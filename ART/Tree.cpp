@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <fstream>
 #include <functional>
-#include "../Epoche.cpp"
+#include "Epoche.cpp"
 #include "N.cpp"
 
 #ifdef ARTDEBUG
@@ -19,7 +19,7 @@ std::ostream &art_cout = dev_null;
 
 namespace ART_ROWEX {
 
-Tree::Tree(LoadKeyFunction loadKey) : root(new N256(0, {})), loadKey(loadKey) {
+Tree::Tree() : root(new N256(0, {})) {
     N::clflush((char *)root, sizeof(N256), true, true);
 }
 
@@ -64,11 +64,15 @@ void *Tree::lookup(const Key *k, ThreadInfo &threadEpocheInfo) const {
                     return NULL;
                 }
                 if (N::isLeaf(node)) {
-                    Key *ret = N::getLeaf(node);
+                    Leaf *ret = N::getLeaf(node);
                     N::helpFlush(parentref);
                     N::helpFlush(curref);
                     if (level < k->getKeyLen() - 1 || optimisticPrefixMatch) {
-                        return checkKey(ret, k);
+                        if (ret->checkKey(k)) {
+                            return &ret->value;
+                        } else {
+                            return NULL;
+                        }
                     } else {
                         return &ret->value;
                     }
@@ -80,7 +84,7 @@ void *Tree::lookup(const Key *k, ThreadInfo &threadEpocheInfo) const {
 }
 
 bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
-                       Key *result[], std::size_t resultSize,
+                       Leaf *result[], std::size_t resultSize,
                        std::size_t &resultsFound,
                        ThreadInfo &threadEpocheInfo) const {
     for (uint32_t i = 0; i < std::min(start->getKeyLen(), end->getKeyLen());
@@ -93,7 +97,7 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
         }
     }
     EpocheGuard epocheGuard(threadEpocheInfo);
-    Key *toContinue = NULL;
+    Leaf *toContinue = NULL;
     bool restart;
     std::function<void(const N *)> copy = [&result, &resultSize, &resultsFound,
                                            &toContinue, &copy](const N *node) {
@@ -271,24 +275,26 @@ restart:
     }
 
     if (toContinue != NULL) {
-        continueKey = toContinue;
+        Key *newkey =
+            new Key(toContinue->key, toContinue->key_len, toContinue->value);
+        continueKey = newkey;
         return true;
     } else {
         return false;
     }
 }
 
-void *Tree::checkKey(const Key *ret, const Key *k) const {
+bool Tree::checkKey(const Key *ret, const Key *k) const {
     if (ret->getKeyLen() == k->getKeyLen() &&
         memcmp(ret->fkey, k->fkey, k->getKeyLen()) == 0) {
-        return &(const_cast<Key *>(ret)->value);
+        return true;
     }
-    return NULL;
+    return false;
 }
 
-void Tree::insert(const Key *k, ThreadInfo &epocheInfo) {
-    // art_cout << "Inserting key " << k->fkey << std::endl;
-    N::clflush((char *)k, sizeof(Key) + k->key_len, false, true);
+typename Tree::OperationResults Tree::insert(const Key *k,
+                                             ThreadInfo &epocheInfo) {
+    // N::clflush((char *)k, sizeof(Key) + k->key_len, false, true);
     EpocheGuard epocheGuard(epocheInfo);
 restart:
     bool needRestart = false;
@@ -328,7 +334,8 @@ restart:
                 auto newNode = new N4(nextLevel, prefi);
 
                 // 2)  add node and (tid, *k) as children
-                newNode->insert(k->fkey[nextLevel], N::setLeaf(k), false);
+                Leaf *newLeaf = new Leaf(k);
+                newNode->insert(k->fkey[nextLevel], N::setLeaf(newLeaf), false);
                 newNode->insert(nonMatchingKey, node, false);
                 N::clflush((char *)newNode, sizeof(N4), true, true);
 
@@ -343,46 +350,23 @@ restart:
                 N::change(parentNode, parentKey, newNode);
                 parentNode->writeUnlock();
 
-#ifdef CRASH_SPLIT
-                // Fork a new process now
-                pid_t pid = fork();
+                // 4) update prefix of node, unlock
+                node->setPrefix(
+                    remainingPrefix.prefix,
+                    node->getPrefi().prefixCount - ((nextLevel - level) + 1),
+                    true);
 
-                // child process
-                if (pid == 0) {
-                    // This is a crash state. So initialize locks
-                    lock_initialization();
-                    art_cout
-                        << "\n Child process returned before updating level "
-                        << std::endl;
-                    return;
-                } else if (pid > 0) {
-                    int returnStatus;
-                    waitpid(pid, &returnStatus, 0);
-                    art_cout << " Continuing in parent to insert " << k->fkey
-                             << std::endl;
-#endif
+                node->writeUnlock();
+                return OperationResults::Success;
 
-                    // 4) update prefix of node, unlock
-                    node->setPrefix(remainingPrefix.prefix,
-                                    node->getPrefi().prefixCount -
-                                        ((nextLevel - level) + 1),
-                                    true);
-
-                    node->writeUnlock();
-                    return;
-
-#ifdef CRASH_SPLIT
-                }  // end parent
-                else {
-                    art_cout << "Fork failed" << std::endl;
-                    return;
-                }
-#endif
             }  // end case  NoMatch
             case CheckPrefixPessimisticResult::Match:
                 break;
         }
         assert(nextLevel < k->getKeyLen());  // prevent duplicate key
+        // TODO
+        // maybe one string is substring of another, so it fkey[level] will be 0
+        // solve problem of substring
         level = nextLevel;
         nodeKey = k->fkey[level];
 
@@ -397,41 +381,55 @@ restart:
             node->lockVersionOrRestart(v, needRestart);
             if (needRestart) goto restart;
 
+            Leaf *newLeaf = new Leaf(k);
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
-                               N::setLeaf(k), epocheInfo, needRestart);
+                               N::setLeaf(newLeaf), epocheInfo, needRestart);
             if (needRestart) goto restart;
-            return;
+            return OperationResults::Success;
         }
         if (N::isLeaf(nextNode)) {
             node->lockVersionOrRestart(v, needRestart);
             if (needRestart) goto restart;
-            Key *key;
-            key = N::getLeaf(nextNode);
+            Leaf *key = N::getLeaf(nextNode);
 
             level++;
-            assert(level < key->getKeyLen());  // prevent inserting when prefix
-                                               // of key exists already
+            // assert(level < key->getKeyLen());
+            // prevent inserting when
+            // prefix of key exists already
+            // but if I want to insert a prefix of this key, i also need to
+            // insert successfully
             uint32_t prefixLength = 0;
-            while (key->fkey[level + prefixLength] ==
-                   k->fkey[level + prefixLength]) {
+            while (level + prefixLength <
+                       std::min(k->getKeyLen(), key->getKeyLen()) &&
+                   key->fkey[level + prefixLength] ==
+                       k->fkey[level + prefixLength]) {
                 prefixLength++;
+            }
+            if (k->getKeyLen() == key->getKeyLen() &&
+                level + prefixLength == k->getKeyLen()) {
+                // duplicate key
+                node->writeUnlock();
+                return OperationResults::Existed;
             }
 
             auto n4 =
                 new N4(level + prefixLength, &k->fkey[level], prefixLength);
-            n4->insert(k->fkey[level + prefixLength], N::setLeaf(k), false);
+            Leaf *newLeaf = new Leaf(k);
+            n4->insert(k->fkey[level + prefixLength], N::setLeaf(newLeaf),
+                       false);
             n4->insert(key->fkey[level + prefixLength], nextNode, false);
             N::clflush((char *)n4, sizeof(N4), true, true);
 
             N::change(node, k->fkey[level - 1], n4);
             node->writeUnlock();
-            return;
+            return OperationResults::Success;
         }
         level++;
     }
 }
 
-void Tree::remove(const Key *k, ThreadInfo &threadInfo) {
+typename Tree::OperationResults Tree::remove(const Key *k,
+                                             ThreadInfo &threadInfo) {
     EpocheGuard epocheGuard(threadInfo);
 restart:
     bool needRestart = false;
@@ -456,10 +454,15 @@ restart:
                 if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
                     goto restart;
                 }
-                return;
+                return OperationResults::NotFound;
             case CheckPrefixResult::OptimisticMatch:
                 // fallthrough
             case CheckPrefixResult::Match: {
+                // if (level >= k->getKeyLen()) {
+                //     // key is too short
+                //     // but it next fkey is 0
+                //     return OperationResults::NotFound;
+                // }
                 nodeKey = k->fkey[level];
 
                 parentref = curref;
@@ -474,15 +477,16 @@ restart:
                         !node->readUnlockOrRestart(v)) {  // TODO benötigt??
                         goto restart;
                     }
-                    return;
+                    return OperationResults::NotFound;
                 }
                 if (N::isLeaf(nextNode)) {
                     node->lockVersionOrRestart(v, needRestart);
                     if (needRestart) goto restart;
 
-                    if (!checkKey(N::getLeaf(nextNode), k)) {
+                    Leaf *leaf = N::getLeaf(nextNode);
+                    if (!leaf->checkKey(k)) {
                         node->writeUnlock();
-                        return;
+                        return OperationResults::NotFound;
                     }
                     assert(parentNode == nullptr || node->getCount() != 1);
                     if (node->getCount() == 2 && node != root) {
@@ -522,43 +526,19 @@ restart:
                             // N::remove(node, k[level]); not necessary
                             N::change(parentNode, parentKey, secondNodeN);
 
-#ifdef CRASH_MERGE
-                            pid_t pid = fork();
-                            if (pid == 0) {
-                                // This is a crash state. So initialize locks
-                                lock_initialization();
-                                art_cout << "\n Child process returned before "
-                                            "updating level in merge"
-                                         << std::endl;
-                                return;
-                            } else if (pid > 0) {
-                                int returnStatus;
-                                waitpid(pid, &returnStatus, 0);
-                                art_cout << " Continuing in parent to remove "
-                                         << k->fkey << std::endl;
-#endif
-                                secondNodeN->addPrefixBefore(node, secondNodeK);
+                            secondNodeN->addPrefixBefore(node, secondNodeK);
 
-                                parentNode->writeUnlock();
-                                node->writeUnlockObsolete();
-                                this->epoche.markNodeForDeletion(node,
-                                                                 threadInfo);
-                                secondNodeN->writeUnlock();
-
-#ifdef CRASH_MERGE
-                            }  // end parent
-                            else {
-                                art_cout << "Fork failed" << std::endl;
-                                return;
-                            }  // end fork fail
-#endif
+                            parentNode->writeUnlock();
+                            node->writeUnlockObsolete();
+                            this->epoche.markNodeForDeletion(node, threadInfo);
+                            secondNodeN->writeUnlock();
                         }
                     } else {
                         N::removeAndUnlock(node, k->fkey[level], parentNode,
                                            parentKey, threadInfo, needRestart);
                         if (needRestart) goto restart;
                     }
-                    return;
+                    return OperationResults::Success;
                 }
                 level++;
             }
@@ -617,7 +597,7 @@ typename Tree::CheckPrefixPessimisticResult Tree::checkPrefixPessimistic(
             uint32_t discrimination =
                 (n->getLevel() > level ? n->getLevel() - level
                                        : level - n->getLevel());
-            Key *kr = N::getAnyChildTid(n);
+            Leaf *kr = N::getAnyChildTid(n);
             p.prefixCount = discrimination;
             for (uint32_t i = 0;
                  i < std::min(discrimination, maxStoredPrefixLength); i++)
@@ -636,7 +616,7 @@ typename Tree::CheckPrefixPessimisticResult Tree::checkPrefixPessimistic(
 
     if (p.prefixCount > 0) {
         uint32_t prevLevel = level;
-        Key *kt = NULL;
+        Leaf *kt = NULL;
         bool load_flag = false;
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
@@ -679,7 +659,7 @@ typename Tree::PCCompareResults Tree::checkPrefixCompare(
         return PCCompareResults::SkippedLevel;
     }
     if (p.prefixCount > 0) {
-        Key *kt = NULL;
+        Leaf *kt = NULL;
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
             if (i == maxStoredPrefixLength) {
@@ -709,7 +689,7 @@ typename Tree::PCEqualsResults Tree::checkPrefixEquals(
         return PCEqualsResults::SkippedLevel;
     }
     if (p.prefixCount > 0) {
-        Key *kt = NULL;
+        Leaf *kt = NULL;
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
             if (i == maxStoredPrefixLength) {

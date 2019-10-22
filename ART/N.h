@@ -9,8 +9,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <atomic>
-#include "../Epoche.h"
-#include "../Key.h"
+#include "Epoche.h"
+#include "Key.h"
 #ifdef LOCK_INIT
 #include "tbb/concurrent_vector.h"
 #endif
@@ -25,6 +25,34 @@ namespace ART_ROWEX {
  * LockCheckFreeReadTree
  * UnsynchronizedTree
  */
+
+class Leaf {
+   public:
+    size_t key_len;
+    uint64_t key;
+    uint8_t *fkey;
+    uint64_t value;
+
+   public:
+    Leaf(const Key *k) {
+        key_len = k->key_len;
+        key = k->key;
+        fkey = (uint8_t *)&key;
+        value = k->value;
+    }
+
+    virtual ~Leaf() {
+        // TODO
+    }
+
+    inline uint64_t getValue() { return value; }
+    inline bool checkKey(const Key *k) const {
+        if (key_len == k->getKeyLen() && memcmp(fkey, k->fkey, key_len) == 0)
+            return true;
+        return false;
+    }
+    inline size_t getKeyLen() const { return key_len; }
+} __attribute__((aligned(64)));
 
 enum class NTypes : uint8_t { N4 = 0, N16 = 1, N48 = 2, N256 = 3 };
 
@@ -135,15 +163,15 @@ class N {
 
     void addPrefixBefore(N *node, uint8_t key);
 
-    static Key *getLeaf(const N *n);
+    static Leaf *getLeaf(const N *n);
 
     static bool isLeaf(const N *n);
 
-    static N *setLeaf(const Key *k);
+    static N *setLeaf(const Leaf *k);
 
     static N *getAnyChild(const N *n);
 
-    static Key *getAnyChildTid(const N *n);
+    static Leaf *getAnyChildTid(const N *n);
 
     static void deleteChildren(N *node);
 

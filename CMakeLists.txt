@@ -14,15 +14,30 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -march=native -mrtm -mcx16 -m
 add_definitions(-DCLFLUSH)
 #add_definitions(-DCLFLUSH_OPT)
 #add_definitions(-DCLWB)
-link_libraries(pthread)
+link_libraries(pthread atomic boost_system boost_thread gtest)
 find_library(TbbLib tbb)
+include_directories(./ART
+                    ./benchmark
+                    ./nvm_mgr
+                    ./test)
 
-set(INDEX_FILES Tree.cpp)
+set(INDEX_FILES 
+        ./ART/Tree.cpp
+        ./benchmark/generator.cpp
+        ./nvm_mgr/nvm_mgr.cpp
+        ./nvm_mgr/threadinfo.cpp)
 
 add_library(Indexes ${INDEX_FILES})
 target_link_libraries(Indexes  ${TbbLib})
 
-set(P_ART_TEST example.cpp)
-add_executable(example ${P_ART_TEST})
+set(P_ART_BENCH test/art_simple_bench.cpp)
+add_executable(art_simple_bench ${P_ART_BENCH})
+target_link_libraries(art_simple_bench Indexes)
 
-target_link_libraries(example Indexes atomic boost_system boost_thread)
+set(P_ART_TEST test/art_correctness.cpp)
+add_executable(art_test ${P_ART_TEST})
+target_link_libraries(art_test Indexes)
+
+set(BENCHMARK test/main.cpp)
+add_executable(benchmark ${BENCHMARK})
+target_link_libraries(benchmark Indexes)

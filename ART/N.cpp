@@ -442,13 +442,13 @@ bool N::isLeaf(const N *n) {
     return (reinterpret_cast<uintptr_t>(n) & (1ULL << 0));
 }
 
-N *N::setLeaf(const Key *k) {
+N *N::setLeaf(const Leaf *k) {
     return reinterpret_cast<N *>(reinterpret_cast<void *>(
         (reinterpret_cast<uintptr_t>(k) | (1ULL << 0))));
 }
 
-Key *N::getLeaf(const N *n) {
-    return reinterpret_cast<Key *>(reinterpret_cast<void *>(
+Leaf *N::getLeaf(const N *n) {
+    return reinterpret_cast<Leaf *>(reinterpret_cast<void *>(
         (reinterpret_cast<uintptr_t>(n) & ~(1ULL << 0))));
 }
 
@@ -494,7 +494,7 @@ void N::deleteNode(N *node) {
     delete node;
 }
 
-Key *N::getAnyChildTid(const N *n) {
+Leaf *N::getAnyChildTid(const N *n) {
     const N *nextNode = n;
 
     while (true) {
