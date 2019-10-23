@@ -78,13 +78,12 @@ static void flush_data(void* addr, size_t len) {
 
 // prefetch instruction
 //
-#define CACHE_LINE_SIZE 64
 inline void prefetch(const void* ptr) {
 #ifdef NOPREFETCH
     (void)ptr;
 #else
     typedef struct {
-        char x[CACHE_LINE_SIZE];
+        char x[CACHE_ALIGN];
     } cacheline_t;
     asm volatile("prefetcht0 %0" : : "m"(*(const cacheline_t*)ptr));
 #endif

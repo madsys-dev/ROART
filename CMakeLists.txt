@@ -19,7 +19,8 @@ find_library(TbbLib tbb)
 include_directories(./ART
                     ./benchmark
                     ./nvm_mgr
-                    ./test)
+                    ./test
+                    ./fast_fair)
 
 set(INDEX_FILES 
         ./ART/Tree.cpp
@@ -41,3 +42,8 @@ target_link_libraries(art_test Indexes)
 set(BENCHMARK test/main.cpp)
 add_executable(benchmark ${BENCHMARK})
 target_link_libraries(benchmark Indexes)
+
+
+set(YCSB test/ycsb.cpp)
+add_executable(ycsb ${YCSB})
+target_link_libraries(ycsb Indexes)

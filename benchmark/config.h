@@ -6,16 +6,13 @@
 #include <iostream>
 
 enum IndexType {
-    NV_TREE,
-    FP_TREE,
-    RN_TREE,
-    RN_TREE_R,
-    WB_TREE,
-    WB_TREE_2,
+    PART, FAST_FAIR,
     _IndexTypeNumber
 };
 
-enum DataDistrubute { RANDOM, ZIPFIAN, _DataDistrbuteNumber };
+enum DataDistrubute {
+    RANDOM, ZIPFIAN, _DataDistrbuteNumber
+};
 
 enum BenchMarkType {
     READ_ONLY,
@@ -57,51 +54,50 @@ struct Config {
     void report() {
         printf("--- Config ---\n");
         printf(
-            "type:\t %d\nbenchmark:\t %d\nthreads:\t %d\ninit_keys:\t %lld\n",
-            type, benchmark, num_threads, init_keys);
+                "type:\t %d\nbenchmark:\t %d\nthreads:\t %d\ninit_keys:\t %lld\n",
+                type, benchmark, num_threads, init_keys);
         printf("--------------\n");
     }
 };
 
 static struct option opts[] = {
-    {"help", no_argument, NULL, 'h'},
-    {"type", required_argument, NULL, 't'},
-    {"num_threads", required_argument, NULL, 'n'},
-    {"keys", required_argument, NULL, 'k'},
-    {"share_memory", no_argument, NULL, 's'},
-    {"duration", required_argument, NULL, 'd'},
-    {"benchmark", required_argument, NULL, 'b'},
-    {"filename", required_argument, NULL, 'f'},
-    {"workload", required_argument, NULL, 'w'},
-    {"skewness", required_argument, NULL, 'S'},
-    {"scan_length", required_argument, NULL, 'l'},
-    {"read_ratio", required_argument, NULL, 'r'},
+        {"help",         no_argument,       NULL, 'h'},
+        {"type",         required_argument, NULL, 't'},
+        {"num_threads",  required_argument, NULL, 'n'},
+        {"keys",         required_argument, NULL, 'k'},
+        {"share_memory", no_argument,       NULL, 's'},
+        {"duration",     required_argument, NULL, 'd'},
+        {"benchmark",    required_argument, NULL, 'b'},
+        {"filename",     required_argument, NULL, 'f'},
+        {"workload",     required_argument, NULL, 'w'},
+        {"skewness",     required_argument, NULL, 'S'},
+        {"scan_length",  required_argument, NULL, 'l'},
+        {"read_ratio",   required_argument, NULL, 'r'},
 };
 
 static void usage_exit(FILE *out) {
     fprintf(
-        out,
-        "Command line options : nstore <options> \n"
-        "   -h --help              : Print help message \n"
-        "   -t --type              : Index type : 0 (NV_TREE) 1 (FP_TREE) "
-        "2(RN_TREE) 3(RN_TREE_R) 4(WB_TREE) 5(WB_TREE_2)\n"
-        "   -n --num_threads       : Number of workers \n"
-        "   -k --keys              : Number of key-value pairs at begin\n"
-        "   -s --non_share_memory  : Use different index instances among "
-        "different workers\n"
-        "   -d --duration          : Execution time\n"
-        "   -b --benchmark         : Benchmark type, 0-%d\n"
-        "   -w --workload          : type of workload: 0 (RANDOM) 1 (ZIPFIAN)\n"
-        "   -S --skewed            : skewness: 0-1 (default 0.99)\n"
-        "   -l --scan_length       : scan_length: int (default 100)\n"
-        "   -r --read_ratio        : read ratio: int (default 50)\n",
-        _BenchMarkType - 1);
+            out,
+            "Command line options : nstore <options> \n"
+            "   -h --help              : Print help message \n"
+            "   -t --type              : Index type : 0 (PART) 1 (FAST_FAIR) \n"
+            "   -n --num_threads       : Number of workers \n"
+            "   -k --keys              : Number of key-value pairs at begin\n"
+            "   -s --non_share_memory  : Use different index instances among "
+            "different workers\n"
+            "   -d --duration          : Execution time\n"
+            "   -b --benchmark         : Benchmark type, 0-%d\n"
+            "   -w --workload          : type of workload: 0 (RANDOM) 1 (ZIPFIAN)\n"
+            "   -S --skewed            : skewness: 0-1 (default 0.99)\n"
+            "   -l --scan_length       : scan_length: int (default 100)\n"
+            "   -r --read_ratio        : read ratio: int (default 50)\n",
+            _BenchMarkType - 1);
     exit(EXIT_FAILURE);
 }
 
 static void parse_arguments(int argc, char *argv[], Config &state) {
     // Default Values
-    state.type = NV_TREE;
+    state.type = PART;
     state.num_threads = 4;
     state.init_keys = 1000000;
     state.time = 5;
@@ -124,13 +120,13 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
 
         switch (c) {
             case 'b':
-                state.benchmark = (BenchMarkType)atoi(optarg);
+                state.benchmark = (BenchMarkType) atoi(optarg);
                 break;
             case 'd':
                 state.duration = atof(optarg);
                 break;
             case 't':
-                state.type = (IndexType)atoi(optarg);
+                state.type = (IndexType) atoi(optarg);
                 break;
             case 'n':
                 state.num_threads = atoi(optarg);
@@ -145,7 +141,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
                 state.filename = std::string(optarg);
                 break;
             case 'w':
-                state.workload = (DataDistrubute)atoi(optarg);
+                state.workload = (DataDistrubute) atoi(optarg);
                 break;
             case 'S':
                 state.skewness = atof(optarg);
