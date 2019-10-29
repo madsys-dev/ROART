@@ -100,8 +100,12 @@ public:
 
     std::pair<OperationType, long long> nextIntOperation(int tid) {
         long long d = workload->NextInt(tid) % _conf.init_keys;
-//        long long x = rdm[tid].randomInt() % 128;
+#ifdef INSERT_DUP
         long long x = 1;
+#else
+        long long x = rdm[tid].randomInt() % 128;
+#endif
+
         return std::make_pair(INSERT, d * x);
     }
 
@@ -110,7 +114,12 @@ public:
         return std::make_pair(INSERT, s);
     }
 
-//    long long nextInitIntKey() { return  Benchmark::nextInitIntKey(); }
+#ifndef INSERT_DUP
+
+    long long nextInitIntKey() { return 128 * Benchmark::nextInitIntKey(); }
+
+#endif
+
 };
 
 class UpdateOnlyBench : public Benchmark {

@@ -57,8 +57,11 @@ public:
     }
 
     std::string NextStr() {
-//        int len = randomInt() % 10 + 5;
+#ifdef VARIABLE_LENGTH
+        int len = randomInt() % 10 + 5;
+#else
         int len = sizeof(long long);
+#endif
         std::string res = "";
         for (int i = 0; i < len; i++) {
             char c = randomInt() % 94 + 33;
@@ -105,7 +108,7 @@ public:
 
 public:
     WorkloadGenerator() {
-        for(int i = 0; i < max_thread_num; i++){
+        for (int i = 0; i < max_thread_num; i++) {
             next_int[i] = next_str[i] = 0;
         }
         std::string fn_int = get_file_name_int();
@@ -148,7 +151,7 @@ public:
         std::cout << "load data successfully\n";
     }
 
-    virtual ~WorkloadGenerator(){}
+    virtual ~WorkloadGenerator() {}
 
     virtual long long NextInt(int tid) {
         int index = next_int[tid] % data_size;
@@ -156,7 +159,7 @@ public:
         return wl_int[index];
     }
 
-    virtual std::string NextStr(int tid){
+    virtual std::string NextStr(int tid) {
         int index = next_str[tid] % data_size;
         next_str[tid]++;
         return wl_str[index];
@@ -176,7 +179,7 @@ public:
         return wl_int[zipfindex[index]];
     }
 
-    std::string NextStr(int tid){
+    std::string NextStr(int tid) {
         int index = next_str[tid] % data_size;
         next_str[tid]++;
         return wl_str[zipfindex[index]];

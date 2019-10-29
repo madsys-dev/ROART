@@ -14,6 +14,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O2 -march=native -mavx -mavx
 add_definitions(-DCLFLUSH)
 #add_definitions(-DCLFLUSH_OPT)
 #add_definitions(-DCLWB)
+
 link_libraries(pthread atomic boost_system boost_thread gtest)
 find_library(TbbLib tbb)
 include_directories(./ART

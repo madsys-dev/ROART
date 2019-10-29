@@ -36,11 +36,15 @@ class Leaf {
    public:
     Leaf(const Key *k) {
         key_len = k->key_len;
-//        key = k->key;
+        value = k->value;
+#ifdef KEY_INLINE
+        key = k->key; // compare to store the key, new an array will decrease 30% performance
+        fkey = (uint8_t *)&key;
+#else
         fkey = new uint8_t[key_len];
         memcpy(fkey, k->fkey, key_len);
-//        fkey = (uint8_t *)&key;
-        value = k->value;
+#endif
+
     }
 
     virtual ~Leaf() {

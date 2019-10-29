@@ -13,7 +13,7 @@
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "util.h"
-#include "fast_fair_str.h"
+#include "fast_fair.h"
 #include "timer.h"
 
 namespace nvindex {
