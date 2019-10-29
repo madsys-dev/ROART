@@ -5,9 +5,16 @@
 #include <cassert>
 #include <iostream>
 
+const int max_thread_num = 36;
+
 enum IndexType {
     PART, FAST_FAIR,
     _IndexTypeNumber
+};
+
+enum KeyType {
+    Integer, String,
+    _KeyTypeNumber
 };
 
 enum DataDistrubute {
@@ -35,6 +42,7 @@ enum BenchMarkType {
 struct Config {
     IndexType type;
     BenchMarkType benchmark;
+    KeyType key_type;
 
     int num_threads;
     unsigned long long init_keys;
@@ -81,6 +89,7 @@ static void usage_exit(FILE *out) {
             "Command line options : nstore <options> \n"
             "   -h --help              : Print help message \n"
             "   -t --type              : Index type : 0 (PART) 1 (FAST_FAIR) \n"
+            "   -K --key_type           : Key type : 0 (Integer) 1 (String) \n"
             "   -n --num_threads       : Number of workers \n"
             "   -k --keys              : Number of key-value pairs at begin\n"
             "   -s --non_share_memory  : Use different index instances among "
@@ -99,6 +108,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     // Default Values
     state.type = PART;
     state.num_threads = 4;
+    state.key_type = Integer;
     state.init_keys = 1000000;
     state.time = 5;
     state.share_memory = true;
@@ -114,7 +124,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "f:t:n:k:sd:b:w:S:l:r:T:", opts, &idx);
+        int c = getopt_long(argc, argv, "f:t:K:n:k:sd:b:w:S:l:r:T:", opts, &idx);
 
         if (c == -1) break;
 
@@ -127,6 +137,9 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
                 break;
             case 't':
                 state.type = (IndexType) atoi(optarg);
+                break;
+            case 'K':
+                state.key_type = (KeyType) atoi(optarg);
                 break;
             case 'n':
                 state.num_threads = atoi(optarg);

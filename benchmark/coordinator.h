@@ -9,11 +9,11 @@
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
-#include "index_factory.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "util.h"
 #include "fast_fair.h"
+#include "timer.h"
 
 namespace nvindex {
 
@@ -60,7 +60,8 @@ namespace nvindex {
 
         void art_worker(ART_ROWEX::Tree *art, int workerid, Result *result,
                         Benchmark *b) {
-            Benchmark *benchmark = getBenchmark(conf);
+//            Benchmark *benchmark = getBenchmark(conf);
+            Benchmark *benchmark = b;
             printf("[WORKER]\thello, I am worker %d\n", workerid);
             register_threadinfo();
             stick_this_thread_to_core(workerid);
@@ -109,7 +110,7 @@ namespace nvindex {
             int count = 0;
             Key *k = new Key();
             while (done == 0) {
-                volatile auto next_operation = benchmark->nextOperation();
+                volatile auto next_operation = benchmark->nextIntOperation(workerid);
 
                 OperationType op = next_operation.first;
                 long long d = next_operation.second;
@@ -189,7 +190,8 @@ namespace nvindex {
 
         void ff_worker(btree *bt, int workerid, Result *result,
                        Benchmark *b) {
-            Benchmark *benchmark = getBenchmark(conf);
+//            Benchmark *benchmark = getBenchmark(conf);
+            Benchmark *benchmark = b;
             printf("[WORKER]\thello, I am worker %d\n", workerid);
             register_threadinfo();
             stick_this_thread_to_core(workerid);
@@ -235,7 +237,7 @@ namespace nvindex {
             int submit_time = 1000000000.0 / frequency;
             int count = 0;
             while (done == 0) {
-                volatile auto next_operation = benchmark->nextOperation();
+                volatile auto next_operation = benchmark->nextIntOperation(workerid);
 
                 OperationType op = next_operation.first;
                 long long d = next_operation.second;
@@ -333,7 +335,7 @@ namespace nvindex {
 
                 Key *k = new Key();
                 for (unsigned long i = 0; i < conf.init_keys; i++) {
-                    long kk = benchmark->nextInitKey();
+                    long kk = benchmark->nextInitIntKey();
                     k->Init(kk, sizeof(uint64_t), kk);
                     art->insert(k, tinfo);
                 }
@@ -379,7 +381,7 @@ namespace nvindex {
                 bar = new boost::barrier(conf.num_threads + 1);
 
                 for (unsigned long i = 0; i < conf.init_keys; i++) {
-                    long kk = benchmark->nextInitKey();
+                    long kk = benchmark->nextInitIntKey();
                     bt->btree_insert(kk, (char *) kk);
                 }
                 printf("init insert finished\n");

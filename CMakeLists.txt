@@ -43,7 +43,7 @@ set(BENCHMARK test/main.cpp)
 add_executable(benchmark ${BENCHMARK})
 target_link_libraries(benchmark Indexes)
 
-
-set(YCSB test/ycsb.cpp)
-add_executable(ycsb ${YCSB})
-target_link_libraries(ycsb Indexes)
+#
+#set(YCSB test/ycsb.cpp)
+#add_executable(ycsb ${YCSB})
+#target_link_libraries(ycsb Indexes)
