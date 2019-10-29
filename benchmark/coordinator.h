@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <boost/thread/barrier.hpp>
 #include <thread>
+#include <string>
 #include "Key.h"
 #include "N.h"
 #include "Tree.h"
@@ -12,7 +13,7 @@
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "util.h"
-#include "fast_fair.h"
+#include "fast_fair_str.h"
 #include "timer.h"
 
 namespace nvindex {
@@ -110,17 +111,30 @@ namespace nvindex {
             int count = 0;
             Key *k = new Key();
             while (done == 0) {
-                volatile auto next_operation = benchmark->nextIntOperation(workerid);
 
-                OperationType op = next_operation.first;
-                long long d = next_operation.second;
                 V result = 1;
+
+                OperationType op;
+                long long d;
+                std::string s;
+
+                if (conf.key_type == Integer) {
+                    auto next_operation = benchmark->nextIntOperation(workerid);
+                    op = next_operation.first;
+                    d = next_operation.second;
+                    k->Init(d, sizeof(uint64_t), d);
+                } else if (conf.key_type == String) {
+                    auto next_operation = benchmark->nextStrOperation(workerid);
+                    op = next_operation.first;
+                    s = next_operation.second;
+                    k->Init((char *) s.c_str(), sizeof(uint64_t), (char *) s.c_str());
+                }
 
                 cpuCycleTimer t;
                 if (conf.latency_test) {
                     t.start();
                 }
-                k->Init(d, sizeof(uint64_t), d);
+
                 ART_ROWEX::Tree::OperationResults res;
                 switch (op) {
                     case UPDATE:
@@ -188,7 +202,7 @@ namespace nvindex {
         }
 
 
-        void ff_worker(btree *bt, int workerid, Result *result,
+        void ff_worker(fastfair::btree *bt, int workerid, Result *result,
                        Benchmark *b) {
 //            Benchmark *benchmark = getBenchmark(conf);
             Benchmark *benchmark = b;
@@ -237,11 +251,24 @@ namespace nvindex {
             int submit_time = 1000000000.0 / frequency;
             int count = 0;
             while (done == 0) {
-                volatile auto next_operation = benchmark->nextIntOperation(workerid);
 
-                OperationType op = next_operation.first;
-                long long d = next_operation.second;
                 V result = 1;
+                OperationType op;
+                long long d;
+                std::string s;
+
+
+                if(conf.key_type == Integer){
+                    auto next_operation = benchmark->nextIntOperation(workerid);
+
+                    op = next_operation.first;
+                    d = next_operation.second;
+                }else if(conf.key_type == String){
+                    auto next_operation = benchmark->nextStrOperation(workerid);
+
+                    op = next_operation.first;
+                    s = next_operation.second;
+                }
 
                 cpuCycleTimer t;
                 if (conf.latency_test) {
@@ -259,11 +286,20 @@ namespace nvindex {
                     case REMOVE:
                     case INSERT:
                         // printf("[%d] start insert %lld\n", workerid, d);
-                        bt->btree_insert(d, (char *) d);
+
+                        if(conf.key_type == Integer){
+                            bt->btree_insert(d, (char *) d);
+                        } else if  (conf.key_type == String) {
+                            bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
+                        }
 
                         break;
                     case GET:
-                        bt->btree_search(d);
+                        if(conf.key_type == Integer) {
+                            bt->btree_search(d);
+                        } else if(conf.key_type == String){
+                            bt->btree_search((char *)s.c_str());
+                        }
 
                         // if (tx % 100 == 0) {
                         //     sync_latency(total_find_latency_breaks,
@@ -335,9 +371,15 @@ namespace nvindex {
 
                 Key *k = new Key();
                 for (unsigned long i = 0; i < conf.init_keys; i++) {
-                    long kk = benchmark->nextInitIntKey();
-                    k->Init(kk, sizeof(uint64_t), kk);
-                    art->insert(k, tinfo);
+                    if (conf.key_type == Integer) {
+                        long kk = benchmark->nextInitIntKey();
+                        k->Init(kk, sizeof(uint64_t), kk);
+                        art->insert(k, tinfo);
+                    } else if (conf.key_type == String) {
+                        std::string s = benchmark->nextInitStrKey();
+                        k->Init((char *) s.c_str(), sizeof(uint64_t), (char *) s.c_str());
+                        art->insert(k, tinfo);
+                    }
                 }
                 printf("init insert finished\n");
 
@@ -369,7 +411,7 @@ namespace nvindex {
                 // FAST_FAIR
 
                 printf("test FAST_FAIR---------------------\n");
-                btree *bt = new btree();
+                fastfair::btree *bt = new fastfair::btree();
                 register_threadinfo();
                 Benchmark *benchmark = getBenchmark(conf);
 
@@ -381,8 +423,13 @@ namespace nvindex {
                 bar = new boost::barrier(conf.num_threads + 1);
 
                 for (unsigned long i = 0; i < conf.init_keys; i++) {
-                    long kk = benchmark->nextInitIntKey();
-                    bt->btree_insert(kk, (char *) kk);
+                    if (conf.key_type == Integer) {
+                        long kk = benchmark->nextInitIntKey();
+                        bt->btree_insert(kk, (char *) kk);
+                    } else if (conf.key_type == String) {
+                        std::string s = benchmark->nextInitStrKey();
+                        bt->btree_insert((char *) s.c_str(), (char *) s.c_str());
+                    }
                 }
                 printf("init insert finished\n");
 

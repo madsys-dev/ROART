@@ -57,7 +57,8 @@ public:
     }
 
     std::string NextStr() {
-        int len = randomInt() % 10 + 5;
+//        int len = randomInt() % 10 + 5;
+        int len = sizeof(long long);
         std::string res = "";
         for (int i = 0; i < len; i++) {
             char c = randomInt() % 94 + 33;

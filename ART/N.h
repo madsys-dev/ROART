@@ -36,8 +36,10 @@ class Leaf {
    public:
     Leaf(const Key *k) {
         key_len = k->key_len;
-        key = k->key;
-        fkey = (uint8_t *)&key;
+//        key = k->key;
+        fkey = new uint8_t[key_len];
+        memcpy(fkey, k->fkey, key_len);
+//        fkey = (uint8_t *)&key;
         value = k->value;
     }
 

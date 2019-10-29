@@ -26,6 +26,12 @@ typedef struct Key {
         fkey = (uint8_t *)&key;
     }
 
+    void Init(char *key_, size_t key_len_, char * value_){
+        value = (uint64_t)value_;
+        key_len = key_len_;
+        fkey = (uint8_t *)key_;
+    }
+
     inline Key *make_leaf(char *key, size_t key_len, uint64_t value);
 
     inline Key *make_leaf(uint64_t key, size_t key_len, uint64_t value);
