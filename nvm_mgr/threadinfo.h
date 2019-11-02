@@ -1,7 +1,7 @@
 #ifndef thread_info_h
 #define thread_info_h
 
-namespace nvindex {
+namespace NVMMgr_ns {
 /*
  * Persistent leaf management
  * NOTE: PMFreeList is not thread-safe, only used for thread_info
@@ -40,5 +40,5 @@ void set_leaf_size(int);
 
 void* static_leaf();
 
-}  // namespace nvindex
+}  // namespace NVMMgr_ns
 #endif

@@ -8,6 +8,7 @@ using namespace std;
 
 #include "Tree.h"
 
+using namespace PART_ns;
 void run(char **argv) {
     std::cout << "Simple Example of P-ART" << std::endl;
 
@@ -16,7 +17,7 @@ void run(char **argv) {
     std::vector<Key *> Keys;
 
     Keys.reserve(n);
-    ART_ROWEX::Tree *tree = new ART_ROWEX::Tree();
+    Tree *tree = new Tree();
     auto t = tree->getThreadInfo();
     // Generate keys
     for (uint64_t i = 0; i < n; i++) {

@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <sys/time.h>
 #include "util.h"
-namespace nvindex{
 
 class timer {
  public:
@@ -66,4 +65,3 @@ public:
 
 };
 
-} //nvindex

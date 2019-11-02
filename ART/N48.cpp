@@ -2,7 +2,7 @@
 #include <algorithm>
 #include "N.h"
 
-namespace ART_ROWEX {
+namespace PART_ns {
 
 inline bool N48::insert(uint8_t key, N *n, bool flush) {
     if (compactCount == 48) {

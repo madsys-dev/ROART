@@ -2,7 +2,7 @@
 #include <algorithm>
 #include "N.h"
 
-namespace ART_ROWEX {
+namespace PART_ns {
 
 void N256::deleteChildren() {
     for (uint64_t i = 0; i < 256; ++i) {

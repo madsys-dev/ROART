@@ -7,7 +7,7 @@
 #include "N4.cpp"
 #include "N48.cpp"
 
-namespace ART_ROWEX {
+namespace PART_ns {
 static unsigned long write_latency_in_ns = 0;
 static unsigned long cpu_freq_mhz = 2100;
 static unsigned long cache_line_size = 64;
@@ -534,4 +534,4 @@ void N::getChildren(const N *node, uint8_t start, uint8_t end,
         }
     }
 }
-}  // namespace ART_ROWEX
+}  // namespace PART_ns

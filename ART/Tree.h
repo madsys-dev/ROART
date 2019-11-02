@@ -6,16 +6,14 @@
 #define ART_ROWEX_TREE_H
 #include "N.h"
 
-using namespace ART;
-
-namespace ART_ROWEX {
+namespace PART_ns {
 
 class Tree {
    public:
     using LoadKeyFunction = void (*)(TID tid, Key &key);
 
    private:
-    N *const root;
+    N *root;
 
     bool checkKey(const Key *ret, const Key *k) const;
 
@@ -72,6 +70,8 @@ class Tree {
     Tree(Tree &&t) : root(t.root), loadKey(t.loadKey) {}
 
     ~Tree();
+
+    void rebuild();
 
     ThreadInfo getThreadInfo();
 

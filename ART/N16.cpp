@@ -3,7 +3,7 @@
 #include <algorithm>
 #include "N.h"
 
-namespace ART_ROWEX {
+namespace PART_ns {
 
 inline bool N16::insert(uint8_t key, N *n, bool flush) {
     if (compactCount == 16) {

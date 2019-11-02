@@ -6,7 +6,6 @@
 #include "tbb/enumerable_thread_specific.h"
 #include "tbb/combinable.h"
 
-namespace ART {
 
     struct LabelDelete {
         std::array<void*, 32> nodes;
@@ -111,6 +110,6 @@ namespace ART {
     inline ThreadInfo::~ThreadInfo() {
         deletionList.localEpoche.store(std::numeric_limits<uint64_t>::max());
     }
-}
+
 
 #endif //ART_EPOCHE_H

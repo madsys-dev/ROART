@@ -2,7 +2,7 @@
 #include <algorithm>
 #include "N.h"
 
-namespace ART_ROWEX {
+namespace PART_ns {
 
 void N4::deleteChildren() {
     for (uint32_t i = 0; i < compactCount; ++i) {

@@ -17,8 +17,7 @@
 
 using TID = uint64_t;
 
-using namespace ART;
-namespace ART_ROWEX {
+namespace PART_ns {
 /*
  * SynchronizedTree
  * LockCouplingTree
@@ -399,5 +398,5 @@ class N256 : public N {
 
     uint32_t getCount() const;
 };
-}  // namespace ART_ROWEX
+}  // namespace PART_ns
 #endif  // ART_ROWEX_N_H

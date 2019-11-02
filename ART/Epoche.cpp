@@ -7,7 +7,6 @@
 #include <assert.h>
 #include <iostream>
 #include "Epoche.h"
-using namespace ART;
 
 
 inline DeletionList::~DeletionList() {

@@ -8,7 +8,7 @@
 #include <assert.h>
 #include "nvm_mgr.h"
 
-namespace nvindex{
+namespace NVMMgr_ns{
 
 class PMBlockAllocator{
 	int alignment = 64;
@@ -34,5 +34,5 @@ public:
 	}
 };
 
-} //nvindex
+} //NVMMgr_ns
 #endif

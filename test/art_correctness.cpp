@@ -6,6 +6,8 @@
 #include <vector>
 #include "Tree.h"
 
+using namespace PART_ns;
+
 TEST(TestCorrectness, PM_ART) {
     const int nthreads = 4;
     const int test_iter = 100000;
@@ -15,7 +17,7 @@ TEST(TestCorrectness, PM_ART) {
 
     uint64_t *keys = new uint64_t[nthreads * test_iter + 1];
 
-    ART_ROWEX::Tree *art = new ART_ROWEX::Tree();
+    Tree *art = new Tree();
     std::thread *tid[nthreads];
     auto t = art->getThreadInfo();
 
@@ -25,9 +27,9 @@ TEST(TestCorrectness, PM_ART) {
         Keys[i] = new Key(keys[i], sizeof(uint64_t), i + 1);
         // Keys[i] = Keys[i]->make_leaf(i, sizeof(uint64_t), i + 1);
         // printf("insert start 1\n");
-        ART_ROWEX::Tree::OperationResults res = art->insert(Keys[i], t);
+        Tree::OperationResults res = art->insert(Keys[i], t);
         // printf("insert success\n");
-        ASSERT_EQ(res, ART_ROWEX::Tree::OperationResults::Success)
+        ASSERT_EQ(res, Tree::OperationResults::Success)
             << "insert failed on key " << i;
     }
 
@@ -53,9 +55,9 @@ TEST(TestCorrectness, PM_ART) {
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
 
-                    ART_ROWEX::Tree::OperationResults res =
+                    Tree::OperationResults res =
                         art->remove(Keys[kk], t);
-                    ASSERT_EQ(res, ART_ROWEX::Tree::OperationResults::Success)
+                    ASSERT_EQ(res, Tree::OperationResults::Success)
                         << "fail to remove key " << kk;
                 }
                 // read
@@ -69,10 +71,10 @@ TEST(TestCorrectness, PM_ART) {
                 // insert
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
-                    ART_ROWEX::Tree::OperationResults res =
+                    Tree::OperationResults res =
                         art->insert(Keys[kk], t);
 
-                    ASSERT_EQ(res, ART_ROWEX::Tree::OperationResults::Success)
+                    ASSERT_EQ(res, Tree::OperationResults::Success)
                         << "insert failed on key " << kk;
                 }
 

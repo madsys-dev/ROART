@@ -8,6 +8,8 @@
 #include <fstream>
 #include <functional>
 #include "Epoche.cpp"
+#include "nvm_mgr.h"
+#include "threadinfo.h"
 #include "N.cpp"
 
 #ifdef ARTDEBUG
@@ -17,10 +19,29 @@ std::ofstream dev_null("/dev/null");
 std::ostream &art_cout = dev_null;
 #endif
 
-namespace ART_ROWEX {
+using namespace NVMMgr_ns;
 
-Tree::Tree() : root(new N256(0, {})) {
-    N::clflush((char *)root, sizeof(N256), true, true);
+namespace PART_ns {
+
+Tree::Tree(){
+    std::cout<<"[P-ART]\tnew P-ART\n";
+    void* thread_info;
+    int threads;
+    bool safe;
+    bool init = init_nvm_mgr(thread_info, threads, safe);
+    register_threadinfo();
+    NVMMgr *mgr = get_nvm_mgr();
+    root = reinterpret_cast<N256 *>(mgr->alloc_tree_meta());
+
+    if(init) {
+        // first open
+        std::cout<<"[P-ART]\tfirst create a P-ART\n";
+    }
+    else {
+        // recovery
+        std::cout<<"[P-ART]\trecovery P-ART\n";
+        rebuild();
+    }
 }
 
 Tree::~Tree() {
@@ -712,5 +733,11 @@ typename Tree::PCEqualsResults Tree::checkPrefixEquals(
         }
     }
     return PCEqualsResults::BothMatch;
+}
+
+void Tree::rebuild(){
+    // TODO: traverse the whole tree from root and calculate count
+    // TODO: reclaim the garbage node
+
 }
 }  // namespace ART_ROWEX
