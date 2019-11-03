@@ -1,115 +1,109 @@
 #ifndef ART_EPOCHE_H
 #define ART_EPOCHE_H
 
-#include <atomic>
-#include <array>
-#include "tbb/enumerable_thread_specific.h"
 #include "tbb/combinable.h"
+#include "tbb/enumerable_thread_specific.h"
+#include <array>
+#include <atomic>
 
+struct LabelDelete {
+    std::array<void *, 32> nodes;
+    uint64_t epoche;
+    std::size_t nodesCount;
+    LabelDelete *next;
+};
 
-    struct LabelDelete {
-        std::array<void*, 32> nodes;
-        uint64_t epoche;
-        std::size_t nodesCount;
-        LabelDelete *next;
-    };
+class DeletionList {
+    LabelDelete *headDeletionList = nullptr;
+    LabelDelete *freeLabelDeletes = nullptr;
+    std::size_t deletitionListCount = 0;
 
-    class DeletionList {
-        LabelDelete *headDeletionList = nullptr;
-        LabelDelete *freeLabelDeletes = nullptr;
-        std::size_t deletitionListCount = 0;
+  public:
+    std::atomic<uint64_t> localEpoche;
+    size_t thresholdCounter{0};
 
-    public:
-        std::atomic<uint64_t> localEpoche;
-        size_t thresholdCounter{0};
+    ~DeletionList();
+    LabelDelete *head();
 
-        ~DeletionList();
-        LabelDelete *head();
+    void add(void *n, uint64_t globalEpoch);
 
-        void add(void *n, uint64_t globalEpoch);
+    void remove(LabelDelete *label, LabelDelete *prev);
 
-        void remove(LabelDelete *label, LabelDelete *prev);
+    std::size_t size();
 
-        std::size_t size();
+    std::uint64_t deleted = 0;
+    std::uint64_t added = 0;
+};
 
-        std::uint64_t deleted = 0;
-        std::uint64_t added = 0;
-    };
+class Epoche;
+class EpocheGuard;
 
-    class Epoche;
-    class EpocheGuard;
+class ThreadInfo {
+    friend class Epoche;
+    friend class EpocheGuard;
+    Epoche &epoche;
+    DeletionList &deletionList;
 
-    class ThreadInfo {
-        friend class Epoche;
-        friend class EpocheGuard;
-        Epoche &epoche;
-        DeletionList &deletionList;
+    DeletionList &getDeletionList() const;
 
+  public:
+    ThreadInfo(Epoche &epoche);
 
-        DeletionList & getDeletionList() const;
-    public:
+    ThreadInfo(const ThreadInfo &ti)
+        : epoche(ti.epoche), deletionList(ti.deletionList) {}
 
-        ThreadInfo(Epoche &epoche);
+    ~ThreadInfo();
 
-        ThreadInfo(const ThreadInfo &ti) : epoche(ti.epoche), deletionList(ti.deletionList) {
-        }
+    Epoche &getEpoche() const;
+};
 
-        ~ThreadInfo();
+class Epoche {
+    friend class ThreadInfo;
+    std::atomic<uint64_t> currentEpoche{0};
 
-        Epoche & getEpoche() const;
-    };
+    tbb::enumerable_thread_specific<DeletionList> deletionLists;
 
-    class Epoche {
-        friend class ThreadInfo;
-        std::atomic<uint64_t> currentEpoche{0};
+    size_t startGCThreshhold;
 
-        tbb::enumerable_thread_specific<DeletionList> deletionLists;
+  public:
+    Epoche(size_t startGCThreshhold) : startGCThreshhold(startGCThreshhold) {}
 
-        size_t startGCThreshhold;
+    ~Epoche();
 
+    void enterEpoche(ThreadInfo &epocheInfo);
 
-    public:
-        Epoche(size_t startGCThreshhold) : startGCThreshhold(startGCThreshhold) { }
+    void markNodeForDeletion(void *n, ThreadInfo &epocheInfo);
 
-        ~Epoche();
+    void exitEpocheAndCleanup(ThreadInfo &info);
 
-        void enterEpoche(ThreadInfo &epocheInfo);
+    void showDeleteRatio();
+};
 
-        void markNodeForDeletion(void *n, ThreadInfo &epocheInfo);
+class EpocheGuard {
+    ThreadInfo &threadEpocheInfo;
 
-        void exitEpocheAndCleanup(ThreadInfo &info);
-
-        void showDeleteRatio();
-
-    };
-
-    class EpocheGuard {
-        ThreadInfo &threadEpocheInfo;
-    public:
-
-        EpocheGuard(ThreadInfo &threadEpocheInfo) : threadEpocheInfo(threadEpocheInfo) {
-            threadEpocheInfo.getEpoche().enterEpoche(threadEpocheInfo);
-        }
-
-        ~EpocheGuard() {
-            threadEpocheInfo.getEpoche().exitEpocheAndCleanup(threadEpocheInfo);
-        }
-    };
-
-    class EpocheGuardReadonly {
-    public:
-
-        EpocheGuardReadonly(ThreadInfo &threadEpocheInfo) {
-            threadEpocheInfo.getEpoche().enterEpoche(threadEpocheInfo);
-        }
-
-        ~EpocheGuardReadonly() {
-        }
-    };
-
-    inline ThreadInfo::~ThreadInfo() {
-        deletionList.localEpoche.store(std::numeric_limits<uint64_t>::max());
+  public:
+    EpocheGuard(ThreadInfo &threadEpocheInfo)
+        : threadEpocheInfo(threadEpocheInfo) {
+        threadEpocheInfo.getEpoche().enterEpoche(threadEpocheInfo);
     }
 
+    ~EpocheGuard() {
+        threadEpocheInfo.getEpoche().exitEpocheAndCleanup(threadEpocheInfo);
+    }
+};
 
-#endif //ART_EPOCHE_H
+class EpocheGuardReadonly {
+  public:
+    EpocheGuardReadonly(ThreadInfo &threadEpocheInfo) {
+        threadEpocheInfo.getEpoche().enterEpoche(threadEpocheInfo);
+    }
+
+    ~EpocheGuardReadonly() {}
+};
+
+inline ThreadInfo::~ThreadInfo() {
+    deletionList.localEpoche.store(std::numeric_limits<uint64_t>::max());
+}
+
+#endif // ART_EPOCHE_H

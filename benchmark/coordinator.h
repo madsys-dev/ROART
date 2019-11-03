@@ -1,27 +1,26 @@
 #ifndef coordinator_h
 #define coordinator_h
 
-#include <unistd.h>
-#include <boost/thread/barrier.hpp>
-#include <thread>
-#include <string>
 #include "Key.h"
 #include "N.h"
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
+#include "fast_fair.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
-#include "util.h"
-#include "fast_fair.h"
 #include "timer.h"
+#include "util.h"
+#include <boost/thread/barrier.hpp>
+#include <string>
+#include <thread>
+#include <unistd.h>
 
 using namespace NVMMgr_ns;
 
-template<typename K, typename V, int size>
-class Coordinator {
+template <typename K, typename V, int size> class Coordinator {
     class Result {
-    public:
+      public:
         double throughput;
         double update_latency_breaks[3];
         double find_latency_breaks[3];
@@ -43,12 +42,13 @@ class Coordinator {
         }
     };
 
-public:
+  public:
     Coordinator(Config _conf) : conf(_conf) {}
 
     int stick_this_thread_to_core(int core_id) {
         int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
-        if (core_id < 0 || core_id >= num_cores) return EINVAL;
+        if (core_id < 0 || core_id >= num_cores)
+            return EINVAL;
 
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
@@ -61,7 +61,7 @@ public:
 
     void art_worker(PART_ns::Tree *art, int workerid, Result *result,
                     Benchmark *b) {
-//            Benchmark *benchmark = getBenchmark(conf);
+        //            Benchmark *benchmark = getBenchmark(conf);
         Benchmark *benchmark = b;
         printf("[WORKER]\thello, I am worker %d\n", workerid);
         NVMMgr_ns::register_threadinfo();
@@ -83,14 +83,14 @@ public:
         memset(total_update_latency_breaks, 0, sizeof(double) * 3);
         memset(total_find_latency_breaks, 0, sizeof(double) * 3);
 
-#define sync_latency(a, b, count)                                        \
-    do {                                                                 \
-        if (b[0] > 0.0 || (count > 100) && (b[0] > 10 * a[0] / count)) { \
-            for (int i = 0; i < 3; i++) {                                \
-                a[i] += b[i];                                            \
-            }                                                            \
-            count++;                                                     \
-        }                                                                \
+#define sync_latency(a, b, count)                                              \
+    do {                                                                       \
+        if (b[0] > 0.0 || (count > 100) && (b[0] > 10 * a[0] / count)) {       \
+            for (int i = 0; i < 3; i++) {                                      \
+                a[i] += b[i];                                                  \
+            }                                                                  \
+            count++;                                                           \
+        }                                                                      \
     } while (0)
 
         static int scan_values = 0;
@@ -127,7 +127,7 @@ public:
                 auto next_operation = benchmark->nextStrOperation(workerid);
                 op = next_operation.first;
                 s = next_operation.second;
-                k->Init((char *) s.c_str(), sizeof(uint64_t), (char *) s.c_str());
+                k->Init((char *)s.c_str(), sizeof(uint64_t), (char *)s.c_str());
             }
 
             cpuCycleTimer t;
@@ -137,39 +137,39 @@ public:
 
             PART_ns::Tree::OperationResults res;
             switch (op) {
-                case UPDATE:
-                    // result = bt->update(d, d, update_latency_breaks);
-                    // if (tx % 100 == 0) {
-                    //     sync_latency(total_update_latency_breaks,
-                    //                  update_latency_breaks, update_count);
-                    // }
-                    // break;
-                case INSERT:
-                    // printf("[%d] start insert %lld\n", workerid, d);
-                    res = art->insert(k, tinfo);
-                    if (res == PART_ns::Tree::OperationResults::Success) {
-                        count++;
-                    }
-                    break;
-                case REMOVE:
+            case UPDATE:
+                // result = bt->update(d, d, update_latency_breaks);
+                // if (tx % 100 == 0) {
+                //     sync_latency(total_update_latency_breaks,
+                //                  update_latency_breaks, update_count);
+                // }
+                // break;
+            case INSERT:
+                // printf("[%d] start insert %lld\n", workerid, d);
+                res = art->insert(k, tinfo);
+                if (res == PART_ns::Tree::OperationResults::Success) {
+                    count++;
+                }
+                break;
+            case REMOVE:
 
-                    art->remove(k, tinfo);
-                    break;
-                case GET:
-                    art->lookup(k, tinfo);
+                art->remove(k, tinfo);
+                break;
+            case GET:
+                art->lookup(k, tinfo);
 
-                    // if (tx % 100 == 0) {
-                    //     sync_latency(total_find_latency_breaks,
-                    //                  find_latency_breaks, find_count);
-                    // }
-                    break;
-                case SCAN:
-                    // bt->scan(d, scan_func);
-                    // scan_values = 0;
-                    break;
-                default:
-                    printf("not support such operation: %d\n", op);
-                    exit(-1);
+                // if (tx % 100 == 0) {
+                //     sync_latency(total_find_latency_breaks,
+                //                  find_latency_breaks, find_count);
+                // }
+                break;
+            case SCAN:
+                // bt->scan(d, scan_func);
+                // scan_values = 0;
+                break;
+            default:
+                printf("not support such operation: %d\n", op);
+                exit(-1);
             }
             if (conf.latency_test) {
                 t.end();
@@ -194,17 +194,16 @@ public:
                    total_update_latency_breaks[i],
                    total_find_latency_breaks[i]);
         }
-#endif  // PERF_LATENCY
+#endif // PERF_LATENCY
 
         unregister_threadinfo();
 
         printf("[WORKER]\tworker %d finished\n", workerid);
     }
 
-
     void ff_worker(fastfair::btree *bt, int workerid, Result *result,
                    Benchmark *b) {
-//            Benchmark *benchmark = getBenchmark(conf);
+        //            Benchmark *benchmark = getBenchmark(conf);
         Benchmark *benchmark = b;
         printf("[WORKER]\thello, I am worker %d\n", workerid);
         register_threadinfo();
@@ -224,14 +223,14 @@ public:
         memset(total_update_latency_breaks, 0, sizeof(double) * 3);
         memset(total_find_latency_breaks, 0, sizeof(double) * 3);
 
-#define sync_latency(a, b, count)                                        \
-    do {                                                                 \
-        if (b[0] > 0.0 || (count > 100) && (b[0] > 10 * a[0] / count)) { \
-            for (int i = 0; i < 3; i++) {                                \
-                a[i] += b[i];                                            \
-            }                                                            \
-            count++;                                                     \
-        }                                                                \
+#define sync_latency(a, b, count)                                              \
+    do {                                                                       \
+        if (b[0] > 0.0 || (count > 100) && (b[0] > 10 * a[0] / count)) {       \
+            for (int i = 0; i < 3; i++) {                                      \
+                a[i] += b[i];                                                  \
+            }                                                                  \
+            count++;                                                           \
+        }                                                                      \
     } while (0)
 
         static int scan_values = 0;
@@ -257,7 +256,6 @@ public:
             long long d;
             std::string s;
 
-
             if (conf.key_type == Integer) {
                 auto next_operation = benchmark->nextIntOperation(workerid);
 
@@ -276,43 +274,43 @@ public:
             }
 
             switch (op) {
-                case UPDATE:
-                    // result = bt->update(d, d, update_latency_breaks);
-                    // if (tx % 100 == 0) {
-                    //     sync_latency(total_update_latency_breaks,
-                    //                  update_latency_breaks, update_count);
-                    // }
-                    // break;
-                case REMOVE:
-                case INSERT:
-                    // printf("[%d] start insert %lld\n", workerid, d);
+            case UPDATE:
+                // result = bt->update(d, d, update_latency_breaks);
+                // if (tx % 100 == 0) {
+                //     sync_latency(total_update_latency_breaks,
+                //                  update_latency_breaks, update_count);
+                // }
+                // break;
+            case REMOVE:
+            case INSERT:
+                // printf("[%d] start insert %lld\n", workerid, d);
 
-                    if (conf.key_type == Integer) {
-                        bt->btree_insert(d, (char *) d);
-                    } else if (conf.key_type == String) {
-                        bt->btree_insert((char *) s.c_str(), (char *) s.c_str());
-                    }
+                if (conf.key_type == Integer) {
+                    bt->btree_insert(d, (char *)d);
+                } else if (conf.key_type == String) {
+                    bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
+                }
 
-                    break;
-                case GET:
-                    if (conf.key_type == Integer) {
-                        bt->btree_search(d);
-                    } else if (conf.key_type == String) {
-                        bt->btree_search((char *) s.c_str());
-                    }
+                break;
+            case GET:
+                if (conf.key_type == Integer) {
+                    bt->btree_search(d);
+                } else if (conf.key_type == String) {
+                    bt->btree_search((char *)s.c_str());
+                }
 
-                    // if (tx % 100 == 0) {
-                    //     sync_latency(total_find_latency_breaks,
-                    //                  find_latency_breaks, find_count);
-                    // }
-                    break;
-                case SCAN:
-                    // bt->scan(d, scan_func);
-                    // scan_values = 0;
-                    break;
-                default:
-                    printf("not support such operation: %d\n", op);
-                    exit(-1);
+                // if (tx % 100 == 0) {
+                //     sync_latency(total_find_latency_breaks,
+                //                  find_latency_breaks, find_count);
+                // }
+                break;
+            case SCAN:
+                // bt->scan(d, scan_func);
+                // scan_values = 0;
+                break;
+            default:
+                printf("not support such operation: %d\n", op);
+                exit(-1);
             }
             if (conf.latency_test) {
                 t.end();
@@ -337,7 +335,7 @@ public:
                    total_update_latency_breaks[i],
                    total_find_latency_breaks[i]);
         }
-#endif  // PERF_LATENCY
+#endif // PERF_LATENCY
 
         unregister_threadinfo();
 
@@ -359,13 +357,11 @@ public:
             register_threadinfo();
             Benchmark *benchmark = getBenchmark(conf);
 
-
             Result *results = new Result[conf.num_threads];
             memset(results, 0, sizeof(Result) * conf.num_threads);
 
             std::thread **pid = new std::thread *[conf.num_threads];
             bar = new boost::barrier(conf.num_threads + 1);
-
 
             auto tinfo = art->getThreadInfo();
 
@@ -377,7 +373,8 @@ public:
                     art->insert(k, tinfo);
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
-                    k->Init((char *) s.c_str(), sizeof(uint64_t), (char *) s.c_str());
+                    k->Init((char *)s.c_str(), sizeof(uint64_t),
+                            (char *)s.c_str());
                     art->insert(k, tinfo);
                 }
             }
@@ -402,7 +399,7 @@ public:
 
             printf("[COORDINATOR]\tFinish benchmark..\n");
             printf("[COORDINATOR]\ttotal throughput: %.3lf Mtps\n",
-                   (double) final_result.throughput / 1000000.0 / conf.duration);
+                   (double)final_result.throughput / 1000000.0 / conf.duration);
 
             delete art;
             delete[] pid;
@@ -415,7 +412,6 @@ public:
             register_threadinfo();
             Benchmark *benchmark = getBenchmark(conf);
 
-
             Result *results = new Result[conf.num_threads];
             memset(results, 0, sizeof(Result) * conf.num_threads);
 
@@ -425,10 +421,10 @@ public:
             for (unsigned long i = 0; i < conf.init_keys; i++) {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
-                    bt->btree_insert(kk, (char *) kk);
+                    bt->btree_insert(kk, (char *)kk);
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
-                    bt->btree_insert((char *) s.c_str(), (char *) s.c_str());
+                    bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
                 }
             }
             printf("init insert finished\n");
@@ -452,13 +448,12 @@ public:
 
             printf("[COORDINATOR]\tFinish benchmark..\n");
             printf("[COORDINATOR]\ttotal throughput: %.3lf Mtps\n",
-                   (double) final_result.throughput / 1000000.0 / conf.duration);
+                   (double)final_result.throughput / 1000000.0 / conf.duration);
 
             delete bt;
             delete[] pid;
             delete[] results;
         }
-
 
 #ifdef PERF_LATENCY
         printf("update latency: \t");
@@ -476,13 +471,13 @@ public:
                final_result.find_latency_breaks[0],
                final_result.find_latency_breaks[1]);
         printf("\n");
-#endif  // PERF_LATENCY
+#endif // PERF_LATENCY
 
         unregister_threadinfo();
         close_nvm_mgr();
     }
 
-private:
+  private:
     Config conf __attribute__((aligned(64)));
     volatile int done __attribute__((aligned(64))) = 0;
     boost::barrier *bar __attribute__((aligned(64))) = 0;

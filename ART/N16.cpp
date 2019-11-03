@@ -1,7 +1,7 @@
-#include <assert.h>
-#include <emmintrin.h>  // x86 SSE intrinsics
-#include <algorithm>
 #include "N.h"
+#include <algorithm>
+#include <assert.h>
+#include <emmintrin.h> // x86 SSE intrinsics
 
 namespace PART_ns {
 
@@ -22,8 +22,7 @@ inline bool N16::insert(uint8_t key, N *n, bool flush) {
     return true;
 }
 
-template <class NODE>
-void N16::copyTo(NODE *n) const {
+template <class NODE> void N16::copyTo(NODE *n) const {
     for (unsigned i = 0; i < compactCount; i++) {
         N *child = children[i].load();
         if (child != nullptr) {
@@ -135,8 +134,9 @@ uint32_t N16::getCount() const {
     uint32_t cnt = 0;
     for (uint32_t i = 0; i < compactCount && cnt < 3; i++) {
         N *child = children[i].load();
-        if (child != nullptr) ++cnt;
+        if (child != nullptr)
+            ++cnt;
     }
     return cnt;
 }
-}  // namespace ART_ROWEX
+} // namespace PART_ns

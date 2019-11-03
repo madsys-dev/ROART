@@ -1,25 +1,17 @@
 #pragma once
 
-#include <getopt.h>
-#include <unistd.h>
 #include <cassert>
+#include <getopt.h>
 #include <iostream>
+#include <unistd.h>
 
 const int max_thread_num = 36;
 
-enum IndexType {
-    PART, FAST_FAIR,
-    _IndexTypeNumber
-};
+enum IndexType { PART, FAST_FAIR, _IndexTypeNumber };
 
-enum KeyType {
-    Integer, String,
-    _KeyTypeNumber
-};
+enum KeyType { Integer, String, _KeyTypeNumber };
 
-enum DataDistrubute {
-    RANDOM, ZIPFIAN, _DataDistrbuteNumber
-};
+enum DataDistrubute { RANDOM, ZIPFIAN, _DataDistrbuteNumber };
 
 enum BenchMarkType {
     READ_ONLY,
@@ -52,7 +44,7 @@ struct Config {
 
     std::string filename;
     DataDistrubute workload;
-    int read_ratio;  // for read-upadte benchmark, (read_ratio)%.
+    int read_ratio; // for read-upadte benchmark, (read_ratio)%.
 
     float skewness;
     int scan_length;
@@ -62,45 +54,45 @@ struct Config {
     void report() {
         printf("--- Config ---\n");
         printf(
-                "type:\t %d\nbenchmark:\t %d\nthreads:\t %d\ninit_keys:\t %lld\n",
-                type, benchmark, num_threads, init_keys);
+            "type:\t %d\nbenchmark:\t %d\nthreads:\t %d\ninit_keys:\t %lld\n",
+            type, benchmark, num_threads, init_keys);
         printf("--------------\n");
     }
 };
 
 static struct option opts[] = {
-        {"help",         no_argument,       NULL, 'h'},
-        {"type",         required_argument, NULL, 't'},
-        {"num_threads",  required_argument, NULL, 'n'},
-        {"keys",         required_argument, NULL, 'k'},
-        {"share_memory", no_argument,       NULL, 's'},
-        {"duration",     required_argument, NULL, 'd'},
-        {"benchmark",    required_argument, NULL, 'b'},
-        {"filename",     required_argument, NULL, 'f'},
-        {"workload",     required_argument, NULL, 'w'},
-        {"skewness",     required_argument, NULL, 'S'},
-        {"scan_length",  required_argument, NULL, 'l'},
-        {"read_ratio",   required_argument, NULL, 'r'},
+    {"help", no_argument, NULL, 'h'},
+    {"type", required_argument, NULL, 't'},
+    {"num_threads", required_argument, NULL, 'n'},
+    {"keys", required_argument, NULL, 'k'},
+    {"share_memory", no_argument, NULL, 's'},
+    {"duration", required_argument, NULL, 'd'},
+    {"benchmark", required_argument, NULL, 'b'},
+    {"filename", required_argument, NULL, 'f'},
+    {"workload", required_argument, NULL, 'w'},
+    {"skewness", required_argument, NULL, 'S'},
+    {"scan_length", required_argument, NULL, 'l'},
+    {"read_ratio", required_argument, NULL, 'r'},
 };
 
 static void usage_exit(FILE *out) {
     fprintf(
-            out,
-            "Command line options : nstore <options> \n"
-            "   -h --help              : Print help message \n"
-            "   -t --type              : Index type : 0 (PART) 1 (FAST_FAIR) \n"
-            "   -K --key_type           : Key type : 0 (Integer) 1 (String) \n"
-            "   -n --num_threads       : Number of workers \n"
-            "   -k --keys              : Number of key-value pairs at begin\n"
-            "   -s --non_share_memory  : Use different index instances among "
-            "different workers\n"
-            "   -d --duration          : Execution time\n"
-            "   -b --benchmark         : Benchmark type, 0-%d\n"
-            "   -w --workload          : type of workload: 0 (RANDOM) 1 (ZIPFIAN)\n"
-            "   -S --skewed            : skewness: 0-1 (default 0.99)\n"
-            "   -l --scan_length       : scan_length: int (default 100)\n"
-            "   -r --read_ratio        : read ratio: int (default 50)\n",
-            _BenchMarkType - 1);
+        out,
+        "Command line options : nstore <options> \n"
+        "   -h --help              : Print help message \n"
+        "   -t --type              : Index type : 0 (PART) 1 (FAST_FAIR) \n"
+        "   -K --key_type           : Key type : 0 (Integer) 1 (String) \n"
+        "   -n --num_threads       : Number of workers \n"
+        "   -k --keys              : Number of key-value pairs at begin\n"
+        "   -s --non_share_memory  : Use different index instances among "
+        "different workers\n"
+        "   -d --duration          : Execution time\n"
+        "   -b --benchmark         : Benchmark type, 0-%d\n"
+        "   -w --workload          : type of workload: 0 (RANDOM) 1 (ZIPFIAN)\n"
+        "   -S --skewed            : skewness: 0-1 (default 0.99)\n"
+        "   -l --scan_length       : scan_length: int (default 100)\n"
+        "   -r --read_ratio        : read ratio: int (default 50)\n",
+        _BenchMarkType - 1);
     exit(EXIT_FAILURE);
 }
 
@@ -124,57 +116,59 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "f:t:K:n:k:sd:b:w:S:l:r:T:", opts, &idx);
+        int c =
+            getopt_long(argc, argv, "f:t:K:n:k:sd:b:w:S:l:r:T:", opts, &idx);
 
-        if (c == -1) break;
+        if (c == -1)
+            break;
 
         switch (c) {
-            case 'b':
-                state.benchmark = (BenchMarkType) atoi(optarg);
-                break;
-            case 'd':
-                state.duration = atof(optarg);
-                break;
-            case 't':
-                state.type = (IndexType) atoi(optarg);
-                break;
-            case 'K':
-                state.key_type = (KeyType) atoi(optarg);
-                break;
-            case 'n':
-                state.num_threads = atoi(optarg);
-                break;
-            case 'k':
-                state.init_keys = (1llu << atoi(optarg));
-                break;
-            case 's':
-                state.share_memory = false;
-                break;
-            case 'f':
-                state.filename = std::string(optarg);
-                break;
-            case 'w':
-                state.workload = (DataDistrubute) atoi(optarg);
-                break;
-            case 'S':
-                state.skewness = atof(optarg);
-                break;
-            case 'l':
-                state.scan_length = atoi(optarg);
-                break;
-            case 'r':
-                state.read_ratio = atoi(optarg);
-                break;
-            case 'T':
-                state.throughput = atoi(optarg);
-                state.latency_test = true;
-                break;
-            case 'h':
-                usage_exit(stdout);
-                break;
-            default:
-                fprintf(stderr, "\nUnknown option: -%c-\n", c);
-                usage_exit(stderr);
+        case 'b':
+            state.benchmark = (BenchMarkType)atoi(optarg);
+            break;
+        case 'd':
+            state.duration = atof(optarg);
+            break;
+        case 't':
+            state.type = (IndexType)atoi(optarg);
+            break;
+        case 'K':
+            state.key_type = (KeyType)atoi(optarg);
+            break;
+        case 'n':
+            state.num_threads = atoi(optarg);
+            break;
+        case 'k':
+            state.init_keys = (1llu << atoi(optarg));
+            break;
+        case 's':
+            state.share_memory = false;
+            break;
+        case 'f':
+            state.filename = std::string(optarg);
+            break;
+        case 'w':
+            state.workload = (DataDistrubute)atoi(optarg);
+            break;
+        case 'S':
+            state.skewness = atof(optarg);
+            break;
+        case 'l':
+            state.scan_length = atoi(optarg);
+            break;
+        case 'r':
+            state.read_ratio = atoi(optarg);
+            break;
+        case 'T':
+            state.throughput = atoi(optarg);
+            state.latency_test = true;
+            break;
+        case 'h':
+            usage_exit(stdout);
+            break;
+        default:
+            fprintf(stderr, "\nUnknown option: -%c-\n", c);
+            usage_exit(stderr);
         }
     }
     // state.report();

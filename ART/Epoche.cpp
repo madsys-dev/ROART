@@ -4,10 +4,9 @@
 #ifndef EPOCHE_CPP
 #define EPOCHE_CPP
 
+#include "Epoche.h"
 #include <assert.h>
 #include <iostream>
-#include "Epoche.h"
-
 
 inline DeletionList::~DeletionList() {
     assert(deletitionListCount == 0 && headDeletionList == nullptr);
@@ -20,9 +19,7 @@ inline DeletionList::~DeletionList() {
     freeLabelDeletes = nullptr;
 }
 
-inline std::size_t DeletionList::size() {
-    return deletitionListCount;
-}
+inline std::size_t DeletionList::size() { return deletitionListCount; }
 
 inline void DeletionList::remove(LabelDelete *label, LabelDelete *prev) {
     if (prev == nullptr) {
@@ -40,7 +37,8 @@ inline void DeletionList::remove(LabelDelete *label, LabelDelete *prev) {
 inline void DeletionList::add(void *n, uint64_t globalEpoch) {
     deletitionListCount++;
     LabelDelete *label;
-    if (headDeletionList != nullptr && headDeletionList->nodesCount < headDeletionList->nodes.size()) {
+    if (headDeletionList != nullptr &&
+        headDeletionList->nodesCount < headDeletionList->nodes.size()) {
         label = headDeletionList;
     } else {
         if (freeLabelDeletes != nullptr) {
@@ -60,13 +58,12 @@ inline void DeletionList::add(void *n, uint64_t globalEpoch) {
     added++;
 }
 
-inline LabelDelete *DeletionList::head() {
-    return headDeletionList;
-}
+inline LabelDelete *DeletionList::head() { return headDeletionList; }
 
 inline void Epoche::enterEpoche(ThreadInfo &epocheInfo) {
     unsigned long curEpoche = currentEpoche.load(std::memory_order_relaxed);
-    epocheInfo.getDeletionList().localEpoche.store(curEpoche, std::memory_order_release);
+    epocheInfo.getDeletionList().localEpoche.store(curEpoche,
+                                                   std::memory_order_release);
 }
 
 inline void Epoche::markNodeForDeletion(void *n, ThreadInfo &epocheInfo) {
@@ -144,14 +141,12 @@ inline void Epoche::showDeleteRatio() {
 }
 
 inline ThreadInfo::ThreadInfo(Epoche &epoche)
-        : epoche(epoche), deletionList(epoche.deletionLists.local()) { }
+    : epoche(epoche), deletionList(epoche.deletionLists.local()) {}
 
 inline DeletionList &ThreadInfo::getDeletionList() const {
     return deletionList;
 }
 
-inline Epoche &ThreadInfo::getEpoche() const {
-    return epoche;
-}
+inline Epoche &ThreadInfo::getEpoche() const { return epoche; }
 
-#endif //EPOCHE_CPP
+#endif // EPOCHE_CPP

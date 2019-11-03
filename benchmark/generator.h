@@ -1,33 +1,34 @@
 #ifndef GENERATOR_H
 #define GENERATOR_H
 
-#include <iostream>
+#include <atomic>
+#include <cstdio>
 #include <fstream>
+#include <iostream>
 #include <map>
 #include <mutex>
-#include <cstdio>
 #include <unistd.h>
-#include <atomic>
 
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-#include <bits/stdc++.h>
 #include "config.h"
+#include <bits/stdc++.h>
 
 /*
- * Fast random number, using eran48/nrand48; All the functions work by generating
- * a sequence of 48-bit integers, X[i], accourding to the liner congruential formula:
- * 		Xn+1 = (aXn + c) mod m;  where n >= 0
- * If you want to generate the same sequence again, you can call "reset" function.
+ * Fast random number, using eran48/nrand48; All the functions work by
+ * generating a sequence of 48-bit integers, X[i], accourding to the liner
+ * congruential formula: Xn+1 = (aXn + c) mod m;  where n >= 0 If you want to
+ * generate the same sequence again, you can call "reset" function.
  */
 class RandomFunc {
     unsigned short seed[3];
     unsigned short seed2[3];
     unsigned short inital[3];
     unsigned short inital2[3];
-public:
+
+  public:
     RandomFunc() {
         for (int i = 0; i < 3; i++) {
             inital[i] = seed[i] = rand();
@@ -35,13 +36,9 @@ public:
         }
     }
 
-    int randomInt() {
-        return nrand48(seed) ^ nrand48(seed2);
-    }
+    int randomInt() { return nrand48(seed) ^ nrand48(seed2); }
 
-    double randomDouble() {
-        return erand48(seed) * erand48(seed2);
-    }
+    double randomDouble() { return erand48(seed) * erand48(seed2); }
 
     void setSeed(unsigned short newseed[3]) {
         memcpy(seed, newseed, sizeof(unsigned short) * 3);
@@ -52,9 +49,7 @@ public:
         memcpy(seed2, inital2, sizeof(unsigned short) * 3);
     }
 
-    long long Next() {
-        return randomInt();
-    }
+    long long Next() { return randomInt(); }
 
     std::string NextStr() {
 #ifdef VARIABLE_LENGTH
@@ -69,7 +64,7 @@ public:
         }
         return res;
     }
-}__attribute__((aligned(64)));
+} __attribute__((aligned(64)));
 
 class ZipfianFunc {
     double *zipfs;
@@ -78,19 +73,16 @@ class ZipfianFunc {
 
     void init(double s, int inital);
 
-public:
+  public:
     ZipfianFunc(double s, int inital = (1 << 20));
 
-    ~ZipfianFunc() {
-        delete zipfs;
-    }
+    ~ZipfianFunc() { delete zipfs; }
 
     int randomInt();
 } __attribute__((aligned(64)));
 
-
 class WorkloadGenerator {
-public:
+  public:
     static const int data_size = (1 << 25);
     int wl_int[data_size];
     std::string wl_str[data_size];
@@ -98,15 +90,11 @@ public:
     uint64_t next_int[max_thread_num];
     uint64_t next_str[max_thread_num];
 
-    static std::string get_file_name_int() {
-        return "/tmp/random_int_data";
-    }
+    static std::string get_file_name_int() { return "/tmp/random_int_data"; }
 
-    static std::string get_file_name_str() {
-        return "/tmp/random_str_data";
-    }
+    static std::string get_file_name_str() { return "/tmp/random_str_data"; }
 
-public:
+  public:
     WorkloadGenerator() {
         for (int i = 0; i < max_thread_num; i++) {
             next_int[i] = next_str[i] = 0;
@@ -166,11 +154,10 @@ public:
     }
 };
 
-
 class ZipfGenerator : public WorkloadGenerator {
     int zipfindex[data_size];
 
-public:
+  public:
     ZipfGenerator(double s, int initial = (1 << 20));
 
     long long NextInt(int tid) {
@@ -188,7 +175,8 @@ public:
 
 class RandomGenerator : public WorkloadGenerator {
     RandomFunc rdm[max_thread_num];
-public:
+
+  public:
     RandomGenerator() {}
 
     long long NextInt(int tid) {
@@ -205,14 +193,11 @@ public:
 class SequenceGenerator : public WorkloadGenerator {
     int size;
     std::atomic<int> next;
-public:
-    SequenceGenerator(int size) : size(size) {
-        next.store(0);
-    }
 
-    long long NextInt() {
-        return next.fetch_add(1);
-    }
+  public:
+    SequenceGenerator(int size) : size(size) { next.store(0); }
+
+    long long NextInt() { return next.fetch_add(1); }
 } __attribute__((aligned(64)));
 
 #endif // GENERATOR_H

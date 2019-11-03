@@ -1,6 +1,6 @@
-#include <assert.h>
-#include <algorithm>
 #include "N.h"
+#include <algorithm>
+#include <assert.h>
 
 namespace PART_ns {
 
@@ -19,8 +19,7 @@ inline bool N48::insert(uint8_t key, N *n, bool flush) {
     return true;
 }
 
-template <class NODE>
-void N48::copyTo(NODE *n) const {
+template <class NODE> void N48::copyTo(NODE *n) const {
     for (unsigned i = 0; i < 256; i++) {
         uint8_t index = childIndex[i].load();
         if (index != emptyMarker && children[index].load() != nullptr) {
@@ -105,8 +104,9 @@ uint32_t N48::getCount() const {
     uint32_t cnt = 0;
     for (uint32_t i = 0; i < 256 && cnt < 3; i++) {
         uint8_t index = childIndex[i].load();
-        if (index != emptyMarker && children[index].load() != nullptr) cnt++;
+        if (index != emptyMarker && children[index].load() != nullptr)
+            cnt++;
     }
     return cnt;
 }
-}  // namespace ART_ROWEX
+} // namespace PART_ns

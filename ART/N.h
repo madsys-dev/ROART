@@ -6,11 +6,11 @@
 #define ART_ROWEX_N_H
 //#define ART_NOREADLOCK
 //#define ART_NOWRITELOCK
-#include <stdint.h>
-#include <string.h>
-#include <atomic>
 #include "Epoche.h"
 #include "Key.h"
+#include <atomic>
+#include <stdint.h>
+#include <string.h>
 #ifdef LOCK_INIT
 #include "tbb/concurrent_vector.h"
 #endif
@@ -25,27 +25,27 @@ namespace PART_ns {
  * UnsynchronizedTree
  */
 
-enum class NTypes : uint8_t { N4 = 0, N16 = 1, N48 = 2, N256 = 3, Leaf = 4 };
+enum class NTypes : uint8_t { N4 = 1, N16 = 2, N48 = 3, N256 = 4, Leaf = 5 };
 
 class Leaf {
-   public:
+  public:
     size_t key_len;
     uint64_t key;
     uint8_t *fkey;
     uint64_t value;
 
-   public:
+  public:
     Leaf(const Key *k) {
         key_len = k->key_len;
         value = k->value;
 #ifdef KEY_INLINE
-        key = k->key; // compare to store the key, new an array will decrease 30% performance
+        key = k->key; // compare to store the key, new an array will decrease
+                      // 30% performance
         fkey = (uint8_t *)&key;
 #else
         fkey = new uint8_t[key_len];
         memcpy(fkey, k->fkey, key_len);
 #endif
-
     }
 
     virtual ~Leaf() {
@@ -73,7 +73,7 @@ static tbb::concurrent_vector<N *> lock_initializer;
 void lock_initialization();
 #endif
 class N {
-   protected:
+  protected:
     N(NTypes type, uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : level(level) {
         setType(type);
@@ -109,7 +109,7 @@ class N {
 
     static uint64_t convertTypeToVersion(NTypes type);
 
-   public:
+  public:
     static inline N *setDirty(N *val) {
         return (N *)((uint64_t)val | dirty_bit);
     }
@@ -210,11 +210,11 @@ class N {
 };
 
 class N4 : public N {
-   public:
+  public:
     std::atomic<uint8_t> keys[4];
     std::atomic<N *> children[4];
 
-   public:
+  public:
     N4(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : N(NTypes::N4, level, prefix, prefixLength) {
         memset(keys, 0, sizeof(keys));
@@ -229,8 +229,7 @@ class N4 : public N {
     inline bool insert(uint8_t key, N *n, bool flush)
         __attribute__((always_inline));
 
-    template <class NODE>
-    void copyTo(NODE *n) const;
+    template <class NODE> void copyTo(NODE *n) const;
 
     void change(uint8_t key, N *val);
 
@@ -252,7 +251,7 @@ class N4 : public N {
 };
 
 class N16 : public N {
-   public:
+  public:
     std::atomic<uint8_t> keys[16];
     std::atomic<N *> children[16];
 
@@ -287,7 +286,7 @@ class N16 : public N {
 
     std::atomic<N *> *getChildPos(const uint8_t k);
 
-   public:
+  public:
     N16(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : N(NTypes::N16, level, prefix, prefixLength) {
         memset(keys, 0, sizeof(keys));
@@ -302,8 +301,7 @@ class N16 : public N {
     inline bool insert(uint8_t key, N *n, bool flush)
         __attribute__((always_inline));
 
-    template <class NODE>
-    void copyTo(NODE *n) const;
+    template <class NODE> void copyTo(NODE *n) const;
 
     void change(uint8_t key, N *val);
 
@@ -326,7 +324,7 @@ class N48 : public N {
     std::atomic<uint8_t> childIndex[256];
     std::atomic<N *> children[48];
 
-   public:
+  public:
     static const uint8_t emptyMarker = 48;
 
     N48(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
@@ -343,8 +341,7 @@ class N48 : public N {
     inline bool insert(uint8_t key, N *n, bool flush)
         __attribute__((always_inline));
 
-    template <class NODE>
-    void copyTo(NODE *n) const;
+    template <class NODE> void copyTo(NODE *n) const;
 
     void change(uint8_t key, N *val);
 
@@ -366,7 +363,7 @@ class N48 : public N {
 class N256 : public N {
     std::atomic<N *> children[256];
 
-   public:
+  public:
     N256(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : N(NTypes::N256, level, prefix, prefixLength) {
         memset(children, '\0', sizeof(children));
@@ -379,8 +376,7 @@ class N256 : public N {
     inline bool insert(uint8_t key, N *val, bool flush)
         __attribute__((always_inline));
 
-    template <class NODE>
-    void copyTo(NODE *n) const;
+    template <class NODE> void copyTo(NODE *n) const;
 
     void change(uint8_t key, N *n);
 
@@ -398,5 +394,5 @@ class N256 : public N {
 
     uint32_t getCount() const;
 };
-}  // namespace PART_ns
-#endif  // ART_ROWEX_N_H
+} // namespace PART_ns
+#endif // ART_ROWEX_N_H

@@ -1,10 +1,10 @@
+#include "Tree.h"
 #include <gtest/gtest.h>
+#include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <iostream>
 #include <thread>
 #include <vector>
-#include "Tree.h"
 
 using namespace PART_ns;
 
@@ -55,8 +55,7 @@ TEST(TestCorrectness, PM_ART) {
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
 
-                    Tree::OperationResults res =
-                        art->remove(Keys[kk], t);
+                    Tree::OperationResults res = art->remove(Keys[kk], t);
                     ASSERT_EQ(res, Tree::OperationResults::Success)
                         << "fail to remove key " << kk;
                 }
@@ -71,8 +70,7 @@ TEST(TestCorrectness, PM_ART) {
                 // insert
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
-                    Tree::OperationResults res =
-                        art->insert(Keys[kk], t);
+                    Tree::OperationResults res = art->insert(Keys[kk], t);
 
                     ASSERT_EQ(res, Tree::OperationResults::Success)
                         << "insert failed on key " << kk;
@@ -103,10 +101,4 @@ TEST(TestCorrectness, PM_ART) {
     }
 
     std::cout << "passed test.....\n";
-}
-
-int main(int argc, char **argv) {
-    testing::InitGoogleTest(&argc, argv);
-    // Runs all tests using Google Test.
-    return RUN_ALL_TESTS();
 }

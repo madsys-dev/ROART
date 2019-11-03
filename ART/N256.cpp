@@ -1,6 +1,6 @@
-#include <assert.h>
-#include <algorithm>
 #include "N.h"
+#include <algorithm>
+#include <assert.h>
 
 namespace PART_ns {
 
@@ -22,8 +22,7 @@ inline bool N256::insert(uint8_t key, N *val, bool flush) {
     return true;
 }
 
-template <class NODE>
-void N256::copyTo(NODE *n) const {
+template <class NODE> void N256::copyTo(NODE *n) const {
     for (int i = 0; i < 256; ++i) {
         N *child = children[i].load();
         if (child != nullptr) {
@@ -83,8 +82,9 @@ uint32_t N256::getCount() const {
     uint32_t cnt = 0;
     for (uint32_t i = 0; i < 256 && cnt < 3; i++) {
         N *child = children[i].load();
-        if (child != nullptr) cnt++;
+        if (child != nullptr)
+            cnt++;
     }
     return cnt;
 }
-}  // namespace ART_ROWEX
+} // namespace PART_ns

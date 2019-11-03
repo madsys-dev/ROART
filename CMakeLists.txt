@@ -32,19 +32,15 @@ set(INDEX_FILES
 add_library(Indexes ${INDEX_FILES})
 target_link_libraries(Indexes  ${TbbLib})
 
-set(P_ART_BENCH test/art_simple_bench.cpp)
+set(P_ART_BENCH perf/art_simple_bench.cpp)
 add_executable(art_simple_bench ${P_ART_BENCH})
 target_link_libraries(art_simple_bench Indexes)
 
-set(P_ART_TEST test/art_correctness.cpp)
-add_executable(art_test ${P_ART_TEST})
-target_link_libraries(art_test Indexes)
-
-set(BENCHMARK test/main.cpp)
+set(BENCHMARK perf/main.cpp)
 add_executable(benchmark ${BENCHMARK})
 target_link_libraries(benchmark Indexes)
 
-#
-#set(YCSB test/ycsb.cpp)
-#add_executable(ycsb ${YCSB})
-#target_link_libraries(ycsb Indexes)
+aux_source_directory(test DIR_TEST_SRCS)
+add_executable(unittest ${DIR_TEST_SRCS})
+target_link_libraries(unittest Indexes gtest)
+

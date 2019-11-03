@@ -9,10 +9,10 @@
 namespace PART_ns {
 
 class Tree {
-   public:
+  public:
     using LoadKeyFunction = void (*)(TID tid, Key &key);
 
-   private:
+  private:
     N *root;
 
     bool checkKey(const Key *ret, const Key *k) const;
@@ -21,7 +21,7 @@ class Tree {
 
     Epoche epoche{256};
 
-   public:
+  public:
     enum class CheckPrefixResult : uint8_t { Match, NoMatch, OptimisticMatch };
 
     enum class CheckPrefixPessimisticResult : uint8_t {
@@ -44,15 +44,16 @@ class Tree {
     };
     enum class OperationResults : uint8_t {
         Success,
-        NotFound,  // remove
-        Existed,   // insert
+        NotFound, // remove
+        Existed,  // insert
         UnSuccess
     };
     static CheckPrefixResult checkPrefix(N *n, const Key *k, uint32_t &level);
 
-    static CheckPrefixPessimisticResult checkPrefixPessimistic(
-        N *n, const Key *k, uint32_t &level, uint8_t &nonMatchingKey,
-        Prefix &nonMatchingPrefix, LoadKeyFunction loadKey);
+    static CheckPrefixPessimisticResult
+    checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
+                           uint8_t &nonMatchingKey, Prefix &nonMatchingPrefix,
+                           LoadKeyFunction loadKey);
 
     static PCCompareResults checkPrefixCompare(const N *n, const Key *k,
                                                uint32_t &level,
@@ -62,7 +63,7 @@ class Tree {
                                              const Key *start, const Key *end,
                                              LoadKeyFunction loadKey);
 
-   public:
+  public:
     Tree();
 
     Tree(const Tree &) = delete;
@@ -86,5 +87,5 @@ class Tree {
 
     OperationResults remove(const Key *k, ThreadInfo &epocheInfo);
 };
-}  // namespace ART_ROWEX
-#endif  // ART_ROWEX_TREE_H
+} // namespace PART_ns
+#endif // ART_ROWEX_TREE_H
