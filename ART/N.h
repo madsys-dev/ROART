@@ -25,6 +25,8 @@ namespace PART_ns {
  * UnsynchronizedTree
  */
 
+enum class NTypes : uint8_t { N4 = 0, N16 = 1, N48 = 2, N256 = 3, Leaf = 4 };
+
 class Leaf {
    public:
     size_t key_len;
@@ -58,8 +60,6 @@ class Leaf {
     }
     inline size_t getKeyLen() const { return key_len; }
 } __attribute__((aligned(64)));
-
-enum class NTypes : uint8_t { N4 = 0, N16 = 1, N48 = 2, N256 = 3 };
 
 static constexpr uint32_t maxStoredPrefixLength = 4;
 struct Prefix {

@@ -7,6 +7,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <string>
+#include <list>
 #include "util.h"
 
 namespace NVMMgr_ns {
@@ -16,17 +17,12 @@ namespace NVMMgr_ns {
          *
          * A simple structure to manage the NVM file
          *
-         *  /  4K  /     4K          /  1024 * 4K   / ...  /
-         *  / head / Root node(meta) / thread local / data /
+         *   / 256K  /  128 * 256K  /     ...     /
+         *  / head  / thread local / data blocks /
          *
          *  head:
-         *       Avaiable to the NVM manager, including how many blocks allocated.
-         *
-         *  Root node:
-         *       Root node for applications. The application has total control to
-         * this area, which can be used as the metadata of the application. The
-         * address of the root node can be obtained by the function
-         * "alloc_tree_meta"
+         *       Avaiable to the NVM manager, including root and bitmap to indicate
+         *       how many blocks have been allocated.
          *
          *  thread local:
          *       Each thread can own a thread local persistent memory area. After
@@ -46,27 +42,31 @@ namespace NVMMgr_ns {
          * we do not recyle memory.
          *
          */
+        static const int magic_number = 12345;
+        static const int max_threads = 128;
+
         static const size_t start_addr = 0x50000000;
-        static const int PGSIZE = 4096;
-        static const long long filesize = 1024LL * 1024 * PGSIZE;  // 4GB
+        static const int PGSIZE = 256 * 1024; // 256K
+        static const long long filesize = 16LL * 1024 * PGSIZE;  // 4GB
+
+        static const size_t tree_meta_start = start_addr + PGSIZE;
+        static const size_t thread_local_start = tree_meta_start + PGSIZE;
+        static const size_t data_block_start =
+                thread_local_start + PGSIZE * max_threads;
 
         static const char *get_filename() {
             static const std::string filename = "/mnt/dax/matianmao/part.data";
             return filename.c_str();
         }
 
-        int fd;
-
         struct Head {
-            static const int magic_number = 12345;
-            static const int max_threads = 1024;
-            int status;
-            int threads;
-            size_t allocated_pages;  // pages
-            const static size_t tree_meta_start = start_addr + PGSIZE;
-            const static size_t thread_local_start = tree_meta_start + PGSIZE;
-            const static size_t data_block_start =
-                    thread_local_start + PGSIZE * max_threads;
+            // TODO: some other meta data for recovery
+            char root[4096]; // for root
+
+            int status; // if equal to magic_number, it is reopen
+            int threads; // threads number
+            int bitmap[0];   // show every page type
+            // 0: free, 1: N4, 2: N16, 3: N48, 4: N256, 5: Leaf
         };
 
     public:
@@ -74,28 +74,29 @@ namespace NVMMgr_ns {
 
         ~NVMMgr();
 
-        // Return whether the NVM file is created for the first time.
-        // If not, this function will set references passed to it correctly:
-        //      thread_info: the start address of thread local memories.
-        //      threads: the number of thread local pages. Each page is 4K Bytes.
-        //      safe: whether the NVM manager normally existed last time (by call
-        //      the destruction function)
-        bool init(void *&thread_info, int &threads, bool &safe);
+        void reload_free_blocks();
 
         // TODO: raise exception if this function is not invoked before any alloc
         // function.
-        void recover_done();
+//        void recover_done();
 
-        static void *alloc_tree_meta() { return (void *) (Head::tree_meta_start); }
+        void *alloc_tree_root() { return (void *)meta_data; }
 
         void *alloc_thread_info();
 
         void *alloc_block(int pages);
+
+        uint64_t free_bit_offset;
+        std::list<uint64_t> free_page_list;
+        int fd;
+        Head *meta_data;
     };
 
     NVMMgr *get_nvm_mgr();
 
-    bool init_nvm_mgr(void *&thread_info, int &threads, bool &safe);
+    // true: first initialize
+    // false: have been initialized
+    bool init_nvm_mgr();
 
     void close_nvm_mgr();
 }

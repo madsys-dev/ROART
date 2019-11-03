@@ -184,7 +184,7 @@ void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     parentNode->writeUnlock();
 
     n->writeUnlockObsolete();
-    threadInfo.getEpoche().markNodeForDeletion(n, threadInfo);
+//    threadInfo.getEpoche().markNodeForDeletion(n, threadInfo);
 }
 
 template <typename curN>
@@ -206,7 +206,7 @@ void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     parentNode->writeUnlock();
 
     n->writeUnlockObsolete();
-    threadInfo.getEpoche().markNodeForDeletion(n, threadInfo);
+//    threadInfo.getEpoche().markNodeForDeletion(n, threadInfo);
 }
 
 void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
@@ -331,7 +331,7 @@ void N::removeAndShrink(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
 
     parentNode->writeUnlock();
     n->writeUnlockObsolete();
-    threadInfo.getEpoche().markNodeForDeletion(n, threadInfo);
+//    threadInfo.getEpoche().markNodeForDeletion(n, threadInfo);
 }
 
 void N::removeAndUnlock(N *node, uint8_t key, N *parentNode, uint8_t keyParent,

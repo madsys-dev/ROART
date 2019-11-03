@@ -6,19 +6,41 @@
 
 namespace NVMMgr_ns {
 
+    //global nvm manager
     NVMMgr *nvm_mgr = NULL;
     std::mutex _mtx;
 
-    NVMMgr::NVMMgr() {
-#ifdef CLEAR_NVM_POOL
-        printf("[NVM MGR]\tmemory clear\n");
-        std::string str = std::string("echo '0' > ") + get_filename();
-        int res = system(str.c_str());
-        if (res != 0) {
-            printf("[NVM MGR] clear failed\n");
-            exit(0);
+    int create_file(const char *file_name, uint64_t file_size) {
+        std::ofstream fout(file_name);
+        if (fout) {
+            fout.close();
+            int result = truncate(file_name, file_size);
+            if (result != 0) {
+                printf("[NVM MGR]\ttruncate new file failed\n");
+                exit(1);
+            }
+        } else {
+            printf("[NVM MGR]\tcreate new file failed\n");
+            exit(1);
         }
-#endif
+
+        return 0;
+    }
+
+    NVMMgr::NVMMgr() {
+        // access 的返回结果， 0: 存在， 1: 不存在
+        int initial = access(get_filename(), F_OK);
+
+        if (initial) {
+            int result = create_file(get_filename(), filesize);
+            if (result != 0) {
+                printf("[NVM MGR]\tcreate file failed when initalizing\n");
+                exit(1);
+            }
+            printf("[NVM MGR]\tcreate file success.\n");
+        }
+
+        // open file
         fd = open(get_filename(), O_RDWR);
         if (fd < 0) {
             printf("[NVM MGR]\tfailed to open nvm file\n");
@@ -28,6 +50,8 @@ namespace NVMMgr_ns {
             printf("[NVM MGR]\tfailed to truncate file\n");
             exit(-1);
         }
+
+        // mmap
         void *addr = mmap((void *) start_addr, filesize, PROT_READ | PROT_WRITE,
                           MAP_SHARED, fd, 0);
 
@@ -36,50 +60,42 @@ namespace NVMMgr_ns {
             exit(0);
         }
         printf("[NVM MGR]\tmmap successfully\n");
+
+        // initialize meta data
+        meta_data = static_cast<Head *>(addr);
+        if (initial) {
+            // set status of head and set zero for bitmap
+            // persist it
+            memset((void *)meta_data, 0, PGSIZE);
+
+            meta_data->status = magic_number;
+            meta_data->threads = 0;
+
+            flush_data((void *)meta_data, PGSIZE);
+        }
+
+        reload_free_blocks();
     }
 
     NVMMgr::~NVMMgr() {
-        // 正常结束
+        // normally exit
         printf("[NVM MGR]\tnormally exits, NVM reset..\n");
-        Head *head = (Head *) start_addr;
-        head->threads = 0;
-        flush_data((void *) head, sizeof(Head));
+//        Head *head = (Head *) start_addr;
+//        flush_data((void *) head, sizeof(Head));
         munmap((void *) start_addr, filesize);
     }
 
-    bool NVMMgr::init(void *&thread_info, int &threads, bool &safe) {
-        Head *head = (Head *) start_addr;
-        bool res;
-
-        if (head->status == Head::magic_number) {  // reopen
-            // do nothing
-            safe = head->threads == 0;
-            res = false;
-        } else {  // first time
-            head->status = Head::magic_number;
-            head->threads = 0;
-            flush_data((void *) head, sizeof(Head));
-            safe = true;
-            res = true;
-        }
-        thread_info = (void *) head->thread_local_start;
-        threads = head->threads;
-
-        return res;
-    }
-
-    void NVMMgr::recover_done() {
-        Head *head = (Head *) start_addr;
-        head->threads = 0;
-        flush_data((void *) head, sizeof(Head));
-    }
+//    void NVMMgr::recover_done() {
+//        Head *head = (Head *) start_addr;
+//        head->threads = 0;
+//        flush_data((void *) head, sizeof(Head));
+//    }
 
     void *NVMMgr::alloc_thread_info() {
         // not thread safe
-        Head *head = (Head *) start_addr;
-        size_t index = head->threads++;
-        flush_data((void *) head, sizeof(Head));
-        return (void *) (head->thread_local_start + index * PGSIZE);
+        size_t index = meta_data->threads++;
+        flush_data((void *) meta_data->threads, sizeof(int));
+        return (void *) (thread_local_start + index * PGSIZE);
     }
 
     void *NVMMgr::alloc_block(int pages) {
@@ -92,6 +108,11 @@ namespace NVMMgr_ns {
         return (void *) (head->data_block_start + index * PGSIZE);
     }
 
+
+    /* interface to call methods of nvm_mgr
+     *
+     *
+     */
     NVMMgr *get_nvm_mgr() {
         std::lock_guard<std::mutex> lock(_mtx);
 
@@ -102,21 +123,23 @@ namespace NVMMgr_ns {
         return nvm_mgr;
     }
 
-    bool init_nvm_mgr(void *&thread_info, int &threads, bool &safe) {
+    bool init_nvm_mgr() {
         std::lock_guard<std::mutex> lock(_mtx);
 
         if (nvm_mgr) {
             printf("[NVM MGR]\tnvm manager has already been initilized.\n");
-            return true;
+            return false;
         }
         nvm_mgr = new NVMMgr();
-        return nvm_mgr->init(thread_info, threads, safe);
+        return true;
     }
 
     void close_nvm_mgr() {
         std::lock_guard<std::mutex> lock(_mtx);
 
-        delete nvm_mgr;
-        nvm_mgr = NULL;
+        if (nvm_mgr != NULL) {
+            delete nvm_mgr;
+            nvm_mgr = NULL;
+        }
     }
 }

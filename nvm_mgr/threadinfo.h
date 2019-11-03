@@ -1,6 +1,8 @@
 #ifndef thread_info_h
 #define thread_info_h
 
+#include "N.h"
+
 namespace NVMMgr_ns {
 /*
  * Persistent leaf management
@@ -18,18 +20,24 @@ class PMFreeList {
    public:
     PMFreeList();
 
-    void* alloc_leaf();
-    void free_leaf(void* leaf);
+    void* alloc_node(PART_ns::NTypes nt);
+    void free_node(void* n);
 };
 
 struct thread_info {
     int id;
     volatile int _lock;
     struct thread_info* next;
-    PMFreeList* pm_free_list;
+
+    PMFreeList* node4_free_list;
+    PMFreeList* node16_free_list;
+    PMFreeList* node48_free_list;
+    PMFreeList* node256_free_list;
+    PMFreeList* leaf_free_list;
+
     char padding[8];
-    char static_log[4072];  // 整个 thread_info的长度为 4096，所以剩下的内存
-                            // 4096-32 = 4064 都可以用来做 static log。
+    char static_log[4032];  // 整个 thread_info的长度为 4096，所以剩下的内存
+                            // 4096-64 = 4032 都可以用来做 static log。
 } __attribute__((aligned(64)));
 
 void register_threadinfo();

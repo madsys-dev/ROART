@@ -25,13 +25,11 @@ namespace PART_ns {
 
 Tree::Tree(){
     std::cout<<"[P-ART]\tnew P-ART\n";
-    void* thread_info;
-    int threads;
-    bool safe;
-    bool init = init_nvm_mgr(thread_info, threads, safe);
+
+    bool init = init_nvm_mgr();
     register_threadinfo();
     NVMMgr *mgr = get_nvm_mgr();
-    root = reinterpret_cast<N256 *>(mgr->alloc_tree_meta());
+    root = reinterpret_cast<N256 *>(mgr->alloc_tree_root());
 
     if(init) {
         // first open
@@ -45,6 +43,7 @@ Tree::Tree(){
 }
 
 Tree::~Tree() {
+    // TODO: reclaim the memory of PM
     N::deleteChildren(root);
     N::deleteNode(root);
 }
@@ -60,7 +59,6 @@ void *Tree::lookup(const Key *k, ThreadInfo &threadEpocheInfo) const {
     uint32_t level = 0;
     bool optimisticPrefixMatch = false;
 
-    // art_cout << "Searching key " << k->fkey << std::endl;
     while (true) {
         switch (checkPrefix(node, k, level)) {  // increases level
             case CheckPrefixResult::NoMatch:
@@ -315,11 +313,9 @@ bool Tree::checkKey(const Key *ret, const Key *k) const {
 
 typename Tree::OperationResults Tree::insert(const Key *k,
                                              ThreadInfo &epocheInfo) {
-    // N::clflush((char *)k, sizeof(Key) + k->key_len, false, true);
     EpocheGuard epocheGuard(epocheInfo);
 restart:
     bool needRestart = false;
-    // art_cout << __func__ << "Start/Restarting insert.." << std::endl;
     N *node = nullptr;
     N *nextNode = root;
     N *parentNode = nullptr;
@@ -528,7 +524,7 @@ restart:
 
                             parentNode->writeUnlock();
                             node->writeUnlockObsolete();
-                            this->epoche.markNodeForDeletion(node, threadInfo);
+//                            this->epoche.markNodeForDeletion(node, threadInfo);
                         } else {
                             uint64_t vChild = secondNodeN->getVersion();
                             secondNodeN->lockVersionOrRestart(vChild,
@@ -551,7 +547,7 @@ restart:
 
                             parentNode->writeUnlock();
                             node->writeUnlockObsolete();
-                            this->epoche.markNodeForDeletion(node, threadInfo);
+//                            this->epoche.markNodeForDeletion(node, threadInfo);
                             secondNodeN->writeUnlock();
                         }
                     } else {

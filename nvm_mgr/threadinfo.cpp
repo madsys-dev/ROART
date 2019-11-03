@@ -16,6 +16,7 @@ namespace NVMMgr_ns {
     __thread thread_info *ti = NULL;
     std::mutex ti_lock;
     thread_info *ti_list_head = NULL;
+    int id = 0;
 
     PMFreeList::PMFreeList() {
         list_cursor = 0;
@@ -26,7 +27,8 @@ namespace NVMMgr_ns {
         assert(pm_free_list);
     }
 
-    void *PMFreeList::alloc_leaf() {
+    void *PMFreeList::alloc_node(PART_ns::NTypes nt) {
+        // TODO: according to nt, alloc different node
         if (block_cursor == BLK_SIZE) {
             pm_block = pmblock->alloc_block(BLK_SIZE * leaf_size);
             assert(pm_block != NULL);
@@ -36,16 +38,22 @@ namespace NVMMgr_ns {
         return (void *) ((size_t) pm_block + (block_cursor++) * leaf_size);
     }
 
-    void PMFreeList::free_leaf(void *leaf) {
-        // TODO: free leaf
+    void PMFreeList::free_node(void *n) {
+        // TODO: free different node
         assert(0);
     }
 
-    int id;
-
     void set_leaf_size(int size) { leaf_size = size; }
 
-    void *alloc_leaf() { return ti->pm_free_list->alloc_leaf(); }
+    void *alloc_leaf() { return ti->leaf_free_list->alloc_node(PART_ns::NTypes::Leaf); }
+
+    void *alloc_node4() { return ti->node4_free_list->alloc_node(PART_ns::NTypes::N4); }
+
+    void *alloc_node16() { return ti->node16_free_list->alloc_node(PART_ns::NTypes::N16); }
+
+    void *alloc_node48() { return ti->node48_free_list->alloc_node(PART_ns::NTypes::N48); }
+
+    void *alloc_node256() { return ti->node256_free_list->alloc_node(PART_ns::NTypes::N256); }
 
     void *static_leaf() { return ti->static_log; }
 
@@ -59,7 +67,12 @@ namespace NVMMgr_ns {
             // ti =  new thread_info();
             ti = (thread_info *) mgr->alloc_thread_info();
             // printf("[THREAD INFO]\tti %p\n", ti);
-            ti->pm_free_list = new PMFreeList;
+            ti->node4_free_list = new PMFreeList;
+            ti->node16_free_list = new PMFreeList;
+            ti->node48_free_list = new PMFreeList;
+            ti->node256_free_list = new PMFreeList;
+            ti->leaf_free_list = new PMFreeList;
+
             ti->next = ti_list_head;
             ti->_lock = 0;
             ti_list_head = ti;
