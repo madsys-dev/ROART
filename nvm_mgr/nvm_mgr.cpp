@@ -50,6 +50,7 @@ NVMMgr::NVMMgr() {
         printf("[NVM MGR]\tfailed to truncate file\n");
         exit(-1);
     }
+    printf("[NVM MGR]\topen file %s success.\n", get_filename());
 
     // mmap
     void *addr = mmap((void *)start_addr, filesize, PROT_READ | PROT_WRITE,
@@ -73,6 +74,7 @@ NVMMgr::NVMMgr() {
         free_bit_offset = 0;
 
         flush_data((void *)meta_data, PGSIZE);
+        printf("[NVM MGR]\tinitialize nvm file's head\n");
     }
     free_page_list.clear();
 
@@ -85,6 +87,7 @@ NVMMgr::~NVMMgr() {
     //        Head *head = (Head *) start_addr;
     //        flush_data((void *) head, sizeof(Head));
     munmap((void *)start_addr, filesize);
+    close(fd);
 }
 
 //    void NVMMgr::recover_done() {
@@ -113,6 +116,10 @@ bool NVMMgr::reload_free_blocks() {
                     (filesize / PGSIZE) - (max_threads + 1)) {
                     break;
                 }
+                if (meta_data->bitmap[free_bit_offset] != 0) {
+                    free_bit_offset++;
+                    continue;
+                }
 
                 free_page_list.push_back(free_bit_offset);
                 free_bit_offset++;
@@ -128,7 +135,7 @@ bool NVMMgr::reload_free_blocks() {
 void *NVMMgr::alloc_thread_info() {
     // not thread safe
     size_t index = meta_data->threads++;
-    flush_data((void *)meta_data->threads, sizeof(int));
+    flush_data((void *)&(meta_data->threads), sizeof(int));
     return (void *)(thread_local_start + index * PGSIZE);
 }
 
@@ -145,7 +152,10 @@ void *NVMMgr::alloc_block(int type) {
     free_page_list.pop_front();
 
     meta_data->bitmap[id] = type;
+    flush_data((void *)&(meta_data->bitmap[id]), sizeof(int));
     printf("[NVM MGR]\talloc a new block %d, type is %d\n", id, type);
+
+    // TODO: crash consistency allocation to avoid memory leak
 
     return addr;
 }

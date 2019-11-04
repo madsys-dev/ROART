@@ -8,42 +8,62 @@
 
 namespace NVMMgr_ns {
 
+// global block allocator
 PMBlockAllocator *pmblock = NULL;
 
-#define BLK_SIZE (1024)
-int leaf_size;
-
-__thread thread_info *ti = NULL;
+// global threadinfo lock to protect alloc thread info
 std::mutex ti_lock;
+
+// global threadinfo list hread
 thread_info *ti_list_head = NULL;
+
+// thread local info
+__thread thread_info *ti = NULL;
+
+// global thread id
 int id = 0;
 
-PMFreeList::PMFreeList() {
-    list_cursor = 0;
-    block_cursor = BLK_SIZE;
-    list_capacity = BLK_SIZE;
+PMFreeList::PMFreeList(PMBlockAllocator *pmb_): pmb(pmb_) { free_node_list.clear(); }
 
-    pm_free_list = (void **)aligned_alloc(64, sizeof(void *) * BLK_SIZE);
-    assert(pm_free_list);
+size_t get_node_size(PART_ns::NTypes nt) {
+    switch (nt) {
+    case PART_ns::NTypes::N4:
+        return sizeof(PART_ns::N4);
+    case PART_ns::NTypes::N16:
+        return sizeof(PART_ns::N16);
+    case PART_ns::NTypes::N48:
+        return sizeof(PART_ns::N48);
+    case PART_ns::NTypes::N256:
+        return sizeof(PART_ns::N256);
+    case PART_ns::NTypes::Leaf:
+        return sizeof(PART_ns::Leaf);
+    default:
+        std::cout << "[ALLOC NODE]\twrong type\n";
+        assert(0);
+    }
 }
 
 void *PMFreeList::alloc_node(PART_ns::NTypes nt) {
     // TODO: according to nt, alloc different node
-    if (block_cursor == BLK_SIZE) {
-        pm_block = pmblock->alloc_block(BLK_SIZE * leaf_size);
-        assert(pm_block != NULL);
-        block_cursor = 0;
+    if (free_node_list.empty()) {
+        size_t node_size = get_node_size(nt);
+        std::cout << "[ALLOC NODE]\tnode type " << (int)nt << ", node size "
+                  << node_size << "\n";
+        void *addr = pmb->alloc_block((int)nt);
+        for (int i = 0; i + node_size <= NVMMgr::PGSIZE; i += node_size) {
+            free_node_list.push_back((uint64_t)addr + i);
+        }
     }
-    assert(block_cursor < BLK_SIZE);
-    return (void *)((size_t)pm_block + (block_cursor++) * leaf_size);
+    uint64_t pos = free_node_list.front();
+    free_node_list.pop_front();
+
+    return (void *)pos;
 }
 
 void PMFreeList::free_node(void *n) {
     // TODO: free different node
     assert(0);
 }
-
-void set_leaf_size(int size) { leaf_size = size; }
 
 void *alloc_leaf() {
     return ti->leaf_free_list->alloc_node(PART_ns::NTypes::Leaf);
@@ -65,34 +85,34 @@ void *alloc_node256() {
     return ti->node256_free_list->alloc_node(PART_ns::NTypes::N256);
 }
 
-void *static_leaf() { return ti->static_log; }
+void *get_static_log() { return ti->static_log; }
 
 void register_threadinfo() {
-    ti_lock.lock();
+    std::lock_guard<std::mutex> lock_guard(ti_lock);
+
     if (pmblock == NULL) {
         pmblock = new PMBlockAllocator();
+        std::cout << "[THREAD]\tfirst new pmblock\n";
     }
     if (ti == NULL) {
         NVMMgr *mgr = get_nvm_mgr();
-        // ti =  new thread_info();
         ti = (thread_info *)mgr->alloc_thread_info();
-        // printf("[THREAD INFO]\tti %p\n", ti);
-        ti->node4_free_list = new PMFreeList;
-        ti->node16_free_list = new PMFreeList;
-        ti->node48_free_list = new PMFreeList;
-        ti->node256_free_list = new PMFreeList;
-        ti->leaf_free_list = new PMFreeList;
+        ti->node4_free_list = new PMFreeList(pmblock);
+        ti->node16_free_list = new PMFreeList(pmblock);
+        ti->node48_free_list = new PMFreeList(pmblock);
+        ti->node256_free_list = new PMFreeList(pmblock);
+        ti->leaf_free_list = new PMFreeList(pmblock);
 
         ti->next = ti_list_head;
         ti->_lock = 0;
         ti_list_head = ti;
         ti->id = id++;
+        std::cout << "[THREAD]\talloc thread info " << ti->id << "\n";
     }
-    ti_lock.unlock();
 }
 
 void unregister_threadinfo() {
-    ti_lock.lock();
+    std::lock_guard<std::mutex> lock_guard(ti_lock);
     thread_info *cti = ti_list_head;
     if (cti == ti) {
         ti_list_head = cti->next;
@@ -108,12 +128,12 @@ void unregister_threadinfo() {
             next = next->next;
         }
     }
+    std::cout << "[THREAD]\tunregister thread\n";
     if (ti_list_head == NULL) {
         // last one leave
         close_nvm_mgr();
     }
     ti = NULL;
-    ti_lock.unlock();
 }
 
 } // namespace NVMMgr_ns

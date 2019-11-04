@@ -2,6 +2,8 @@
 #define thread_info_h
 
 #include "N.h"
+#include "pmalloc_wrap.h"
+#include <list>
 
 namespace NVMMgr_ns {
 /*
@@ -11,14 +13,11 @@ namespace NVMMgr_ns {
  * TODO: support leaf node recycling by add freed node to the free list.
  */
 class PMFreeList {
-    void **pm_free_list;
-    void *pm_block;
-    int list_cursor;
-    int list_capacity;
-    int block_cursor;
+    std::list<uint64_t> free_node_list;
+    PMBlockAllocator *pmb;
 
   public:
-    PMFreeList();
+    PMFreeList(PMBlockAllocator *pmb_);
 
     void *alloc_node(PART_ns::NTypes nt);
     void free_node(void *n);
@@ -44,9 +43,12 @@ void register_threadinfo();
 void unregister_threadinfo();
 
 void *alloc_leaf();
-void set_leaf_size(int);
+void *alloc_node4();
+void *alloc_node16();
+void *alloc_node48();
+void *alloc_node256();
 
-void *static_leaf();
+void *get_static_log();
 
 } // namespace NVMMgr_ns
 #endif

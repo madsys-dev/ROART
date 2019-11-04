@@ -42,15 +42,15 @@ class NVMMgr {
      * we do not recyle memory.
      *
      */
+  public:
     static const int magic_number = 12345;
     static const int max_threads = 128;
 
-    static const size_t start_addr = 0x50000000;
     static const int PGSIZE = 256 * 1024;                   // 256K
     static const long long filesize = 16LL * 1024 * PGSIZE; // 4GB
 
-    static const size_t tree_meta_start = start_addr + PGSIZE;
-    static const size_t thread_local_start = tree_meta_start + PGSIZE;
+    static const size_t start_addr = 0x50000000;
+    static const size_t thread_local_start = start_addr + PGSIZE;
     static const size_t data_block_start =
         thread_local_start + PGSIZE * max_threads;
 
@@ -86,9 +86,12 @@ class NVMMgr {
 
     void *alloc_block(int type);
 
+    // volatile metadata and rebuild when recovery
     uint64_t free_bit_offset;
     std::list<uint64_t> free_page_list;
     int fd;
+
+    // persist it as the head of nvm region
     Head *meta_data;
 };
 

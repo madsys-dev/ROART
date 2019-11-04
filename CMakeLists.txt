@@ -40,7 +40,9 @@ set(BENCHMARK perf/main.cpp)
 add_executable(benchmark ${BENCHMARK})
 target_link_libraries(benchmark Indexes)
 
-aux_source_directory(test DIR_TEST_SRCS)
-add_executable(unittest ${DIR_TEST_SRCS})
+add_executable(unittest
+        ./test/test.cpp
+        ./test/test_correctness.cpp
+        ./test/test_nvm_mgr.cpp)
 target_link_libraries(unittest Indexes gtest)
 

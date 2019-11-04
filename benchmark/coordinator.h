@@ -345,10 +345,7 @@ template <typename K, typename V, int size> class Coordinator {
     void run() {
         printf("[COORDINATOR]\tStart benchmark..\n");
 
-        void *th_info;
-        int threads;
-        bool safe;
-        init_nvm_mgr(th_info, threads, safe);
+        init_nvm_mgr();
 
         if (conf.type == PART) {
             // ART
