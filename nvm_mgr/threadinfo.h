@@ -45,6 +45,7 @@ void register_threadinfo();
 void unregister_threadinfo();
 
 int get_thread_id();
+void *get_threadinfo();
 
 void *alloc_leaf();
 void *alloc_node4();

@@ -138,8 +138,8 @@ void unregister_threadinfo() {
     ti = NULL;
 }
 
-    int get_thread_id(){
-        return ti->id;
-    }
+int get_thread_id() { return ti->id; }
+
+void *get_threadinfo() { return (void *)ti; }
 
 } // namespace NVMMgr_ns

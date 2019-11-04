@@ -108,17 +108,50 @@ TEST(TestNVMMgr, PMFreeList) {
     delete mgr;
 }
 
-TEST(TestNVMMgr, thread_info){
+TEST(TestNVMMgr, thread_info) {
     std::cout << "[TEST]\tstart to test PMFreeList\n";
     clear_data();
 
-    //initialize a global nvm_mgr
+    // initialize a global nvm_mgr
     init_nvm_mgr();
 
-    //initialize a thread and global pmblockallocator
+    // initialize a thread and global pmblockallocator
     register_threadinfo();
 
-    ASSERT_EQ(get_thread_id(), 1);
+    ASSERT_EQ(get_thread_id(), 0);
+    void *n4 = alloc_node4();
+    void *n16 = alloc_node16();
+    void *n48 = alloc_node48();
+    void *n256 = alloc_node256();
+    void *leaf = alloc_leaf();
 
+    std::cout<<"[TEST]\talloc different nodes\n";
 
+    NVMMgr *mgr = get_nvm_mgr();
+    uint64_t start = NVMMgr::data_block_start;
+    ASSERT_EQ((int)mgr->free_page_list.size(), 3);
+    ASSERT_EQ((uint64_t)n4, start);
+    ASSERT_EQ((uint64_t)n16, start + 1 * NVMMgr::PGSIZE);
+    ASSERT_EQ((uint64_t)n48, start + 2 * NVMMgr::PGSIZE);
+    ASSERT_EQ((uint64_t)n256, start + 3 * NVMMgr::PGSIZE);
+    ASSERT_EQ((uint64_t)leaf, start + 4 * NVMMgr::PGSIZE);
+
+    std::cout<<"[TEST]\tcheck every node's address successfully\n";
+
+    thread_info *ti = reinterpret_cast<thread_info *>(get_threadinfo());
+    ASSERT_EQ(ti->node4_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::N4) - 1);
+    ASSERT_EQ(ti->node16_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::N16) - 1);
+    ASSERT_EQ(ti->node48_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::N48) - 1);
+    ASSERT_EQ(ti->node256_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::N256) - 1);
+    ASSERT_EQ(ti->leaf_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::Leaf) - 1);
+
+    std::cout<<"[TEST]\tcheck every freelist's size successfully\n";
+
+    unregister_threadinfo();
+    close_nvm_mgr();
 }
