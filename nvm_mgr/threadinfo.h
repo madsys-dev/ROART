@@ -47,11 +47,7 @@ void unregister_threadinfo();
 int get_thread_id();
 void *get_threadinfo();
 
-void *alloc_leaf();
-void *alloc_node4();
-void *alloc_node16();
-void *alloc_node48();
-void *alloc_node256();
+void *alloc_new_node(PART_ns::NTypes type);
 
 void *get_static_log();
 

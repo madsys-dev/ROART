@@ -29,7 +29,7 @@ Tree::Tree() {
     bool init = init_nvm_mgr();
     register_threadinfo();
     NVMMgr *mgr = get_nvm_mgr();
-    root = reinterpret_cast<N256 *>(mgr->alloc_tree_root());
+    root = new (mgr->alloc_tree_root()) N256(0, {});
 
     if (init) {
         // first open
@@ -43,8 +43,11 @@ Tree::Tree() {
 
 Tree::~Tree() {
     // TODO: reclaim the memory of PM
-    N::deleteChildren(root);
-    N::deleteNode(root);
+    //    N::deleteChildren(root);
+    //    N::deleteNode(root);
+    std::cout << "[P-ART]\tshut down, free the tree\n";
+    unregister_threadinfo();
+    close_nvm_mgr();
 }
 
 ThreadInfo Tree::getThreadInfo() { return ThreadInfo(this->epoche); }
@@ -550,8 +553,7 @@ restart:
 
                         parentNode->writeUnlock();
                         node->writeUnlockObsolete();
-                        //                            this->epoche.markNodeForDeletion(node,
-                        //                            threadInfo);
+                        // this->epoche.markNodeForDeletion(node, threadInfo);
                         secondNodeN->writeUnlock();
                     }
                 } else {
@@ -566,6 +568,11 @@ restart:
         }
         }
     }
+}
+
+void Tree::rebuild() {
+    // TODO: traverse the whole tree from root and calculate count
+    // TODO: reclaim the garbage node
 }
 
 typename Tree::CheckPrefixResult Tree::checkPrefix(N *n, const Key *k,
@@ -684,11 +691,13 @@ Tree::checkPrefixCompare(const N *n, const Key *k, uint32_t &level,
     }
     if (p.prefixCount > 0) {
         Leaf *kt = NULL;
+        bool load_flag = false;
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
-            if (i == maxStoredPrefixLength) {
+            if (i >= maxStoredPrefixLength && !load_flag) {
                 // loadKey(N::getAnyChildTid(n), kt);
                 kt = N::getAnyChildTid(n);
+                load_flag = true;
             }
             uint8_t kLevel = (k->getKeyLen() > level) ? k->fkey[level] : 0;
 
@@ -714,11 +723,13 @@ Tree::checkPrefixEquals(const N *n, uint32_t &level, const Key *start,
     }
     if (p.prefixCount > 0) {
         Leaf *kt = NULL;
+        bool load_flag = false;
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
-            if (i == maxStoredPrefixLength) {
+            if (i >= maxStoredPrefixLength && !load_flag) {
                 // loadKey(N::getAnyChildTid(n), kt);
                 kt = N::getAnyChildTid(n);
+                load_flag = true;
             }
             uint8_t startLevel =
                 (start->getKeyLen() > level) ? start->fkey[level] : 0;
@@ -738,8 +749,4 @@ Tree::checkPrefixEquals(const N *n, uint32_t &level, const Key *start,
     return PCEqualsResults::BothMatch;
 }
 
-void Tree::rebuild() {
-    // TODO: traverse the whole tree from root and calculate count
-    // TODO: reclaim the garbage node
-}
 } // namespace PART_ns

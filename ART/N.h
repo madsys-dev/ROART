@@ -95,7 +95,7 @@ class N {
 
     N(N &&) = delete;
 
-    // 2b type 60b version 1b lock 1b obsolete
+    // 3b type 60b version 1b lock 1b obsolete
     std::atomic<uint64_t> typeVersionLockObsolete{0b100};
     // version 1, unlocked, not obsolete
     std::atomic<Prefix> prefix;
@@ -186,18 +186,18 @@ class N {
 
     template <typename curN, typename biggerN>
     static void insertGrow(curN *n, N *parentNode, uint8_t keyParent,
-                           uint8_t key, N *val, ThreadInfo &threadInfo,
-                           bool &needRestart);
+                           uint8_t key, N *val, NTypes type,
+                           ThreadInfo &threadInfo, bool &needRestart);
 
     template <typename curN>
     static void insertCompact(curN *n, N *parentNode, uint8_t keyParent,
-                              uint8_t key, N *val, ThreadInfo &threadInfo,
-                              bool &needRestart);
+                              uint8_t key, N *val, NTypes type,
+                              ThreadInfo &threadInfo, bool &needRestart);
 
     template <typename curN, typename smallerN>
     static void removeAndShrink(curN *n, N *parentNode, uint8_t keyParent,
-                                uint8_t key, ThreadInfo &threadInfo,
-                                bool &needRestart);
+                                uint8_t key, NTypes type,
+                                ThreadInfo &threadInfo, bool &needRestart);
 
     static void getChildren(const N *node, uint8_t start, uint8_t end,
                             std::tuple<uint8_t, N *> children[],

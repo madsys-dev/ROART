@@ -1,11 +1,12 @@
-#include <algorithm>
-#include <assert.h>
-
 #include "N.h"
 #include "N16.cpp"
 #include "N256.cpp"
 #include "N4.cpp"
 #include "N48.cpp"
+#include "threadinfo.h"
+#include <algorithm>
+#include <assert.h>
+#include <iostream>
 
 namespace PART_ns {
 static unsigned long write_latency_in_ns = 0;
@@ -73,12 +74,12 @@ void N::setType(NTypes type) {
 }
 
 uint64_t N::convertTypeToVersion(NTypes type) {
-    return (static_cast<uint64_t>(type) << 62);
+    return (static_cast<uint64_t>(type) << 60);
 }
 
 NTypes N::getType() const {
     return static_cast<NTypes>(
-        typeVersionLockObsolete.load(std::memory_order_relaxed) >> 62);
+        typeVersionLockObsolete.load(std::memory_order_relaxed) >> 60);
 }
 
 uint32_t N::getLevel() const { return level; }
@@ -166,12 +167,15 @@ void N::change(N *node, uint8_t key, N *val) {
 
 template <typename curN, typename biggerN>
 void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
-                   N *val, ThreadInfo &threadInfo, bool &needRestart) {
+                   N *val, NTypes type, ThreadInfo &threadInfo,
+                   bool &needRestart) {
     if (n->insert(key, val, true)) {
         n->writeUnlock();
         return;
     }
-    auto nBig = new biggerN(n->getLevel(), n->getPrefi());
+    // allocate a bigger node from NVMMgr
+    auto nBig = new (NVMMgr_ns::alloc_new_node(type))
+        biggerN(n->getLevel(), n->getPrefi());
     n->copyTo(nBig);
     nBig->insert(key, val, false);
     clflush((char *)nBig, sizeof(biggerN), true, true);
@@ -192,8 +196,11 @@ void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
 
 template <typename curN>
 void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
-                      N *val, ThreadInfo &threadInfo, bool &needRestart) {
-    auto nNew = new curN(n->getLevel(), n->getPrefi());
+                      N *val, NTypes type, ThreadInfo &threadInfo,
+                      bool &needRestart) {
+    // allocate a new node from NVMMgr
+    auto nNew = new (NVMMgr_ns::alloc_new_node(type))
+        curN(n->getLevel(), n->getPrefi());
     n->copyTo(nNew);
     nNew->insert(key, val, false);
     clflush((char *)nNew, sizeof(curN), true, true);
@@ -218,34 +225,34 @@ void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
         if (n->compactCount == 4 && n->count <= 3) {
-            insertCompact<N4>(n, parentNode, keyParent, key, val, threadInfo,
-                              needRestart);
+            insertCompact<N4>(n, parentNode, keyParent, key, val, NTypes::N4,
+                              threadInfo, needRestart);
             break;
         }
-        insertGrow<N4, N16>(n, parentNode, keyParent, key, val, threadInfo,
-                            needRestart);
+        insertGrow<N4, N16>(n, parentNode, keyParent, key, val, NTypes::N16,
+                            threadInfo, needRestart);
         break;
     }
     case NTypes::N16: {
         auto n = static_cast<N16 *>(node);
         if (n->compactCount == 16 && n->count <= 14) {
-            insertCompact<N16>(n, parentNode, keyParent, key, val, threadInfo,
-                               needRestart);
+            insertCompact<N16>(n, parentNode, keyParent, key, val, NTypes::N16,
+                               threadInfo, needRestart);
             break;
         }
-        insertGrow<N16, N48>(n, parentNode, keyParent, key, val, threadInfo,
-                             needRestart);
+        insertGrow<N16, N48>(n, parentNode, keyParent, key, val, NTypes::N48,
+                             threadInfo, needRestart);
         break;
     }
     case NTypes::N48: {
         auto n = static_cast<N48 *>(node);
         if (n->compactCount == 48 && n->count != 48) {
-            insertCompact<N48>(n, parentNode, keyParent, key, val, threadInfo,
-                               needRestart);
+            insertCompact<N48>(n, parentNode, keyParent, key, val, NTypes::N48,
+                               threadInfo, needRestart);
             break;
         }
-        insertGrow<N48, N256>(n, parentNode, keyParent, key, val, threadInfo,
-                              needRestart);
+        insertGrow<N48, N256>(n, parentNode, keyParent, key, val, NTypes::N256,
+                              threadInfo, needRestart);
         break;
     }
     case NTypes::N256: {
@@ -312,13 +319,16 @@ void N::deleteChildren(N *node) {
 
 template <typename curN, typename smallerN>
 void N::removeAndShrink(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
-                        ThreadInfo &threadInfo, bool &needRestart) {
+                        NTypes type, ThreadInfo &threadInfo,
+                        bool &needRestart) {
     if (n->remove(key, parentNode == nullptr, true)) {
         n->writeUnlock();
         return;
     }
 
-    auto nSmall = new smallerN(n->getLevel(), n->getPrefi());
+    // allocate a smaller node from NVMMgr
+    auto nSmall = new (NVMMgr_ns::alloc_new_node(type))
+        smallerN(n->getLevel(), n->getPrefi());
 
     parentNode->writeLockOrRestart(needRestart);
     if (needRestart) {
@@ -348,20 +358,20 @@ void N::removeAndUnlock(N *node, uint8_t key, N *parentNode, uint8_t keyParent,
     }
     case NTypes::N16: {
         auto n = static_cast<N16 *>(node);
-        removeAndShrink<N16, N4>(n, parentNode, keyParent, key, threadInfo,
-                                 needRestart);
+        removeAndShrink<N16, N4>(n, parentNode, keyParent, key, NTypes::N4,
+                                 threadInfo, needRestart);
         break;
     }
     case NTypes::N48: {
         auto n = static_cast<N48 *>(node);
-        removeAndShrink<N48, N16>(n, parentNode, keyParent, key, threadInfo,
-                                  needRestart);
+        removeAndShrink<N48, N16>(n, parentNode, keyParent, key, NTypes::N16,
+                                  threadInfo, needRestart);
         break;
     }
     case NTypes::N256: {
         auto n = static_cast<N256 *>(node);
-        removeAndShrink<N256, N48>(n, parentNode, keyParent, key, threadInfo,
-                                   needRestart);
+        removeAndShrink<N256, N48>(n, parentNode, keyParent, key, NTypes::N48,
+                                   threadInfo, needRestart);
         break;
     }
     }

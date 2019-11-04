@@ -1,4 +1,5 @@
 #include "Tree.h"
+#include "threadinfo.h"
 #include <gtest/gtest.h>
 #include <iostream>
 #include <stdio.h>
@@ -8,7 +9,12 @@
 
 using namespace PART_ns;
 
+inline void clear_data() { system("rm -rf /mnt/dax/matianmao/part.data"); }
+
 TEST(TestCorrectness, PM_ART) {
+    std::cout << "[TEST]\tstart to test correctness\n";
+    clear_data();
+
     const int nthreads = 4;
     const int test_iter = 100000;
 
@@ -22,13 +28,14 @@ TEST(TestCorrectness, PM_ART) {
     auto t = art->getThreadInfo();
 
     // Generate keys
+    std::cout << "[TEST]\tstart to build tree\n";
     for (uint64_t i = 0; i < nthreads * test_iter; i++) {
         keys[i] = i;
         Keys[i] = new Key(keys[i], sizeof(uint64_t), i + 1);
         // Keys[i] = Keys[i]->make_leaf(i, sizeof(uint64_t), i + 1);
-        // printf("insert start 1\n");
+        //        printf("insert start %d\n", i);
         Tree::OperationResults res = art->insert(Keys[i], t);
-        // printf("insert success\n");
+        //        printf("insert success\n");
         ASSERT_EQ(res, Tree::OperationResults::Success)
             << "insert failed on key " << i;
     }
@@ -39,6 +46,7 @@ TEST(TestCorrectness, PM_ART) {
         tid[i] = new std::thread(
             [&](int id) {
                 auto t = art->getThreadInfo();
+                NVMMgr_ns::register_threadinfo();
                 // read
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
@@ -88,6 +96,7 @@ TEST(TestCorrectness, PM_ART) {
                         << "lookup fail in thread " << id << ", insert " << kk
                         << ", lookup " << val;
                 }
+                NVMMgr_ns::unregister_threadinfo();
             },
             i);
     }
@@ -101,4 +110,6 @@ TEST(TestCorrectness, PM_ART) {
     }
 
     std::cout << "passed test.....\n";
+
+    delete art;
 }

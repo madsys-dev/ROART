@@ -8,7 +8,7 @@
 
 namespace PART_ns {
 
-typedef struct Key {
+struct Key {
     uint64_t value;
     size_t key_len;
     uint64_t key;
@@ -39,7 +39,7 @@ typedef struct Key {
     inline Key *make_leaf(uint64_t key, size_t key_len, uint64_t value);
 
     inline size_t getKeyLen() const;
-} Key;
+};
 
 inline Key *Key::make_leaf(char *key, size_t key_len, uint64_t value) {
     void *aligned_alloc;

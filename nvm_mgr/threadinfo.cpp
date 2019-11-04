@@ -27,8 +27,8 @@ PMFreeList::PMFreeList(PMBlockAllocator *pmb_) : pmb(pmb_) {
     free_node_list.clear();
 }
 
-size_t get_node_size(PART_ns::NTypes nt) {
-    switch (nt) {
+size_t get_node_size(PART_ns::NTypes type) {
+    switch (type) {
     case PART_ns::NTypes::N4:
         return sizeof(PART_ns::N4);
     case PART_ns::NTypes::N16:
@@ -45,13 +45,13 @@ size_t get_node_size(PART_ns::NTypes nt) {
     }
 }
 
-void *PMFreeList::alloc_node(PART_ns::NTypes nt) {
+void *PMFreeList::alloc_node(PART_ns::NTypes type) {
     // TODO: according to nt, alloc different node
     if (free_node_list.empty()) {
-        size_t node_size = get_node_size(nt);
-        std::cout << "[ALLOC NODE]\tnode type " << (int)nt << ", node size "
+        size_t node_size = get_node_size(type);
+        std::cout << "[ALLOC NODE]\tnode type " << (int)type << ", node size "
                   << node_size << "\n";
-        void *addr = pmb->alloc_block((int)nt);
+        void *addr = pmb->alloc_block((int)type);
         for (int i = 0; i + node_size <= NVMMgr::PGSIZE; i += node_size) {
             free_node_list.push_back((uint64_t)addr + i);
         }
@@ -67,24 +67,22 @@ void PMFreeList::free_node(void *n) {
     assert(0);
 }
 
-void *alloc_leaf() {
-    return ti->leaf_free_list->alloc_node(PART_ns::NTypes::Leaf);
-}
-
-void *alloc_node4() {
-    return ti->node4_free_list->alloc_node(PART_ns::NTypes::N4);
-}
-
-void *alloc_node16() {
-    return ti->node16_free_list->alloc_node(PART_ns::NTypes::N16);
-}
-
-void *alloc_node48() {
-    return ti->node48_free_list->alloc_node(PART_ns::NTypes::N48);
-}
-
-void *alloc_node256() {
-    return ti->node256_free_list->alloc_node(PART_ns::NTypes::N256);
+void *alloc_new_node(PART_ns::NTypes type) {
+    switch (type) {
+    case PART_ns::NTypes::N4:
+        return ti->node4_free_list->alloc_node(PART_ns::NTypes::N4);
+    case PART_ns::NTypes::N16:
+        return ti->node16_free_list->alloc_node(PART_ns::NTypes::N16);
+    case PART_ns::NTypes::N48:
+        return ti->node48_free_list->alloc_node(PART_ns::NTypes::N48);
+    case PART_ns::NTypes::N256:
+        return ti->node256_free_list->alloc_node(PART_ns::NTypes::N256);
+    case PART_ns::NTypes::Leaf:
+        return ti->leaf_free_list->alloc_node(PART_ns::NTypes::Leaf);
+    default:
+        std::cout << "[ALLOC NODE]\twrong type\n";
+        assert(0);
+    }
 }
 
 void *get_static_log() { return ti->static_log; }
