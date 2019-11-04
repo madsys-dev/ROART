@@ -21,6 +21,8 @@ class PMFreeList {
 
     void *alloc_node(PART_ns::NTypes nt);
     void free_node(void *n);
+
+    int get_freelist_size() { return free_node_list.size(); }
 };
 
 struct thread_info {
@@ -41,6 +43,8 @@ struct thread_info {
 
 void register_threadinfo();
 void unregister_threadinfo();
+
+int get_thread_id();
 
 void *alloc_leaf();
 void *alloc_node4();

@@ -23,7 +23,9 @@ __thread thread_info *ti = NULL;
 // global thread id
 int id = 0;
 
-PMFreeList::PMFreeList(PMBlockAllocator *pmb_): pmb(pmb_) { free_node_list.clear(); }
+PMFreeList::PMFreeList(PMBlockAllocator *pmb_) : pmb(pmb_) {
+    free_node_list.clear();
+}
 
 size_t get_node_size(PART_ns::NTypes nt) {
     switch (nt) {
@@ -135,5 +137,9 @@ void unregister_threadinfo() {
     }
     ti = NULL;
 }
+
+    int get_thread_id(){
+        return ti->id;
+    }
 
 } // namespace NVMMgr_ns

@@ -7,8 +7,8 @@
 
 #include "N.h"
 #include "nvm_mgr.h"
-#include "threadinfo.h"
 #include "pmalloc_wrap.h"
+#include "threadinfo.h"
 
 using namespace NVMMgr_ns;
 
@@ -55,7 +55,7 @@ TEST(TestNVMMgr, nvm_mgr) {
     delete mgr;
 }
 
-TEST(TestNVMMgr, PMBlockAllocator){
+TEST(TestNVMMgr, PMBlockAllocator) {
     std::cout << "[TEST]\tstart to test PMBlockAllocator\n";
     clear_data();
 
@@ -65,20 +65,21 @@ TEST(TestNVMMgr, PMBlockAllocator){
     int bl_num = 10;
     int type = 2;
     uint64_t start = NVMMgr::data_block_start;
-    for(int i = 0; i < bl_num; i++){
-        //alloc some blocks using interface of pmblockalloctor
+    for (int i = 0; i < bl_num; i++) {
+        // alloc some blocks using interface of pmblockalloctor
         void *addr = pmb->alloc_block(type);
         ASSERT_EQ((uint64_t)addr, start + i * NVMMgr::PGSIZE);
     }
-    std::cout<<"[TEST]\tpmb alloc block successfully\n";
+    std::cout << "[TEST]\tpmb alloc block successfully\n";
 
-    std::cout<<"[TEST]\tnvm_mgr's free page list size is "<<mgr->free_page_list.size() <<"\n";
+    std::cout << "[TEST]\tnvm_mgr's free page list size is "
+              << mgr->free_page_list.size() << "\n";
     ASSERT_EQ((int)mgr->free_page_list.size(), 6);
 
     delete mgr;
 }
 
-TEST(TestNVMMgr, PMFreeList){
+TEST(TestNVMMgr, PMFreeList) {
     std::cout << "[TEST]\tstart to test PMFreeList\n";
     clear_data();
 
@@ -86,19 +87,38 @@ TEST(TestNVMMgr, PMFreeList){
     PMBlockAllocator *pmb = new PMBlockAllocator(mgr);
     PMFreeList *pf = new PMFreeList(pmb);
 
-    int bl_num = 10;
+    int node_num = 10;
     PART_ns::NTypes type = PART_ns::NTypes::N4;
     size_t node_size = sizeof(PART_ns::N4);
     uint64_t start = NVMMgr::data_block_start;
-    for(int i = 0; i < bl_num; i++){
-        //alloc some blocks using interface of pmfreelist
+    for (int i = 0; i < node_num; i++) {
+        // alloc some node from a block using interface of pmfreelist
         void *addr = pf->alloc_node(type);
         ASSERT_EQ((uint64_t)addr, start + i * node_size);
     }
-    std::cout<<"[TEST]\tpmb alloc block successfully\n";
+    std::cout << "[TEST]\tpf alloc node successfully\n";
+    std::cout << "[TEST]\tnode size is " << node_size << ", freelist size is "
+              << pf->get_freelist_size() << "\n";
+    ASSERT_EQ(pf->get_freelist_size(), NVMMgr::PGSIZE / node_size - node_num);
 
-    std::cout<<"[TEST]\tnvm_mgr's free page list size is "<<mgr->free_page_list.size() <<"\n";
-    ASSERT_EQ((int)mgr->free_page_list.size(), 6);
+    std::cout << "[TEST]\tnvm_mgr's free page list size is "
+              << mgr->free_page_list.size() << "\n";
+    ASSERT_EQ((int)mgr->free_page_list.size(), 7);
 
     delete mgr;
+}
+
+TEST(TestNVMMgr, thread_info){
+    std::cout << "[TEST]\tstart to test PMFreeList\n";
+    clear_data();
+
+    //initialize a global nvm_mgr
+    init_nvm_mgr();
+
+    //initialize a thread and global pmblockallocator
+    register_threadinfo();
+
+    ASSERT_EQ(get_thread_id(), 1);
+
+
 }
