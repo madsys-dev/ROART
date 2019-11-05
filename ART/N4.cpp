@@ -1,5 +1,5 @@
-#include "N.h"
 #include "N4.h"
+#include "N.h"
 #include <algorithm>
 #include <assert.h>
 
@@ -109,7 +109,8 @@ void N4::getChildren(uint8_t start, uint8_t end,
         if (key >= start && key <= end) {
             N *child = this->children[i].load();
             if (child != nullptr) {
-                children[childrenCount] = std::make_tuple(key, &(this->children[i]));
+                children[childrenCount] =
+                    std::make_tuple(key, &(this->children[i]));
                 childrenCount++;
             }
         }

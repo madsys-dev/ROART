@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <iostream>
 
- DeletionList::~DeletionList() {
+DeletionList::~DeletionList() {
     assert(deletitionListCount == 0 && headDeletionList == nullptr);
     LabelDelete *cur = nullptr, *next = freeLabelDeletes;
     while (next != nullptr) {
@@ -13,9 +13,9 @@
     freeLabelDeletes = nullptr;
 }
 
- std::size_t DeletionList::size() { return deletitionListCount; }
+std::size_t DeletionList::size() { return deletitionListCount; }
 
- void DeletionList::remove(LabelDelete *label, LabelDelete *prev) {
+void DeletionList::remove(LabelDelete *label, LabelDelete *prev) {
     if (prev == nullptr) {
         headDeletionList = label->next;
     } else {
@@ -28,7 +28,7 @@
     deleted += label->nodesCount;
 }
 
- void DeletionList::add(void *n, uint64_t globalEpoch) {
+void DeletionList::add(void *n, uint64_t globalEpoch) {
     deletitionListCount++;
     LabelDelete *label;
     if (headDeletionList != nullptr &&
@@ -52,22 +52,22 @@
     added++;
 }
 
- LabelDelete *DeletionList::head() { return headDeletionList; }
+LabelDelete *DeletionList::head() { return headDeletionList; }
 
- void Epoche::enterEpoche(ThreadInfo &epocheInfo) {
+void Epoche::enterEpoche(ThreadInfo &epocheInfo) {
     unsigned long curEpoche = currentEpoche.load(std::memory_order_relaxed);
     epocheInfo.getDeletionList().localEpoche.store(curEpoche,
                                                    std::memory_order_release);
 }
 
- void Epoche::markNodeForDeletion(void *n, ThreadInfo &epocheInfo) {
+void Epoche::markNodeForDeletion(void *n, ThreadInfo &epocheInfo) {
 #ifndef LOCK_INIT
     epocheInfo.getDeletionList().add(n, currentEpoche.load());
     epocheInfo.getDeletionList().thresholdCounter++;
 #endif
 }
 
- void Epoche::exitEpocheAndCleanup(ThreadInfo &epocheInfo) {
+void Epoche::exitEpocheAndCleanup(ThreadInfo &epocheInfo) {
     DeletionList &deletionList = epocheInfo.getDeletionList();
     if ((deletionList.thresholdCounter & (64 - 1)) == 1) {
         currentEpoche++;
@@ -105,7 +105,7 @@
     }
 }
 
- Epoche::~Epoche() {
+Epoche::~Epoche() {
     uint64_t oldestEpoche = std::numeric_limits<uint64_t>::max();
     for (auto &epoche : deletionLists) {
         auto e = epoche.localEpoche.load();
@@ -128,17 +128,15 @@
     }
 }
 
- void Epoche::showDeleteRatio() {
+void Epoche::showDeleteRatio() {
     for (auto &d : deletionLists) {
         std::cout << "deleted " << d.deleted << " of " << d.added << std::endl;
     }
 }
 
- ThreadInfo::ThreadInfo(Epoche &epoche)
+ThreadInfo::ThreadInfo(Epoche &epoche)
     : epoche(epoche), deletionList(epoche.deletionLists.local()) {}
 
- DeletionList &ThreadInfo::getDeletionList() const {
-    return deletionList;
-}
+DeletionList &ThreadInfo::getDeletionList() const { return deletionList; }
 
- Epoche &ThreadInfo::getEpoche() const { return epoche; }
+Epoche &ThreadInfo::getEpoche() const { return epoche; }

@@ -1,7 +1,7 @@
 #include "Tree.h"
+#include "Epoche.h"
 #include "N.h"
 #include "nvm_mgr.h"
-#include "Epoche.h"
 #include "threadinfo.h"
 #include <algorithm>
 #include <assert.h>
@@ -122,35 +122,37 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
     EpocheGuard epocheGuard(threadEpocheInfo);
     Leaf *toContinue = NULL;
     bool restart;
-    std::function<void( N *, std::atomic<N *> *, std::atomic<N *> *)> copy = [&result, &resultSize, &resultsFound,
-                                           &toContinue, &copy]( N *node, std::atomic<N *> * paref, std::atomic<N *> *curef) {
-        if (N::isLeaf(node)) {
-            if (resultsFound == resultSize) {
-                toContinue = N::getLeaf(node);
-                return;
-            }
-            // result[resultsFound] =
-            // reinterpret_cast<TID>((N::getLeaf(node))->value);
-            N::helpFlush(paref);
-            N::helpFlush(curef);
-            result[resultsFound] = N::getLeaf(node);
-            resultsFound++;
-        } else {
-            std::tuple<uint8_t, std::atomic<N *> *> children[256];
-            uint32_t childrenCount = 0;
-            N::getChildren(node, 0u, 255u, children, childrenCount);
-            for (uint32_t i = 0; i < childrenCount; ++i) {
-                std::atomic<N *> *n = std::get<1>(children[i]);
-                copy(n->load(), curef, n);
-                if (toContinue != NULL) {
-                    break;
+    std::function<void(N *, std::atomic<N *> *, std::atomic<N *> *)> copy =
+        [&result, &resultSize, &resultsFound, &toContinue,
+         &copy](N *node, std::atomic<N *> *paref, std::atomic<N *> *curef) {
+            if (N::isLeaf(node)) {
+                if (resultsFound == resultSize) {
+                    toContinue = N::getLeaf(node);
+                    return;
+                }
+                // result[resultsFound] =
+                // reinterpret_cast<TID>((N::getLeaf(node))->value);
+                N::helpFlush(paref);
+                N::helpFlush(curef);
+                result[resultsFound] = N::getLeaf(node);
+                resultsFound++;
+            } else {
+                std::tuple<uint8_t, std::atomic<N *> *> children[256];
+                uint32_t childrenCount = 0;
+                N::getChildren(node, 0u, 255u, children, childrenCount);
+                for (uint32_t i = 0; i < childrenCount; ++i) {
+                    std::atomic<N *> *n = std::get<1>(children[i]);
+                    copy(n->load(), curef, n);
+                    if (toContinue != NULL) {
+                        break;
+                    }
                 }
             }
-        }
-    };
-    std::function<void( N *, uint32_t, std::atomic<N *> *, std::atomic<N *> *)> findStart =
-        [&copy, &start, &findStart, &toContinue, &restart,
-         this]( N *node, uint32_t level, std::atomic<N *> * paref, std::atomic<N *> *curef) {
+        };
+    std::function<void(N *, uint32_t, std::atomic<N *> *, std::atomic<N *> *)>
+        findStart = [&copy, &start, &findStart, &toContinue, &restart,
+                     this](N *node, uint32_t level, std::atomic<N *> *paref,
+                           std::atomic<N *> *curef) {
             if (N::isLeaf(node)) {
                 copy(node, paref, curef);
                 return;
@@ -189,9 +191,10 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                 break;
             }
         };
-    std::function<void( N *, uint32_t, std::atomic<N *> *, std::atomic<N *> *)> findEnd =
-        [&copy, &end, &toContinue, &restart, &findEnd, this]( N *node,
-                                                             uint32_t level, std::atomic<N *> * paref, std::atomic<N *> *curef) {
+    std::function<void(N *, uint32_t, std::atomic<N *> *, std::atomic<N *> *)>
+        findEnd = [&copy, &end, &toContinue, &restart, &findEnd,
+                   this](N *node, uint32_t level, std::atomic<N *> *paref,
+                         std::atomic<N *> *curef) {
             if (N::isLeaf(node)) {
                 return;
             }

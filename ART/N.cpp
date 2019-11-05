@@ -1,8 +1,8 @@
 #include "N.h"
-#include "N4.h"
 #include "N16.h"
-#include "N48.h"
 #include "N256.h"
+#include "N4.h"
+#include "N48.h"
 #include "threadinfo.h"
 #include <algorithm>
 #include <assert.h>
@@ -541,22 +541,22 @@ void N::getChildren(N *node, uint8_t start, uint8_t end,
                     uint32_t &childrenCount) {
     switch (node->getType()) {
     case NTypes::N4: {
-        auto n = static_cast< N4 *>(node);
+        auto n = static_cast<N4 *>(node);
         n->getChildren(start, end, children, childrenCount);
         return;
     }
     case NTypes::N16: {
-        auto n = static_cast< N16 *>(node);
+        auto n = static_cast<N16 *>(node);
         n->getChildren(start, end, children, childrenCount);
         return;
     }
     case NTypes::N48: {
-        auto n = static_cast< N48 *>(node);
+        auto n = static_cast<N48 *>(node);
         n->getChildren(start, end, children, childrenCount);
         return;
     }
     case NTypes::N256: {
-        auto n = static_cast< N256 *>(node);
+        auto n = static_cast<N256 *>(node);
         n->getChildren(start, end, children, childrenCount);
         return;
     }

@@ -1,5 +1,5 @@
-#include "N.h"
 #include "N256.h"
+#include "N.h"
 #include <algorithm>
 #include <assert.h>
 
@@ -15,7 +15,7 @@ void N256::deleteChildren() {
     }
 }
 
- bool N256::insert(uint8_t key, N *val, bool flush) {
+bool N256::insert(uint8_t key, N *val, bool flush) {
     children[key].store(N::setDirty(val), std::memory_order_seq_cst);
     if (flush)
         clflush((char *)&children[key], sizeof(N *), false, true);

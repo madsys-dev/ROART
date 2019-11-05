@@ -1,11 +1,11 @@
-#include "N.h"
 #include "N16.h"
+#include "N.h"
 #include <algorithm>
 #include <assert.h>
 #include <emmintrin.h> // x86 SSE intrinsics
 
 namespace PART_ns {
-    bool N16::insert(uint8_t key, N *n, bool flush) {
+bool N16::insert(uint8_t key, N *n, bool flush) {
     if (compactCount == 16) {
         return false;
     }
@@ -113,7 +113,8 @@ void N16::getChildren(uint8_t start, uint8_t end,
         if (key >= start && key <= end) {
             N *child = this->children[i].load();
             if (child != nullptr) {
-                children[childrenCount] = std::make_tuple(key, &(this->children[i]));
+                children[childrenCount] =
+                    std::make_tuple(key, &(this->children[i]));
                 childrenCount++;
             }
         }

@@ -1,11 +1,11 @@
-#include "N.h"
 #include "N48.h"
+#include "N.h"
 #include <algorithm>
 #include <assert.h>
 
 namespace PART_ns {
 
- bool N48::insert(uint8_t key, N *n, bool flush) {
+bool N48::insert(uint8_t key, N *n, bool flush) {
     if (compactCount == 48) {
         return false;
     }
@@ -88,7 +88,8 @@ void N48::getChildren(uint8_t start, uint8_t end,
         if (index != emptyMarker && this->children[index] != nullptr) {
             N *child = this->children[index].load();
             if (child != nullptr) {
-                children[childrenCount] = std::make_tuple(i, &(this->children[index]));
+                children[childrenCount] =
+                    std::make_tuple(i, &(this->children[index]));
                 childrenCount++;
             }
         }
