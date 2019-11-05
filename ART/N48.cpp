@@ -9,9 +9,10 @@ inline bool N48::insert(uint8_t key, N *n, bool flush) {
         return false;
     }
     childIndex[key].store(compactCount, std::memory_order_seq_cst);
-    clflush((char *)&childIndex[key], sizeof(uint8_t), false, true);
+    if(flush) clflush((char *)&childIndex[key], sizeof(uint8_t), false, true);
+
     children[compactCount].store(N::setDirty(n), std::memory_order_seq_cst);
-    clflush((char *)&children[compactCount], sizeof(N *), false, true);
+    if(flush) clflush((char *)&children[compactCount], sizeof(N *), false, true);
     children[compactCount].store(n, std::memory_order_seq_cst);
 
     compactCount++;
@@ -23,6 +24,7 @@ template <class NODE> void N48::copyTo(NODE *n) const {
     for (unsigned i = 0; i < 256; i++) {
         uint8_t index = childIndex[i].load();
         if (index != emptyMarker && children[index].load() != nullptr) {
+            // not flush
             n->insert(i, children[index].load(), false);
         }
     }

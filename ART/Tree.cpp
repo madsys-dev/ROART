@@ -29,13 +29,14 @@ Tree::Tree() {
     bool init = init_nvm_mgr();
     register_threadinfo();
     NVMMgr *mgr = get_nvm_mgr();
-    root = new (mgr->alloc_tree_root()) N256(0, {});
 
     if (init) {
         // first open
+        root = new (mgr->alloc_tree_root()) N256(0, {});
         std::cout << "[P-ART]\tfirst create a P-ART\n";
     } else {
         // recovery
+        root = reinterpret_cast<N256 *>(mgr->alloc_tree_root());
         std::cout << "[P-ART]\trecovery P-ART\n";
         rebuild();
     }
@@ -347,26 +348,32 @@ restart:
             if (needRestart)
                 goto restart;
 
-            // 1) Create new node which will be parent of node, Set common
-            // prefix, level to this node
-            Prefix prefi = node->getPrefi();
-            prefi.prefixCount = nextLevel - level;
-            auto newNode = new N4(nextLevel, prefi);
-
-            // 2)  add node and (tid, *k) as children
-            Leaf *newLeaf = new Leaf(k);
-            newNode->insert(k->fkey[nextLevel], N::setLeaf(newLeaf), false);
-            newNode->insert(nonMatchingKey, node, false);
-            N::clflush((char *)newNode, sizeof(N4), true, true);
-
             // 3) lockVersionOrRestart, update parentNode to point to the
             // new node, unlock
             parentNode->writeLockOrRestart(needRestart);
             if (needRestart) {
-                delete newNode;
+//                free_node(NTypes::N4, newNode);
+//                free_node(NTypes::Leaf, newLeaf);
                 node->writeUnlock();
                 goto restart;
             }
+
+            // 1) Create new node which will be parent of node, Set common
+            // prefix, level to this node
+            Prefix prefi = node->getPrefi();
+            prefi.prefixCount = nextLevel - level;
+            auto newNode = new(alloc_new_node(NTypes::N4)) N4(nextLevel, prefi); // not persist
+
+            // 2)  add node and (tid, *k) as children
+            Leaf *newLeaf = new(alloc_new_node(NTypes::Leaf)) Leaf(k); // not persist
+            N::clflush((char *)newLeaf, sizeof(Leaf), true, true); // persist leaf
+
+            // not persist
+            newNode->insert(k->fkey[nextLevel], N::setLeaf(newLeaf), false);
+            newNode->insert(nonMatchingKey, node, false);
+            // persist the new node
+            N::clflush((char *)newNode, sizeof(N4), true, true);
+
             N::change(parentNode, parentKey, newNode);
             parentNode->writeUnlock();
 
@@ -401,7 +408,9 @@ restart:
             if (needRestart)
                 goto restart;
 
-            Leaf *newLeaf = new Leaf(k);
+            Leaf *newLeaf = new(alloc_new_node(NTypes::Leaf)) Leaf(k);
+            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
+
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeaf(newLeaf), epocheInfo, needRestart);
             if (needRestart)
@@ -435,8 +444,10 @@ restart:
             }
 
             auto n4 =
-                new N4(level + prefixLength, &k->fkey[level], prefixLength);
-            Leaf *newLeaf = new Leaf(k);
+                new(alloc_new_node(NTypes::N4)) N4(level + prefixLength, &k->fkey[level], prefixLength);
+            Leaf *newLeaf = new(alloc_new_node(NTypes::Leaf)) Leaf(k);
+            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
+
             n4->insert(k->fkey[level + prefixLength], N::setLeaf(newLeaf),
                        false);
             n4->insert(key->fkey[level + prefixLength], nextNode, false);
@@ -571,7 +582,7 @@ restart:
 }
 
 void Tree::rebuild() {
-    // TODO: traverse the whole tree from root and calculate count
+    N::rebuild_node(root);
     // TODO: reclaim the garbage node
 }
 

@@ -173,19 +173,24 @@ void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
         n->writeUnlock();
         return;
     }
-    // allocate a bigger node from NVMMgr
-    auto nBig = new (NVMMgr_ns::alloc_new_node(type))
-        biggerN(n->getLevel(), n->getPrefi());
-    n->copyTo(nBig);
-    nBig->insert(key, val, false);
-    clflush((char *)nBig, sizeof(biggerN), true, true);
 
+    // grow and lock parent
+    // TODO: first lock parent or create new node
     parentNode->writeLockOrRestart(needRestart);
     if (needRestart) {
-        delete nBig;
+        // free_node(type, nBig);
         n->writeUnlock();
         return;
     }
+
+    // allocate a bigger node from NVMMgr
+    auto nBig = new (NVMMgr_ns::alloc_new_node(type))
+        biggerN(n->getLevel(), n->getPrefi()); // not persist
+    n->copyTo(nBig); // not persist
+    nBig->insert(key, val, false); // not persist
+    // persist the node
+    clflush((char *)nBig, sizeof(biggerN), true, true);
+
 
     N::change(parentNode, keyParent, nBig);
     parentNode->writeUnlock();
@@ -198,19 +203,21 @@ template <typename curN>
 void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
                       N *val, NTypes type, ThreadInfo &threadInfo,
                       bool &needRestart) {
-    // allocate a new node from NVMMgr
-    auto nNew = new (NVMMgr_ns::alloc_new_node(type))
-        curN(n->getLevel(), n->getPrefi());
-    n->copyTo(nNew);
-    nNew->insert(key, val, false);
-    clflush((char *)nNew, sizeof(curN), true, true);
-
+    // compact and lock parent
     parentNode->writeLockOrRestart(needRestart);
     if (needRestart) {
-        delete nNew;
+        // free_node(type, nNew);
         n->writeUnlock();
         return;
     }
+
+    // allocate a new node from NVMMgr
+    auto nNew = new (NVMMgr_ns::alloc_new_node(type))
+        curN(n->getLevel(), n->getPrefi()); // not persist
+    n->copyTo(nNew); // not persist
+    nNew->insert(key, val, false); // not persist
+    // persist the node
+    clflush((char *)nNew, sizeof(curN), true, true);
 
     N::change(parentNode, keyParent, nNew);
     parentNode->writeUnlock();
@@ -326,19 +333,22 @@ void N::removeAndShrink(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
         return;
     }
 
-    // allocate a smaller node from NVMMgr
-    auto nSmall = new (NVMMgr_ns::alloc_new_node(type))
-        smallerN(n->getLevel(), n->getPrefi());
-
+    // shrink and lock parent
     parentNode->writeLockOrRestart(needRestart);
     if (needRestart) {
-        delete nSmall;
+        // free_node(type, nSmall);
         n->writeUnlock();
         return;
     }
 
+    // allocate a smaller node from NVMMgr
+    auto nSmall = new (NVMMgr_ns::alloc_new_node(type))
+            smallerN(n->getLevel(), n->getPrefi());  // not persist
+
     n->remove(key, true, true);
-    n->copyTo(nSmall);
+    n->copyTo(nSmall); // not persist
+
+    // persist the node
     clflush((char *)nSmall, sizeof(smallerN), true, true);
     N::change(parentNode, keyParent, nSmall);
 
@@ -389,6 +399,11 @@ bool N::checkOrRestart(uint64_t startRead) const {
 
 bool N::readUnlockOrRestart(uint64_t startRead) const {
     return startRead == typeVersionLockObsolete.load();
+}
+
+void N::setCount(uint16_t count_, uint16_t compactCount_) {
+    count = count_;
+    compactCount = compactCount_;
 }
 
 uint32_t N::getCount() const {
@@ -547,5 +562,74 @@ void N::getChildren(const N *node, uint8_t start, uint8_t end,
         return;
     }
     }
+}
+
+void N::rebuild_node(N *node) {
+    if (N::isLeaf(node)) {
+        return;
+    }
+    int xcount = 0;
+    int xcompactCount = 0;
+    NTypes type = node->getType();
+    // type is persistent when first create this node
+    // TODO: using SIMD to accelerate recovery
+    switch (type) {
+    case NTypes::N4: {
+        auto n = static_cast<N4 *>(node);
+        for (int i = 0; i < 4; i++) {
+            N *child = N::clearDirty(n->children[i].load());
+            if (child != nullptr) {
+                xcount++;
+                xcompactCount = i;
+                rebuild_node(child);
+            }
+        }
+        break;
+    }
+    case NTypes::N16: {
+        auto n = static_cast<N16 *>(node);
+        for (int i = 0; i < 16; i++) {
+            N *child = N::clearDirty(n->children[i].load());
+            if (child != nullptr) {
+                xcount++;
+                xcompactCount = i;
+                rebuild_node(child);
+            }
+        }
+        break;
+    }
+    case NTypes::N48: {
+        auto n = static_cast<N48 *>(node);
+        for (int i = 0; i < 48; i++) {
+            N *child = N::clearDirty(n->children[i].load());
+            if (child != nullptr) {
+                xcount++;
+                xcompactCount = i;
+                rebuild_node(child);
+            }
+        }
+        break;
+    }
+    case NTypes::N256: {
+        auto n = static_cast<N256 *>(node);
+        for (int i = 0; i < 256; i++) {
+            N *child = N::clearDirty(n->children[i].load());
+            if (child != nullptr) {
+                xcount++;
+                xcompactCount = i;
+                rebuild_node(child);
+            }
+        }
+        break;
+    }
+    default: {
+        std::cout << "[NODE]\twrong type for rebuild node\n";
+        assert(0);
+    }
+    }
+    // reset count and version and lock
+    node->setCount(xcount, xcompactCount);
+    node->typeVersionLockObsolete.store(convertTypeToVersion(type));
+    node->typeVersionLockObsolete.fetch_add(0b100);
 }
 } // namespace PART_ns

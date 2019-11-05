@@ -31,7 +31,9 @@ class Leaf {
   public:
     size_t key_len;
     uint64_t key;
-    uint8_t *fkey;
+//    uint8_t *fkey;
+    // TODO: variable key
+    uint8_t fkey[16];
     uint64_t value;
 
   public:
@@ -43,7 +45,7 @@ class Leaf {
                       // 30% performance
         fkey = (uint8_t *)&key;
 #else
-        fkey = new uint8_t[key_len];
+//        fkey = new uint8_t[key_len];
         memcpy(fkey, k->fkey, key_len);
 #endif
     }
@@ -126,6 +128,8 @@ class N {
 
     uint32_t getCount() const;
 
+    void setCount(uint16_t count_, uint16_t compactCount_);
+
     bool isLocked(uint64_t version) const;
 
     void writeLockOrRestart(bool &needRestart);
@@ -202,6 +206,8 @@ class N {
     static void getChildren(const N *node, uint8_t start, uint8_t end,
                             std::tuple<uint8_t, N *> children[],
                             uint32_t &childrenCount);
+
+    static void rebuild_node(N *node);
 
     static inline void mfence() __attribute__((always_inline));
 
@@ -321,6 +327,7 @@ class N16 : public N {
 };
 
 class N48 : public N {
+  public:
     std::atomic<uint8_t> childIndex[256];
     std::atomic<N *> children[48];
 
@@ -361,6 +368,7 @@ class N48 : public N {
 };
 
 class N256 : public N {
+  public:
     std::atomic<N *> children[256];
 
   public:

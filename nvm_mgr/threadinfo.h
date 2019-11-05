@@ -20,7 +20,7 @@ class PMFreeList {
     PMFreeList(PMBlockAllocator *pmb_);
 
     void *alloc_node(PART_ns::NTypes nt);
-    void free_node(void *n);
+    void free_node(void *addr);
 
     int get_freelist_size() { return free_node_list.size(); }
 };
@@ -48,6 +48,7 @@ int get_thread_id();
 void *get_threadinfo();
 
 void *alloc_new_node(PART_ns::NTypes type);
+void free_node(PART_ns::NTypes type, void *addr);
 
 void *get_static_log();
 

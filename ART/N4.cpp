@@ -19,10 +19,10 @@ inline bool N4::insert(uint8_t key, N *n, bool flush) {
         return false;
     }
     keys[compactCount].store(key, std::memory_order_seq_cst);
-    clflush((char *)&keys[compactCount], sizeof(uint8_t), true, true);
+    if(flush) clflush((char *)&keys[compactCount], sizeof(uint8_t), true, true);
 
     children[compactCount].store(N::setDirty(n), std::memory_order_seq_cst);
-    clflush((char *)&children[compactCount], sizeof(N *), true, true);
+    if(flush) clflush((char *)&children[compactCount], sizeof(N *), true, true);
     children[compactCount].store(n, std::memory_order_seq_cst);
     compactCount++;
     count++;
@@ -36,6 +36,7 @@ template <class NODE> void N4::copyTo(NODE *n) const {
     for (uint32_t i = 0; i < compactCount; ++i) {
         N *child = children[i].load();
         if (child != nullptr) {
+            // not flush
             n->insert(keys[i].load(), child, false);
         }
     }

@@ -10,9 +10,10 @@ inline bool N16::insert(uint8_t key, N *n, bool flush) {
         return false;
     }
     keys[compactCount].store(flipSign(key), std::memory_order_seq_cst);
-    clflush((char *)&keys[compactCount], sizeof(N *), false, true);
+    if(flush) clflush((char *)&keys[compactCount], sizeof(N *), false, true);
+
     children[compactCount].store(N::setDirty(n), std::memory_order_seq_cst);
-    clflush((char *)&children[compactCount], sizeof(N *), false, true);
+    if(flush) clflush((char *)&children[compactCount], sizeof(N *), false, true);
     children[compactCount].store(n, std::memory_order_seq_cst);
     compactCount++;
     count++;
@@ -26,6 +27,7 @@ template <class NODE> void N16::copyTo(NODE *n) const {
     for (unsigned i = 0; i < compactCount; i++) {
         N *child = children[i].load();
         if (child != nullptr) {
+            // not flush
             n->insert(flipSign(keys[i].load()), child, false);
         }
     }

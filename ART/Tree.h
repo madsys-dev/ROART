@@ -72,6 +72,8 @@ class Tree {
 
     ~Tree();
 
+    void rebuild_node(N *n);
+
     void rebuild();
 
     ThreadInfo getThreadInfo();

@@ -62,9 +62,8 @@ void *PMFreeList::alloc_node(PART_ns::NTypes type) {
     return (void *)pos;
 }
 
-void PMFreeList::free_node(void *n) {
-    // TODO: free different node
-    assert(0);
+void PMFreeList::free_node(void *addr) {
+    free_node_list.push_back((uint64_t)addr);
 }
 
 void *alloc_new_node(PART_ns::NTypes type) {
@@ -82,6 +81,24 @@ void *alloc_new_node(PART_ns::NTypes type) {
     default:
         std::cout << "[ALLOC NODE]\twrong type\n";
         assert(0);
+    }
+}
+
+void free_node(PART_ns::NTypes type, void *addr){
+    switch (type) {
+        case PART_ns::NTypes::N4:
+             ti->node4_free_list->free_node(addr);
+        case PART_ns::NTypes::N16:
+             ti->node16_free_list->free_node(addr);
+        case PART_ns::NTypes::N48:
+             ti->node48_free_list->free_node(addr);
+        case PART_ns::NTypes::N256:
+             ti->node256_free_list->free_node(addr);
+        case PART_ns::NTypes::Leaf:
+             ti->leaf_free_list->free_node(addr);
+        default:
+            std::cout << "[FREE NODE]\twrong type\n";
+            assert(0);
     }
 }
 
