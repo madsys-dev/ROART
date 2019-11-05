@@ -44,7 +44,7 @@ class NVMMgr {
      */
   public:
     static const int magic_number = 12345;
-    static const int max_threads = 128;
+    static const int max_threads = 64;
 
     static const int PGSIZE = 256 * 1024;                   // 256K
     static const long long filesize = 16LL * 1024 * PGSIZE; // 4GB

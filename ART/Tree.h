@@ -1,7 +1,3 @@
-//
-// Created by florian on 18.11.15.
-//
-
 #ifndef ART_ROWEX_TREE_H
 #define ART_ROWEX_TREE_H
 #include "N.h"

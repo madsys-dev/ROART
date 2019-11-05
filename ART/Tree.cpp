@@ -1,7 +1,7 @@
 #include "Tree.h"
-#include "Epoche.cpp"
-#include "N.cpp"
+#include "N.h"
 #include "nvm_mgr.h"
+#include "Epoche.h"
 #include "threadinfo.h"
 #include <algorithm>
 #include <assert.h>

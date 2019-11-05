@@ -1,8 +1,4 @@
 #include "N.h"
-#include "N16.cpp"
-#include "N256.cpp"
-#include "N4.cpp"
-#include "N48.cpp"
 #include "threadinfo.h"
 #include <algorithm>
 #include <assert.h>

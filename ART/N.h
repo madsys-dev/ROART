@@ -1,7 +1,3 @@
-//
-// Created by florian on 05.08.15.
-//
-
 #ifndef ART_ROWEX_N_H
 #define ART_ROWEX_N_H
 //#define ART_NOREADLOCK
@@ -167,8 +163,7 @@ class N {
 
     Prefix getPrefi() const;
 
-    inline void setPrefix(const uint8_t *prefix, uint32_t length, bool flush)
-        __attribute__((always_inline));
+    inline void setPrefix(const uint8_t *prefix, uint32_t length, bool flush);
 
     void addPrefixBefore(N *node, uint8_t key);
 
@@ -209,10 +204,9 @@ class N {
 
     static void rebuild_node(N *node);
 
-    static inline void mfence() __attribute__((always_inline));
+    static inline void mfence();
 
-    static inline void clflush(char *data, int len, bool front, bool back)
-        __attribute__((always_inline));
+    static inline void clflush(char *data, int len, bool front, bool back);
 };
 
 class N4 : public N {
@@ -232,8 +226,7 @@ class N4 : public N {
         memset(children, 0, sizeof(children));
     }
 
-    inline bool insert(uint8_t key, N *n, bool flush)
-        __attribute__((always_inline));
+    inline bool insert(uint8_t key, N *n, bool flush);
 
     template <class NODE> void copyTo(NODE *n) const;
 
@@ -304,8 +297,7 @@ class N16 : public N {
         memset(children, 0, sizeof(children));
     }
 
-    inline bool insert(uint8_t key, N *n, bool flush)
-        __attribute__((always_inline));
+    inline bool insert(uint8_t key, N *n, bool flush);
 
     template <class NODE> void copyTo(NODE *n) const;
 
@@ -345,8 +337,7 @@ class N48 : public N {
         memset(children, 0, sizeof(children));
     }
 
-    inline bool insert(uint8_t key, N *n, bool flush)
-        __attribute__((always_inline));
+    inline bool insert(uint8_t key, N *n, bool flush);
 
     template <class NODE> void copyTo(NODE *n) const;
 
@@ -381,8 +372,7 @@ class N256 : public N {
         memset(children, '\0', sizeof(children));
     }
 
-    inline bool insert(uint8_t key, N *val, bool flush)
-        __attribute__((always_inline));
+    inline bool insert(uint8_t key, N *val, bool flush);
 
     template <class NODE> void copyTo(NODE *n) const;
 

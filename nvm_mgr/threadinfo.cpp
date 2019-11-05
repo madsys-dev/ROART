@@ -117,6 +117,10 @@ void register_threadinfo() {
         std::cout << "[THREAD]\tfirst new pmblock\n";
     }
     if (ti == NULL) {
+        if(id == NVMMgr::max_threads){
+            std::cout<<"[THREAD]\tno available threadinfo to allocate\n";
+            assert(0);
+        }
         NVMMgr *mgr = get_nvm_mgr();
         ti = (thread_info *)mgr->alloc_thread_info();
         ti->node4_free_list = new PMFreeList(pmblock);

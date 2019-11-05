@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 2.8)
 project(P-ART)
 
-if( NOT CMAKE_BUILD_TYPE )
+if (NOT CMAKE_BUILD_TYPE)
     message(STATUS "No build type selected, default to Release")
-    set( CMAKE_BUILD_TYPE Release)
-else()
+    set(CMAKE_BUILD_TYPE Release)
+else ()
     message(STATUS "Build type is set to ${CMAKE_BUILD_TYPE}")
-endif()
+endif ()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O2 -march=native -mavx -mavx2  -DNDEBUG")
 
@@ -18,19 +18,44 @@ add_definitions(-DCLFLUSH)
 link_libraries(pthread atomic boost_system boost_thread gtest)
 find_library(TbbLib tbb)
 include_directories(./ART
-                    ./benchmark
-                    ./nvm_mgr
-                    ./test
-                    ./fast_fair)
+        ./benchmark
+        ./nvm_mgr
+        ./test
+        ./fast_fair)
 
-set(INDEX_FILES 
-        ./ART/Tree.cpp
-        ./benchmark/generator.cpp
-        ./nvm_mgr/nvm_mgr.cpp
-        ./nvm_mgr/threadinfo.cpp)
+aux_source_directory(ART       DIR_ART_SRCS)
+aux_source_directory(benchmark DIR_BENCH_SRCS)
+aux_source_directory(fast_fair DIR_FF_SRCS)
+aux_source_directory(nvm_mgr   DIR_NVMMGR_SRCS)
+aux_source_directory(perf      DIR_PERF_SRCS)
+aux_source_directory(test      DIR_TEST_SRC)
 
-add_library(Indexes ${INDEX_FILES})
-target_link_libraries(Indexes  ${TbbLib})
+#set(HEAD_FILE
+#        ./ART/Key.h
+#        ./ART/N.h
+#        ./ART/Tree.h
+#        ./benchmark/benchmarks.h
+#        ./benchmark/config.h
+#        ./benchmark/coordinator.h
+#        ./benchmark/generator.h
+#        ./benchmark/microbench.h
+#        ./benchmark/timer.h
+#        ./fast_fair/fast_fair.h
+#        ./nvm_mgr/Epoche.h
+#        ./nvm_mgr/nvm_mgr.h
+#        ./nvm_mgr/pmalloc_wrap.h
+#        ./nvm_mgr/threadinfo.h
+#        ./nvm_mgr/util.h)
+
+add_library(Indexes
+        ${DIR_ART_SRCS}
+        ${DIR_BENCH_SRCS}
+        ${DIR_FF_SRCS}
+        ${DIR_NVMMGR_SRCS}
+        ${DIR_PERF_SRCS}
+        ${DIR_TEST_SRC})
+#        ${HEAD_FILE})
+target_link_libraries(Indexes ${TbbLib})
 
 set(P_ART_BENCH perf/art_simple_bench.cpp)
 add_executable(art_simple_bench ${P_ART_BENCH})
