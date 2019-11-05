@@ -30,19 +30,7 @@ aux_source_directory(nvm_mgr   DIR_NVMMGR_SRCS)
 aux_source_directory(perf      DIR_PERF_SRCS)
 aux_source_directory(test      DIR_TEST_SRC)
 
-add_library(Indexes
-        ./nvm_mgr/Epoche.cpp
-        ./nvm_mgr/nvm_mgr.cpp
-        ./nvm_mgr/threadinfo.cpp
-        ./benchmark/generator.cpp
-        ./ART/N4.cpp
-        ./ART/N16.cpp
-        ./ART/N48.cpp
-        ./ART/N256.cpp
-        ./ART/N.cpp
-        ./ART/Tree.cpp
-        )
-
+add_library(Indexes ${DIR_ART_SRCS} ${DIR_BENCH_SRCS} ${DIR_FF_SRCS} ${DIR_NVMMGR_SRCS})
 target_link_libraries(Indexes ${TbbLib})
 
 
@@ -54,9 +42,6 @@ set(BENCHMARK perf/main.cpp)
 add_executable(benchmark ${BENCHMARK})
 target_link_libraries(benchmark Indexes)
 
-add_executable(unittest
-        ./test/test.cpp
-        ./test/test_correctness.cpp
-        ./test/test_nvm_mgr.cpp)
+add_executable(unittest ${DIR_TEST_SRC})
 target_link_libraries(unittest Indexes gtest)
 
