@@ -84,21 +84,26 @@ void *alloc_new_node(PART_ns::NTypes type) {
     }
 }
 
-void free_node(PART_ns::NTypes type, void *addr){
+void free_node(PART_ns::NTypes type, void *addr) {
     switch (type) {
-        case PART_ns::NTypes::N4:
-             ti->node4_free_list->free_node(addr);
-        case PART_ns::NTypes::N16:
-             ti->node16_free_list->free_node(addr);
-        case PART_ns::NTypes::N48:
-             ti->node48_free_list->free_node(addr);
-        case PART_ns::NTypes::N256:
-             ti->node256_free_list->free_node(addr);
-        case PART_ns::NTypes::Leaf:
-             ti->leaf_free_list->free_node(addr);
-        default:
-            std::cout << "[FREE NODE]\twrong type\n";
-            assert(0);
+    case PART_ns::NTypes::N4:
+        ti->node4_free_list->free_node(addr);
+        break;
+    case PART_ns::NTypes::N16:
+        ti->node16_free_list->free_node(addr);
+        break;
+    case PART_ns::NTypes::N48:
+        ti->node48_free_list->free_node(addr);
+        break;
+    case PART_ns::NTypes::N256:
+        ti->node256_free_list->free_node(addr);
+        break;
+    case PART_ns::NTypes::Leaf:
+        ti->leaf_free_list->free_node(addr);
+        break;
+    default:
+        std::cout << "[FREE NODE]\twrong type\n";
+        assert(0);
     }
 }
 

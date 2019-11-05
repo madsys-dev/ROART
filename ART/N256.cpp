@@ -16,7 +16,8 @@ void N256::deleteChildren() {
 
 inline bool N256::insert(uint8_t key, N *val, bool flush) {
     children[key].store(N::setDirty(val), std::memory_order_seq_cst);
-    if(flush) clflush((char *)&children[key], sizeof(N *), false, true);
+    if (flush)
+        clflush((char *)&children[key], sizeof(N *), false, true);
     children[key].store(val, std::memory_order_seq_cst);
     count++;
     return true;

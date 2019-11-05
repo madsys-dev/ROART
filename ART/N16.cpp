@@ -10,10 +10,12 @@ inline bool N16::insert(uint8_t key, N *n, bool flush) {
         return false;
     }
     keys[compactCount].store(flipSign(key), std::memory_order_seq_cst);
-    if(flush) clflush((char *)&keys[compactCount], sizeof(N *), false, true);
+    if (flush)
+        clflush((char *)&keys[compactCount], sizeof(N *), false, true);
 
     children[compactCount].store(N::setDirty(n), std::memory_order_seq_cst);
-    if(flush) clflush((char *)&children[compactCount], sizeof(N *), false, true);
+    if (flush)
+        clflush((char *)&children[compactCount], sizeof(N *), false, true);
     children[compactCount].store(n, std::memory_order_seq_cst);
     compactCount++;
     count++;

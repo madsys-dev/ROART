@@ -152,6 +152,27 @@ TEST(TestNVMMgr, thread_info) {
 
     std::cout << "[TEST]\tcheck every freelist's size successfully\n";
 
+    free_node(PART_ns::NTypes::N4, n4);
+    free_node(PART_ns::NTypes::N16, n16);
+    free_node(PART_ns::NTypes::N48, n48);
+    free_node(PART_ns::NTypes::N256, n256);
+    free_node(PART_ns::NTypes::Leaf, leaf);
+
+    std::cout << "[TEST]\tfree nodes successfully\n";
+
+    ASSERT_EQ(ti->node4_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::N4));
+    ASSERT_EQ(ti->node16_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::N16));
+    ASSERT_EQ(ti->node48_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::N48));
+    ASSERT_EQ(ti->node256_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::N256));
+    ASSERT_EQ(ti->leaf_free_list->get_freelist_size(),
+              NVMMgr::PGSIZE / sizeof(PART_ns::Leaf));
+
+    std::cout << "[TEST]]\tfreelist's size correct\n";
+
     unregister_threadinfo();
     close_nvm_mgr();
 }

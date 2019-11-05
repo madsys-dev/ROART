@@ -31,7 +31,7 @@ class Leaf {
   public:
     size_t key_len;
     uint64_t key;
-//    uint8_t *fkey;
+    //    uint8_t *fkey;
     // TODO: variable key
     uint8_t fkey[16];
     uint64_t value;
@@ -45,7 +45,7 @@ class Leaf {
                       // 30% performance
         fkey = (uint8_t *)&key;
 #else
-//        fkey = new uint8_t[key_len];
+        //        fkey = new uint8_t[key_len];
         memcpy(fkey, k->fkey, key_len);
 #endif
     }

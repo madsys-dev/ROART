@@ -9,10 +9,12 @@ inline bool N48::insert(uint8_t key, N *n, bool flush) {
         return false;
     }
     childIndex[key].store(compactCount, std::memory_order_seq_cst);
-    if(flush) clflush((char *)&childIndex[key], sizeof(uint8_t), false, true);
+    if (flush)
+        clflush((char *)&childIndex[key], sizeof(uint8_t), false, true);
 
     children[compactCount].store(N::setDirty(n), std::memory_order_seq_cst);
-    if(flush) clflush((char *)&children[compactCount], sizeof(N *), false, true);
+    if (flush)
+        clflush((char *)&children[compactCount], sizeof(N *), false, true);
     children[compactCount].store(n, std::memory_order_seq_cst);
 
     compactCount++;
