@@ -1,11 +1,11 @@
 #include "N.h"
+#include "N16.h"
 #include <algorithm>
 #include <assert.h>
 #include <emmintrin.h> // x86 SSE intrinsics
 
 namespace PART_ns {
-
-inline bool N16::insert(uint8_t key, N *n, bool flush) {
+    bool N16::insert(uint8_t key, N *n, bool flush) {
     if (compactCount == 16) {
         return false;
     }
@@ -23,16 +23,6 @@ inline bool N16::insert(uint8_t key, N *n, bool flush) {
     // entire key entries
     // if (flush) clflush((char *)this, sizeof(uintptr_t), true, true);
     return true;
-}
-
-template <class NODE> void N16::copyTo(NODE *n) const {
-    for (unsigned i = 0; i < compactCount; i++) {
-        N *child = children[i].load();
-        if (child != nullptr) {
-            // not flush
-            n->insert(flipSign(keys[i].load()), child, false);
-        }
-    }
 }
 
 void N16::change(uint8_t key, N *val) {

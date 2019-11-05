@@ -1,10 +1,11 @@
 #include "N.h"
+#include "N48.h"
 #include <algorithm>
 #include <assert.h>
 
 namespace PART_ns {
 
-inline bool N48::insert(uint8_t key, N *n, bool flush) {
+ bool N48::insert(uint8_t key, N *n, bool flush) {
     if (compactCount == 48) {
         return false;
     }
@@ -20,16 +21,6 @@ inline bool N48::insert(uint8_t key, N *n, bool flush) {
     compactCount++;
     count++;
     return true;
-}
-
-template <class NODE> void N48::copyTo(NODE *n) const {
-    for (unsigned i = 0; i < 256; i++) {
-        uint8_t index = childIndex[i].load();
-        if (index != emptyMarker && children[index].load() != nullptr) {
-            // not flush
-            n->insert(i, children[index].load(), false);
-        }
-    }
 }
 
 void N48::change(uint8_t key, N *val) {

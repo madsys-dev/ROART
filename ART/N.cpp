@@ -1,4 +1,8 @@
 #include "N.h"
+#include "N4.h"
+#include "N16.h"
+#include "N48.h"
+#include "N256.h"
 #include "threadinfo.h"
 #include <algorithm>
 #include <assert.h>
@@ -21,9 +25,9 @@ static inline unsigned long read_tsc(void) {
     return var;
 }
 
-inline void N::mfence() { asm volatile("mfence" ::: "memory"); }
+void N::mfence() { asm volatile("mfence" ::: "memory"); }
 
-inline void N::clflush(char *data, int len, bool front, bool back) {
+void N::clflush(char *data, int len, bool front, bool back) {
     volatile char *ptr = (char *)((unsigned long)data & ~(cache_line_size - 1));
     // if (front) mfence();
     for (; ptr < data + len; ptr += cache_line_size) {
@@ -430,7 +434,7 @@ uint32_t N::getCount() const {
 
 Prefix N::getPrefi() const { return prefix.load(); }
 
-inline void N::setPrefix(const uint8_t *prefix, uint32_t length, bool flush) {
+void N::setPrefix(const uint8_t *prefix, uint32_t length, bool flush) {
     if (length > 0) {
         Prefix p;
         memcpy(p.prefix, prefix, std::min(length, maxStoredPrefixLength));

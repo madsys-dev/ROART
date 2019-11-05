@@ -2,6 +2,10 @@
 #define thread_info_h
 
 #include "N.h"
+#include "N4.h"
+#include "N16.h"
+#include "N48.h"
+#include "N256.h"
 #include "pmalloc_wrap.h"
 #include <list>
 

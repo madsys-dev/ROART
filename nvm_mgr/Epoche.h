@@ -52,7 +52,9 @@ class ThreadInfo {
     ThreadInfo(const ThreadInfo &ti)
         : epoche(ti.epoche), deletionList(ti.deletionList) {}
 
-    ~ThreadInfo();
+    ~ThreadInfo(){
+        deletionList.localEpoche.store(std::numeric_limits<uint64_t>::max());
+    }
 
     Epoche &getEpoche() const;
 };
@@ -102,8 +104,5 @@ class EpocheGuardReadonly {
     ~EpocheGuardReadonly() {}
 };
 
-inline ThreadInfo::~ThreadInfo() {
-    deletionList.localEpoche.store(std::numeric_limits<uint64_t>::max());
-}
 
 #endif // ART_EPOCHE_H

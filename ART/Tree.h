@@ -1,6 +1,10 @@
 #ifndef ART_ROWEX_TREE_H
 #define ART_ROWEX_TREE_H
 #include "N.h"
+#include "N4.h"
+#include "N16.h"
+#include "N48.h"
+#include "N256.h"
 
 namespace PART_ns {
 

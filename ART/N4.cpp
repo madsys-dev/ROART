@@ -1,4 +1,5 @@
 #include "N.h"
+#include "N4.h"
 #include <algorithm>
 #include <assert.h>
 
@@ -14,7 +15,7 @@ void N4::deleteChildren() {
     }
 }
 
-inline bool N4::insert(uint8_t key, N *n, bool flush) {
+bool N4::insert(uint8_t key, N *n, bool flush) {
     if (compactCount == 4) {
         return false;
     }
@@ -32,16 +33,6 @@ inline bool N4::insert(uint8_t key, N *n, bool flush) {
     // only one clflush is required to atomically synchronize its updates
     // if (flush) clflush((char *)this, sizeof(N4), true, true);
     return true;
-}
-
-template <class NODE> void N4::copyTo(NODE *n) const {
-    for (uint32_t i = 0; i < compactCount; ++i) {
-        N *child = children[i].load();
-        if (child != nullptr) {
-            // not flush
-            n->insert(keys[i].load(), child, false);
-        }
-    }
 }
 
 void N4::change(uint8_t key, N *val) {
