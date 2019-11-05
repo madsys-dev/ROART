@@ -198,8 +198,8 @@ class N {
                                 uint8_t key, NTypes type,
                                 ThreadInfo &threadInfo, bool &needRestart);
 
-    static void getChildren(const N *node, uint8_t start, uint8_t end,
-                            std::tuple<uint8_t, N *> children[],
+    static void getChildren(N *node, uint8_t start, uint8_t end,
+                            std::tuple<uint8_t, std::atomic<N *> *> children[],
                             uint32_t &childrenCount);
 
     static void rebuild_node(N *node);
@@ -243,8 +243,8 @@ class N4 : public N {
     void deleteChildren();
 
     void getChildren(uint8_t start, uint8_t end,
-                     std::tuple<uint8_t, N *> *&children,
-                     uint32_t &childrenCount) const;
+                     std::tuple<uint8_t, std::atomic<N *> *> children[],
+                     uint32_t &childrenCount) ;
 
     uint32_t getCount() const;
 };
@@ -312,8 +312,8 @@ class N16 : public N {
     void deleteChildren();
 
     void getChildren(uint8_t start, uint8_t end,
-                     std::tuple<uint8_t, N *> *&children,
-                     uint32_t &childrenCount) const;
+                     std::tuple<uint8_t, std::atomic<N *> *> children[],
+                     uint32_t &childrenCount) ;
 
     uint32_t getCount() const;
 };
@@ -352,8 +352,8 @@ class N48 : public N {
     void deleteChildren();
 
     void getChildren(uint8_t start, uint8_t end,
-                     std::tuple<uint8_t, N *> *&children,
-                     uint32_t &childrenCount) const;
+                     std::tuple<uint8_t, std::atomic<N *> *> children[],
+                     uint32_t &childrenCount) ;
 
     uint32_t getCount() const;
 };
@@ -387,8 +387,8 @@ class N256 : public N {
     void deleteChildren();
 
     void getChildren(uint8_t start, uint8_t end,
-                     std::tuple<uint8_t, N *> *&children,
-                     uint32_t &childrenCount) const;
+                     std::tuple<uint8_t, std::atomic<N *> *> children[],
+                     uint32_t &childrenCount);
 
     uint32_t getCount() const;
 };

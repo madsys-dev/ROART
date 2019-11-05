@@ -532,27 +532,27 @@ Leaf *N::getAnyChildTid(const N *n) {
     }
 }
 
-void N::getChildren(const N *node, uint8_t start, uint8_t end,
-                    std::tuple<uint8_t, N *> children[],
+void N::getChildren(N *node, uint8_t start, uint8_t end,
+                    std::tuple<uint8_t, std::atomic<N *> *> children[],
                     uint32_t &childrenCount) {
     switch (node->getType()) {
     case NTypes::N4: {
-        auto n = static_cast<const N4 *>(node);
+        auto n = static_cast< N4 *>(node);
         n->getChildren(start, end, children, childrenCount);
         return;
     }
     case NTypes::N16: {
-        auto n = static_cast<const N16 *>(node);
+        auto n = static_cast< N16 *>(node);
         n->getChildren(start, end, children, childrenCount);
         return;
     }
     case NTypes::N48: {
-        auto n = static_cast<const N48 *>(node);
+        auto n = static_cast< N48 *>(node);
         n->getChildren(start, end, children, childrenCount);
         return;
     }
     case NTypes::N256: {
-        auto n = static_cast<const N256 *>(node);
+        auto n = static_cast< N256 *>(node);
         n->getChildren(start, end, children, childrenCount);
         return;
     }

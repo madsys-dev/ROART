@@ -30,32 +30,21 @@ aux_source_directory(nvm_mgr   DIR_NVMMGR_SRCS)
 aux_source_directory(perf      DIR_PERF_SRCS)
 aux_source_directory(test      DIR_TEST_SRC)
 
-#set(HEAD_FILE
-#        ./ART/Key.h
-#        ./ART/N.h
-#        ./ART/Tree.h
-#        ./benchmark/benchmarks.h
-#        ./benchmark/config.h
-#        ./benchmark/coordinator.h
-#        ./benchmark/generator.h
-#        ./benchmark/microbench.h
-#        ./benchmark/timer.h
-#        ./fast_fair/fast_fair.h
-#        ./nvm_mgr/Epoche.h
-#        ./nvm_mgr/nvm_mgr.h
-#        ./nvm_mgr/pmalloc_wrap.h
-#        ./nvm_mgr/threadinfo.h
-#        ./nvm_mgr/util.h)
-
 add_library(Indexes
-        ${DIR_ART_SRCS}
-        ${DIR_BENCH_SRCS}
-        ${DIR_FF_SRCS}
-        ${DIR_NVMMGR_SRCS}
-        ${DIR_PERF_SRCS}
-        ${DIR_TEST_SRC})
-#        ${HEAD_FILE})
+        ./nvm_mgr/Epoche.cpp
+        ./nvm_mgr/nvm_mgr.cpp
+        ./nvm_mgr/threadinfo.cpp
+        ./benchmark/generator.cpp
+        ./ART/N4.cpp
+        ./ART/N16.cpp
+        ./ART/N48.cpp
+        ./ART/N256.cpp
+        ./ART/N.cpp
+        ./ART/Tree.cpp
+        )
+
 target_link_libraries(Indexes ${TbbLib})
+
 
 set(P_ART_BENCH perf/art_simple_bench.cpp)
 add_executable(art_simple_bench ${P_ART_BENCH})

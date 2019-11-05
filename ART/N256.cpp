@@ -68,13 +68,13 @@ N *N256::getAnyChild() const {
 }
 
 void N256::getChildren(uint8_t start, uint8_t end,
-                       std::tuple<uint8_t, N *> *&children,
-                       uint32_t &childrenCount) const {
+                       std::tuple<uint8_t, std::atomic<N *> *> children[],
+                       uint32_t &childrenCount) {
     childrenCount = 0;
     for (unsigned i = start; i <= end; i++) {
         N *child = this->children[i].load();
         if (child != nullptr) {
-            children[childrenCount] = std::make_tuple(i, child);
+            children[childrenCount] = std::make_tuple(i, &(this->children[i]));
             childrenCount++;
         }
     }

@@ -122,8 +122,8 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
     EpocheGuard epocheGuard(threadEpocheInfo);
     Leaf *toContinue = NULL;
     bool restart;
-    std::function<void(const N *)> copy = [&result, &resultSize, &resultsFound,
-                                           &toContinue, &copy](const N *node) {
+    std::function<void( N *, std::atomic<N *> *, std::atomic<N *> *)> copy = [&result, &resultSize, &resultsFound,
+                                           &toContinue, &copy]( N *node, std::atomic<N *> * paref, std::atomic<N *> *curef) {
         if (N::isLeaf(node)) {
             if (resultsFound == resultSize) {
                 toContinue = N::getLeaf(node);
@@ -131,26 +131,28 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
             }
             // result[resultsFound] =
             // reinterpret_cast<TID>((N::getLeaf(node))->value);
+            N::helpFlush(paref);
+            N::helpFlush(curef);
             result[resultsFound] = N::getLeaf(node);
             resultsFound++;
         } else {
-            std::tuple<uint8_t, N *> children[256];
+            std::tuple<uint8_t, std::atomic<N *> *> children[256];
             uint32_t childrenCount = 0;
             N::getChildren(node, 0u, 255u, children, childrenCount);
             for (uint32_t i = 0; i < childrenCount; ++i) {
-                const N *n = std::get<1>(children[i]);
-                copy(n);
+                std::atomic<N *> *n = std::get<1>(children[i]);
+                copy(n->load(), curef, n);
                 if (toContinue != NULL) {
                     break;
                 }
             }
         }
     };
-    std::function<void(const N *, uint32_t)> findStart =
+    std::function<void( N *, uint32_t, std::atomic<N *> *, std::atomic<N *> *)> findStart =
         [&copy, &start, &findStart, &toContinue, &restart,
-         this](const N *node, uint32_t level) {
+         this]( N *node, uint32_t level, std::atomic<N *> * paref, std::atomic<N *> *curef) {
             if (N::isLeaf(node)) {
-                copy(node);
+                copy(node, paref, curef);
                 return;
             }
 
@@ -158,21 +160,21 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
             prefixResult = checkPrefixCompare(node, start, level, loadKey);
             switch (prefixResult) {
             case PCCompareResults::Bigger:
-                copy(node);
+                copy(node, paref, curef);
                 break;
             case PCCompareResults::Equal: {
                 uint8_t startLevel =
                     (start->getKeyLen() > level) ? start->fkey[level] : 0;
-                std::tuple<uint8_t, N *> children[256];
+                std::tuple<uint8_t, std::atomic<N *> *> children[256];
                 uint32_t childrenCount = 0;
                 N::getChildren(node, startLevel, 255, children, childrenCount);
                 for (uint32_t i = 0; i < childrenCount; ++i) {
                     const uint8_t k = std::get<0>(children[i]);
-                    const N *n = std::get<1>(children[i]);
+                    std::atomic<N *> *n = std::get<1>(children[i]);
                     if (k == startLevel) {
-                        findStart(n, level + 1);
+                        findStart(n->load(), level + 1, curef, n);
                     } else if (k > startLevel) {
-                        copy(n);
+                        copy(n->load(), curef, n);
                     }
                     if (toContinue != NULL || restart) {
                         break;
@@ -187,9 +189,9 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                 break;
             }
         };
-    std::function<void(const N *, uint32_t)> findEnd =
-        [&copy, &end, &toContinue, &restart, &findEnd, this](const N *node,
-                                                             uint32_t level) {
+    std::function<void( N *, uint32_t, std::atomic<N *> *, std::atomic<N *> *)> findEnd =
+        [&copy, &end, &toContinue, &restart, &findEnd, this]( N *node,
+                                                             uint32_t level, std::atomic<N *> * paref, std::atomic<N *> *curef) {
             if (N::isLeaf(node)) {
                 return;
             }
@@ -199,21 +201,21 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
 
             switch (prefixResult) {
             case PCCompareResults::Smaller:
-                copy(node);
+                copy(node, paref, curef);
                 break;
             case PCCompareResults::Equal: {
                 uint8_t endLevel =
                     (end->getKeyLen() > level) ? end->fkey[level] : 255;
-                std::tuple<uint8_t, N *> children[256];
+                std::tuple<uint8_t, std::atomic<N *> *> children[256];
                 uint32_t childrenCount = 0;
                 N::getChildren(node, 0, endLevel, children, childrenCount);
                 for (uint32_t i = 0; i < childrenCount; ++i) {
                     const uint8_t k = std::get<0>(children[i]);
-                    const N *n = std::get<1>(children[i]);
+                    std::atomic<N *> *n = std::get<1>(children[i]);
                     if (k == endLevel) {
-                        findEnd(n, level + 1);
+                        findEnd(n->load(), level + 1, curef, n);
                     } else if (k < endLevel) {
-                        copy(n);
+                        copy(n->load(), curef, n);
                     }
                     if (toContinue != NULL || restart) {
                         break;
@@ -251,7 +253,7 @@ restart:
             return false;
         }
         case PCEqualsResults::Contained: {
-            copy(node);
+            copy(node, parentref, curref);
             break;
         }
         case PCEqualsResults::BothMatch: {
@@ -260,19 +262,19 @@ restart:
             uint8_t endLevel =
                 (end->getKeyLen() > level) ? end->fkey[level] : 255;
             if (startLevel != endLevel) {
-                std::tuple<uint8_t, N *> children[256];
+                std::tuple<uint8_t, std::atomic<N *> *> children[256];
                 uint32_t childrenCount = 0;
                 N::getChildren(node, startLevel, endLevel, children,
                                childrenCount);
                 for (uint32_t i = 0; i < childrenCount; ++i) {
                     const uint8_t k = std::get<0>(children[i]);
-                    const N *n = std::get<1>(children[i]);
+                    std::atomic<N *> *n = std::get<1>(children[i]);
                     if (k == startLevel) {
-                        findStart(n, level + 1);
+                        findStart(n->load(), level + 1, curref, n);
                     } else if (k > startLevel && k < endLevel) {
-                        copy(n);
+                        copy(n->load(), curref, n);
                     } else if (k == endLevel) {
-                        findEnd(n, level + 1);
+                        findEnd(n->load(), level + 1, curref, n);
                     }
                     if (restart) {
                         goto restart;

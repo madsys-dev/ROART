@@ -115,15 +115,15 @@ void N16::deleteChildren() {
 }
 
 void N16::getChildren(uint8_t start, uint8_t end,
-                      std::tuple<uint8_t, N *> *&children,
-                      uint32_t &childrenCount) const {
+                      std::tuple<uint8_t, std::atomic<N *> *> children[],
+                      uint32_t &childrenCount) {
     childrenCount = 0;
     for (int i = 0; i < compactCount; ++i) {
         uint8_t key = flipSign(this->keys[i].load());
         if (key >= start && key <= end) {
             N *child = this->children[i].load();
             if (child != nullptr) {
-                children[childrenCount] = std::make_tuple(key, child);
+                children[childrenCount] = std::make_tuple(key, &(this->children[i]));
                 childrenCount++;
             }
         }
