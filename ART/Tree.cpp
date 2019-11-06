@@ -159,7 +159,7 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
             }
 
             PCCompareResults prefixResult;
-            prefixResult = checkPrefixCompare(node, start, level, loadKey);
+            prefixResult = checkPrefixCompare(node, start, level);
             switch (prefixResult) {
             case PCCompareResults::Bigger:
                 copy(node, paref, curef);
@@ -200,7 +200,7 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
             }
 
             PCCompareResults prefixResult;
-            prefixResult = checkPrefixCompare(node, end, level, loadKey);
+            prefixResult = checkPrefixCompare(node, end, level);
 
             switch (prefixResult) {
             case PCCompareResults::Smaller:
@@ -248,7 +248,7 @@ restart:
         if (!(node = nextNode) || toContinue)
             break;
         PCEqualsResults prefixResult;
-        prefixResult = checkPrefixEquals(node, level, start, end, loadKey);
+        prefixResult = checkPrefixEquals(node, level, start, end);
         switch (prefixResult) {
         case PCEqualsResults::SkippedLevel:
             goto restart;
@@ -344,8 +344,7 @@ restart:
         uint8_t nonMatchingKey;
         Prefix remainingPrefix;
         switch (checkPrefixPessimistic(node, k, nextLevel, nonMatchingKey,
-                                       remainingPrefix,
-                                       this->loadKey)) { // increases level
+                                       remainingPrefix)) { // increases level
         case CheckPrefixPessimisticResult::SkippedLevel:
             goto restart;
         case CheckPrefixPessimisticResult::NoMatch: {
@@ -624,8 +623,7 @@ typename Tree::CheckPrefixResult Tree::checkPrefix(N *n, const Key *k,
 
 typename Tree::CheckPrefixPessimisticResult
 Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
-                             uint8_t &nonMatchingKey, Prefix &nonMatchingPrefix,
-                             LoadKeyFunction loadKey) {
+                             uint8_t &nonMatchingKey, Prefix &nonMatchingPrefix) {
     Prefix p = n->getPrefi();
     // art_cout << __func__ << ":Actual=" << p.prefixCount + level <<
     // ",Expected=" << n->getLevel() << std::endl;
@@ -703,8 +701,7 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
 }
 
 typename Tree::PCCompareResults
-Tree::checkPrefixCompare(const N *n, const Key *k, uint32_t &level,
-                         LoadKeyFunction loadKey) {
+Tree::checkPrefixCompare(const N *n, const Key *k, uint32_t &level) {
     Prefix p = n->getPrefi();
     if (p.prefixCount + level < n->getLevel()) {
         return PCCompareResults::SkippedLevel;
@@ -736,7 +733,7 @@ Tree::checkPrefixCompare(const N *n, const Key *k, uint32_t &level,
 
 typename Tree::PCEqualsResults
 Tree::checkPrefixEquals(const N *n, uint32_t &level, const Key *start,
-                        const Key *end, LoadKeyFunction loadKey) {
+                        const Key *end) {
     Prefix p = n->getPrefi();
     if (p.prefixCount + level < n->getLevel()) {
         return PCEqualsResults::SkippedLevel;

@@ -11,8 +11,6 @@
 #include "tbb/concurrent_vector.h"
 #endif
 
-using TID = uint64_t;
-
 namespace PART_ns {
 /*
  * SynchronizedTree

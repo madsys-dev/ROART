@@ -10,14 +10,11 @@ namespace PART_ns {
 
 class Tree {
   public:
-    using LoadKeyFunction = void (*)(TID tid, Key &key);
 
   private:
     N *root;
 
     bool checkKey(const Key *ret, const Key *k) const;
-
-    LoadKeyFunction loadKey;
 
     Epoche epoche{256};
 
@@ -52,23 +49,18 @@ class Tree {
 
     static CheckPrefixPessimisticResult
     checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
-                           uint8_t &nonMatchingKey, Prefix &nonMatchingPrefix,
-                           LoadKeyFunction loadKey);
+                           uint8_t &nonMatchingKey, Prefix &nonMatchingPrefix);
 
     static PCCompareResults checkPrefixCompare(const N *n, const Key *k,
-                                               uint32_t &level,
-                                               LoadKeyFunction loadKey);
+                                               uint32_t &level);
 
     static PCEqualsResults checkPrefixEquals(const N *n, uint32_t &level,
-                                             const Key *start, const Key *end,
-                                             LoadKeyFunction loadKey);
+                                             const Key *start, const Key *end);
 
   public:
     Tree();
 
     Tree(const Tree &) = delete;
-
-    Tree(Tree &&t) : root(t.root), loadKey(t.loadKey) {}
 
     ~Tree();
 
