@@ -21,7 +21,13 @@ namespace PART_ns {
 
 enum class NTypes : uint8_t { N4 = 1, N16 = 2, N48 = 3, N256 = 4, Leaf = 5 };
 
-class Leaf {
+class BaseNode {
+public:
+    NTypes type;
+    BaseNode(NTypes type_) : type(type_){}
+};
+
+class Leaf : public BaseNode{
   public:
     size_t key_len;
     uint64_t key;
@@ -31,7 +37,7 @@ class Leaf {
     uint64_t value;
 
   public:
-    Leaf(const Key *k) {
+    Leaf(const Key *k): BaseNode(NTypes::Leaf) {
         key_len = k->key_len;
         value = k->value;
 #ifdef KEY_INLINE
@@ -68,10 +74,10 @@ class N;
 static tbb::concurrent_vector<N *> lock_initializer;
 void lock_initialization();
 #endif
-class N {
+class N : public BaseNode{
   protected:
     N(NTypes type, uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
-        : level(level) {
+        : BaseNode(type), level(level) {
         setType(type);
         setPrefix(prefix, prefixLength, false);
 #ifdef LOCK_INIT
@@ -80,7 +86,7 @@ class N {
     }
 
     N(NTypes type, uint32_t level, const Prefix &prefi)
-        : prefix(prefi), level(level) {
+        : BaseNode(type), prefix(prefi), level(level) {
         setType(type);
 #ifdef LOCK_INIT
         lock_initializer.push_back(this);
