@@ -7,15 +7,12 @@
 #include "N48.h"
 
 namespace PART_ns {
-
 class Tree {
   public:
   private:
     N *root;
 
     bool checkKey(const Key *ret, const Key *k) const;
-
-    Epoche epoche{256};
 
   public:
     enum class CheckPrefixResult : uint8_t { Match, NoMatch, OptimisticMatch };
@@ -67,18 +64,16 @@ class Tree {
 
     void rebuild();
 
-    ThreadInfo getThreadInfo();
 
-    void *lookup(const Key *k, ThreadInfo &threadEpocheInfo) const;
+    void *lookup(const Key *k) const;
 
     bool lookupRange(const Key *start, const Key *end, const Key *continueKey,
                      Leaf *result[], std::size_t resultLen,
-                     std::size_t &resultCount,
-                     ThreadInfo &threadEpocheInfo) const;
+                     std::size_t &resultCount) const;
 
-    OperationResults insert(const Key *k, ThreadInfo &epocheInfo);
+    OperationResults insert(const Key *k);
 
-    OperationResults remove(const Key *k, ThreadInfo &epocheInfo);
+    OperationResults remove(const Key *k);
 } __attribute__((aligned(64)));
 } // namespace PART_ns
 #endif // ART_ROWEX_TREE_H

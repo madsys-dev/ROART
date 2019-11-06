@@ -46,8 +46,6 @@ class thread_info {
     // epoch based GC metadata
     GCMetaData *md;
 
-    char padding[8];
-
     char static_log[4032]; // 整个 thread_info的长度为 4096，所以剩下的内存
                            // 4096-64 = 4032 都可以用来做 static log。
   public:

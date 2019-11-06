@@ -3,7 +3,6 @@
 //#define ART_NOREADLOCK
 //#define ART_NOWRITELOCK
 #include "Epoch.h"
-#include "Epoche.h"
 #include "Key.h"
 #include <atomic>
 #include <stdint.h>
@@ -151,13 +150,13 @@ class N {
     static std::atomic<N *> *getChild(const uint8_t k, N *node);
 
     static void insertAndUnlock(N *node, N *parentNode, uint8_t keyParent,
-                                uint8_t key, N *val, ThreadInfo &threadInfo,
+                                uint8_t key, N *val,
                                 bool &needRestart);
 
     static void change(N *node, uint8_t key, N *val);
 
     static void removeAndUnlock(N *node, uint8_t key, N *parentNode,
-                                uint8_t keyParent, ThreadInfo &threadInfo,
+                                uint8_t keyParent,
                                 bool &needRestart);
 
     Prefix getPrefi() const;
@@ -185,17 +184,17 @@ class N {
     template <typename curN, typename biggerN>
     static void insertGrow(curN *n, N *parentNode, uint8_t keyParent,
                            uint8_t key, N *val, NTypes type,
-                           ThreadInfo &threadInfo, bool &needRestart);
+                            bool &needRestart);
 
     template <typename curN>
     static void insertCompact(curN *n, N *parentNode, uint8_t keyParent,
                               uint8_t key, N *val, NTypes type,
-                              ThreadInfo &threadInfo, bool &needRestart);
+                               bool &needRestart);
 
     template <typename curN, typename smallerN>
     static void removeAndShrink(curN *n, N *parentNode, uint8_t keyParent,
                                 uint8_t key, NTypes type,
-                                ThreadInfo &threadInfo, bool &needRestart);
+                                 bool &needRestart);
 
     static void getChildren(N *node, uint8_t start, uint8_t end,
                             std::tuple<uint8_t, std::atomic<N *> *> children[],

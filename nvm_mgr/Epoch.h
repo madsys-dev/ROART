@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <thread>
+#include <iostream>
 
 namespace NVMMgr_ns {
 
@@ -20,9 +21,6 @@ class GarbageNode {
     void *node_p;
     GarbageNode *next_p;
 
-    /*
-     * Constructor
-     */
     GarbageNode(uint64_t p_delete_epoch, void *p_node_p)
         : delete_epoch{p_delete_epoch}, node_p{p_node_p}, next_p{nullptr} {}
 
@@ -85,6 +83,7 @@ class Epoch_Mgr {
         // We do not worry about race condition here
         // since even if we missed one we could always
         // hit the correct value on next try
+        std::cout<<"[EPOCH]\tglobal epoch thread start\n";
         while (exited_flag == false) {
             // printf("Start new epoch cycle\n");
             IncreaseEpoch();
@@ -93,6 +92,7 @@ class Epoch_Mgr {
             std::chrono::milliseconds duration(GC_INTERVAL);
             std::this_thread::sleep_for(duration);
         }
+        std::cout<<"[EPOCH]\tglobal epoch thread exit\n";
         return;
     }
 

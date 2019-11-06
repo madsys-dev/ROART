@@ -1,5 +1,5 @@
 #include "Tree.h"
-#include "Epoche.h"
+#include "EpochGuard.h"
 #include "N.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
@@ -52,10 +52,11 @@ Tree::~Tree() {
     close_nvm_mgr();
 }
 
-ThreadInfo Tree::getThreadInfo() { return ThreadInfo(this->epoche); }
 
-void *Tree::lookup(const Key *k, ThreadInfo &threadEpocheInfo) const {
-    EpocheGuardReadonly epocheGuard(threadEpocheInfo);
+void *Tree::lookup(const Key *k) const {
+    // enter a new epoch
+    EpochGuard NewEpoch;
+
     N *node = root;
     std::atomic<N *> *parentref = nullptr;
     std::atomic<N *> *curref = nullptr;
@@ -108,8 +109,7 @@ void *Tree::lookup(const Key *k, ThreadInfo &threadEpocheInfo) const {
 
 bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                        Leaf *result[], std::size_t resultSize,
-                       std::size_t &resultsFound,
-                       ThreadInfo &threadEpocheInfo) const {
+                       std::size_t &resultsFound) const {
     for (uint32_t i = 0; i < std::min(start->getKeyLen(), end->getKeyLen());
          ++i) {
         if (start->fkey[i] > end->fkey[i]) {
@@ -119,7 +119,9 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
             break;
         }
     }
-    EpocheGuard epocheGuard(threadEpocheInfo);
+    // enter a new epoch
+    EpochGuard NewEpoch;
+
     Leaf *toContinue = NULL;
     bool restart;
     std::function<void(N *, std::atomic<N *> *, std::atomic<N *> *)> copy =
@@ -320,9 +322,9 @@ bool Tree::checkKey(const Key *ret, const Key *k) const {
     return false;
 }
 
-typename Tree::OperationResults Tree::insert(const Key *k,
-                                             ThreadInfo &epocheInfo) {
-    EpocheGuard epocheGuard(epocheInfo);
+typename Tree::OperationResults Tree::insert(const Key *k) {
+    EpochGuard NewEpoch;
+
 restart:
     bool needRestart = false;
     N *node = nullptr;
@@ -420,7 +422,7 @@ restart:
             N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
 
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
-                               N::setLeaf(newLeaf), epocheInfo, needRestart);
+                               N::setLeaf(newLeaf), needRestart);
             if (needRestart)
                 goto restart;
             return OperationResults::Success;
@@ -469,9 +471,8 @@ restart:
     }
 }
 
-typename Tree::OperationResults Tree::remove(const Key *k,
-                                             ThreadInfo &threadInfo) {
-    EpocheGuard epocheGuard(threadInfo);
+typename Tree::OperationResults Tree::remove(const Key *k) {
+    EpochGuard NewEpoch;
 restart:
     bool needRestart = false;
 
@@ -549,8 +550,9 @@ restart:
 
                         parentNode->writeUnlock();
                         node->writeUnlockObsolete();
-                        //                            this->epoche.markNodeForDeletion(node,
-                        //                            threadInfo);
+
+                        // remove the node
+                        EpochGuard::DeleteNode((void *)node);
                     } else {
                         uint64_t vChild = secondNodeN->getVersion();
                         secondNodeN->lockVersionOrRestart(vChild, needRestart);
@@ -572,15 +574,21 @@ restart:
 
                         parentNode->writeUnlock();
                         node->writeUnlockObsolete();
-                        // this->epoche.markNodeForDeletion(node, threadInfo);
+
+                        // remove the node
+                        EpochGuard::DeleteNode((void *)node);
+
                         secondNodeN->writeUnlock();
                     }
                 } else {
                     N::removeAndUnlock(node, k->fkey[level], parentNode,
-                                       parentKey, threadInfo, needRestart);
+                                       parentKey, needRestart);
                     if (needRestart)
                         goto restart;
                 }
+                // remove the leaf
+                EpochGuard::DeleteNode((void *)nextNode);
+
                 return OperationResults::Success;
             }
             level++;

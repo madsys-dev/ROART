@@ -66,9 +66,32 @@ void PMFreeList::free_node(void *addr) {
     free_node_list.push_back((uint64_t)addr);
 }
 
+thread_info::thread_info(){
+    node4_free_list = new PMFreeList(pmblock);
+    node16_free_list = new PMFreeList(pmblock);
+    node48_free_list = new PMFreeList(pmblock);
+    node256_free_list = new PMFreeList(pmblock);
+    leaf_free_list = new PMFreeList(pmblock);
+
+    md = new GCMetaData();
+    _lock = 0;
+    next = ti_list_head;
+    ti_list_head = ti;
+    id = id++;
+}
+
+thread_info::~thread_info() {
+    delete node4_free_list;
+    delete node16_free_list;
+    delete node48_free_list;
+    delete node256_free_list;
+    delete leaf_free_list;
+    delete md;
+}
+
 void thread_info::AddGarbageNode(void *node_p) {
     GarbageNode *garbage_node_p =
-        new GarbageNode{GetGlobalEpoch(), (void *)(node_p)};
+        new GarbageNode(GetGlobalEpoch(), (void *)(node_p));
     assert(garbage_node_p != nullptr);
 
     // Link this new node to the end of the linked list
@@ -187,17 +210,6 @@ void register_threadinfo() {
         NVMMgr *mgr = get_nvm_mgr();
 
         ti = new (mgr->alloc_thread_info()) thread_info();
-        //        ti = (thread_info *)mgr->alloc_thread_info();
-        //        ti->node4_free_list = new PMFreeList(pmblock);
-        //        ti->node16_free_list = new PMFreeList(pmblock);
-        //        ti->node48_free_list = new PMFreeList(pmblock);
-        //        ti->node256_free_list = new PMFreeList(pmblock);
-        //        ti->leaf_free_list = new PMFreeList(pmblock);
-        //
-        //        ti->next = ti_list_head;
-        //        ti->_lock = 0;
-        //        ti_list_head = ti;
-        //        ti->id = id++;
         std::cout << "[THREAD]\talloc thread info " << ti->id << "\n";
     }
 }
@@ -224,6 +236,7 @@ void unregister_threadinfo() {
         // last one leave
         close_nvm_mgr();
     }
+    delete ti;
     ti = NULL;
 }
 
