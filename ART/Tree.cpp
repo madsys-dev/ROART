@@ -623,7 +623,8 @@ typename Tree::CheckPrefixResult Tree::checkPrefix(N *n, const Key *k,
 
 typename Tree::CheckPrefixPessimisticResult
 Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
-                             uint8_t &nonMatchingKey, Prefix &nonMatchingPrefix) {
+                             uint8_t &nonMatchingKey,
+                             Prefix &nonMatchingPrefix) {
     Prefix p = n->getPrefi();
     // art_cout << __func__ << ":Actual=" << p.prefixCount + level <<
     // ",Expected=" << n->getLevel() << std::endl;
@@ -731,9 +732,10 @@ Tree::checkPrefixCompare(const N *n, const Key *k, uint32_t &level) {
     return PCCompareResults::Equal;
 }
 
-typename Tree::PCEqualsResults
-Tree::checkPrefixEquals(const N *n, uint32_t &level, const Key *start,
-                        const Key *end) {
+typename Tree::PCEqualsResults Tree::checkPrefixEquals(const N *n,
+                                                       uint32_t &level,
+                                                       const Key *start,
+                                                       const Key *end) {
     Prefix p = n->getPrefi();
     if (p.prefixCount + level < n->getLevel()) {
         return PCEqualsResults::SkippedLevel;

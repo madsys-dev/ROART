@@ -49,6 +49,6 @@ class N4 : public N {
                      uint32_t &childrenCount);
 
     uint32_t getCount() const;
-}__attribute__((aligned(64)));
+} __attribute__((aligned(64)));
 
 } // namespace PART_ns

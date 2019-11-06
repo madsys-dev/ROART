@@ -40,7 +40,7 @@ class PMBlockAllocator {
     void free_block(void *block) {
         // TODO: free block
     }
-}__attribute__((aligned(64)));
+} __attribute__((aligned(64)));
 
 } // namespace NVMMgr_ns
 #endif

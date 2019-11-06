@@ -10,7 +10,6 @@ namespace PART_ns {
 
 class Tree {
   public:
-
   private:
     N *root;
 
@@ -80,6 +79,6 @@ class Tree {
     OperationResults insert(const Key *k, ThreadInfo &epocheInfo);
 
     OperationResults remove(const Key *k, ThreadInfo &epocheInfo);
-}__attribute__((aligned(64)));
+} __attribute__((aligned(64)));
 } // namespace PART_ns
 #endif // ART_ROWEX_TREE_H

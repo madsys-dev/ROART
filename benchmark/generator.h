@@ -152,7 +152,7 @@ class WorkloadGenerator {
         next_str[tid]++;
         return wl_str[index];
     }
-}__attribute__((aligned(64)));
+} __attribute__((aligned(64)));
 
 class ZipfGenerator : public WorkloadGenerator {
     int zipfindex[data_size];
@@ -171,7 +171,7 @@ class ZipfGenerator : public WorkloadGenerator {
         next_str[tid]++;
         return wl_str[zipfindex[index]];
     }
-}__attribute__((aligned(64)));
+} __attribute__((aligned(64)));
 
 class RandomGenerator : public WorkloadGenerator {
     RandomFunc rdm[max_thread_num];
@@ -188,7 +188,7 @@ class RandomGenerator : public WorkloadGenerator {
         int index = rdm[tid].Next() % data_size;
         return wl_str[index];
     }
-}__attribute__((aligned(64)));
+} __attribute__((aligned(64)));
 
 class SequenceGenerator : public WorkloadGenerator {
     int size;

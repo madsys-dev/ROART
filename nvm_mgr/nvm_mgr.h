@@ -47,7 +47,7 @@ class NVMMgr {
     static const int max_threads = 64;
 
     static const int PGSIZE = 256 * 1024;                   // 256K
-    static const long long filesize = 16LL  * 1024 * PGSIZE; // 4GB
+    static const long long filesize = 16LL * 1024 * PGSIZE; // 4GB
 
     static const size_t start_addr = 0x50000000;
     static const size_t thread_local_start = start_addr + PGSIZE;
@@ -93,7 +93,7 @@ class NVMMgr {
 
     // persist it as the head of nvm region
     Head *meta_data;
-}__attribute__((aligned(64)));
+} __attribute__((aligned(64)));
 
 NVMMgr *get_nvm_mgr();
 
