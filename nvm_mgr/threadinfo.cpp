@@ -66,6 +66,67 @@ void PMFreeList::free_node(void *addr) {
     free_node_list.push_back((uint64_t)addr);
 }
 
+    void thread_info::AddGarbageNode(void *node_p) {
+        GarbageNode *garbage_node_p = new GarbageNode{GetGlobalEpoch(), (void *)(node_p)};
+        assert(garbage_node_p != nullptr);
+
+        // Link this new node to the end of the linked list
+        // and then update last_p
+        md->last_p->next_p = garbage_node_p;
+        md->last_p = garbage_node_p;
+
+        // Update the counter
+        md->node_count++;
+
+        // It is possible that we could not free enough number of nodes to
+        // make it less than this threshold
+        // So it is important to let the epoch counter be constantly increased
+        // to guarantee progress
+        if(md->node_count > GC_NODE_COUNT_THREADHOLD) {
+            // Use current thread's gc id to perform GC
+            PerformGC();
+        }
+
+        return;
+    }
+
+    void thread_info::PerformGC() {
+        // First of all get the minimum epoch of all active threads
+        // This is the upper bound for deleted epoch in garbage node
+        uint64_t min_epoch = SummarizeGCEpoch();
+
+        // This is the pointer we use to perform GC
+        // Note that we only fetch the metadata using the current thread-local id
+        GarbageNode *header_p = &(md->header);
+        GarbageNode *first_p = header_p->next_p;
+
+        // Then traverse the linked list
+        // Only reclaim memory when the deleted epoch < min epoch
+        while(first_p != nullptr && \
+          first_p->delete_epoch < min_epoch) {
+            // First unlink the current node from the linked list
+            // This could set it to nullptr
+            header_p->next_p = first_p->next_p;
+
+            // Then free memory
+            epoch_manager.FreeEpochDeltaChain((const BaseNode *)first_p->node_p);
+
+            delete first_p;
+            assert(md->node_count != 0UL);
+            md->node_count--;
+
+            first_p = header_p->next_p;
+        }
+
+        // If we have freed all nodes in the linked list we should
+        // reset last_p to the header
+        if(first_p == nullptr) {
+            md->last_p = header_p;
+        }
+
+        return;
+    }
+
 void *alloc_new_node(PART_ns::NTypes type) {
     switch (type) {
     case PART_ns::NTypes::N4:
@@ -107,8 +168,6 @@ void free_node(PART_ns::NTypes type, void *addr) {
     }
 }
 
-void *get_static_log() { return ti->static_log; }
-
 void register_threadinfo() {
     std::lock_guard<std::mutex> lock_guard(ti_lock);
 
@@ -122,17 +181,19 @@ void register_threadinfo() {
             assert(0);
         }
         NVMMgr *mgr = get_nvm_mgr();
-        ti = (thread_info *)mgr->alloc_thread_info();
-        ti->node4_free_list = new PMFreeList(pmblock);
-        ti->node16_free_list = new PMFreeList(pmblock);
-        ti->node48_free_list = new PMFreeList(pmblock);
-        ti->node256_free_list = new PMFreeList(pmblock);
-        ti->leaf_free_list = new PMFreeList(pmblock);
 
-        ti->next = ti_list_head;
-        ti->_lock = 0;
-        ti_list_head = ti;
-        ti->id = id++;
+        ti = new (mgr->alloc_thread_info()) thread_info();
+//        ti = (thread_info *)mgr->alloc_thread_info();
+//        ti->node4_free_list = new PMFreeList(pmblock);
+//        ti->node16_free_list = new PMFreeList(pmblock);
+//        ti->node48_free_list = new PMFreeList(pmblock);
+//        ti->node256_free_list = new PMFreeList(pmblock);
+//        ti->leaf_free_list = new PMFreeList(pmblock);
+//
+//        ti->next = ti_list_head;
+//        ti->_lock = 0;
+//        ti_list_head = ti;
+//        ti->id = id++;
         std::cout << "[THREAD]\talloc thread info " << ti->id << "\n";
     }
 }
@@ -162,8 +223,34 @@ void unregister_threadinfo() {
     ti = NULL;
 }
 
-int get_thread_id() { return ti->id; }
-
 void *get_threadinfo() { return (void *)ti; }
+
+void JoinNewEpoch(){
+    ti->JoinEpoch();
+}
+
+void LeaveThisEpoch(){
+    ti->LeaveEpoch();
+}
+
+void MarkNodeGarbage(void *node){
+    ti->AddGarbageNode(node);
+}
+
+uint64_t SummarizeGCEpoch(){
+    assert(ti_list_head);
+
+    // Use the first metadata's epoch as min and update it on the fly
+    thread_info *tmp = ti_list_head;
+    uint64_t min_epoch = tmp->md->last_active_epoch;
+
+    // This might not be executed if there is only one thread
+    while(tmp->next){
+        tmp = tmp->next;
+        min_epoch = std::min(min_epoch, tmp->md->last_active_epoch);
+    }
+
+    return min_epoch;
+}
 
 } // namespace NVMMgr_ns

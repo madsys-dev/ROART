@@ -39,7 +39,7 @@ struct Key {
     inline Key *make_leaf(uint64_t key, size_t key_len, uint64_t value);
 
     inline size_t getKeyLen() const;
-};
+}__attribute__((aligned(64)));
 
 inline Key *Key::make_leaf(char *key, size_t key_len, uint64_t value) {
     void *aligned_alloc;

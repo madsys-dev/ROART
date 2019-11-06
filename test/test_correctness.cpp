@@ -15,8 +15,8 @@ TEST(TestCorrectness, PM_ART) {
     std::cout << "[TEST]\tstart to test correctness\n";
     clear_data();
 
-    const int nthreads = 4;
-    const int test_iter = 100000;
+    const int nthreads = 22;
+    const int test_iter = 20000;
 
     std::vector<Key *> Keys;
     Keys.reserve(nthreads * test_iter);

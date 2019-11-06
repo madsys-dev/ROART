@@ -72,7 +72,7 @@ class Benchmark {
     }
 
     virtual std::string nextInitStrKey() { return workload->NextStr(0); }
-};
+}__attribute__((aligned(64)));
 
 class ReadOnlyBench : public Benchmark {
   public:
@@ -87,7 +87,7 @@ class ReadOnlyBench : public Benchmark {
         std::string s = workload->NextStr(tid);
         return std::make_pair(GET, s);
     }
-};
+}__attribute__((aligned(64)));
 
 class InsertOnlyBench : public Benchmark {
     RandomFunc rdm[max_thread_num];
@@ -116,7 +116,7 @@ class InsertOnlyBench : public Benchmark {
     long long nextInitIntKey() { return 128 * Benchmark::nextInitIntKey(); }
 
 #endif
-};
+}__attribute__((aligned(64)));
 
 class UpdateOnlyBench : public Benchmark {
   public:
@@ -133,7 +133,7 @@ class UpdateOnlyBench : public Benchmark {
         std::string s = workload->NextStr(tid);
         return std::make_pair(UPDATE, s);
     }
-};
+}__attribute__((aligned(64)));
 
 class DeleteOnlyBench : public Benchmark {
   public:
@@ -148,7 +148,7 @@ class DeleteOnlyBench : public Benchmark {
         std::string s = workload->NextStr(tid);
         return std::make_pair(REMOVE, s);
     }
-};
+}__attribute__((aligned(64)));
 
 class MixedBench : public Benchmark {
     int round;
@@ -205,7 +205,7 @@ class MixedBench : public Benchmark {
         round %= 4;
         return result;
     }
-};
+}__attribute__((aligned(64)));
 
 class ScanBench : public Benchmark {
   public:
@@ -220,7 +220,7 @@ class ScanBench : public Benchmark {
         std::string s = workload->NextStr(tid);
         return std::make_pair(SCAN, s);
     }
-};
+}__attribute__((aligned(64)));
 
 class YSCBA : public Benchmark {
   public:
@@ -251,7 +251,7 @@ class YSCBA : public Benchmark {
             return std::make_pair(GET, workload->NextStr(tid));
         }
     }
-};
+}__attribute__((aligned(64)));
 
 class YSCBB : public Benchmark {
   public:
@@ -281,7 +281,7 @@ class YSCBB : public Benchmark {
             return std::make_pair(GET, workload->NextStr(tid));
         }
     }
-};
+}__attribute__((aligned(64)));
 
 class YSCBC : public Benchmark {
   public:
@@ -294,20 +294,20 @@ class YSCBC : public Benchmark {
     virtual std::pair<OperationType, std::string> nextStrOperation(int tid) {
         return std::make_pair(GET, workload->NextStr(tid));
     }
-};
+}__attribute__((aligned(64)));
 
 class YSCBD : public Benchmark {
   public:
     YSCBD(Config &conf) : Benchmark(conf) {}
 
     OperationType nextOp() { return GET; }
-};
+}__attribute__((aligned(64)));
 
 class YSCBE : public Benchmark {
   public:
     YSCBE(Config &conf) : Benchmark(conf) {}
 
     OperationType nextOp() { return GET; }
-};
+}__attribute__((aligned(64)));
 
 #endif

@@ -3,6 +3,7 @@
 //#define ART_NOREADLOCK
 //#define ART_NOWRITELOCK
 #include "Epoche.h"
+#include "Epoch.h"
 #include "Key.h"
 #include <atomic>
 #include <stdint.h>
@@ -205,7 +206,7 @@ class N {
     static void mfence();
 
     static void clflush(char *data, int len, bool front, bool back);
-};
+}__attribute__((aligned(64)));
 
 } // namespace PART_ns
 #endif // ART_ROWEX_N_H
