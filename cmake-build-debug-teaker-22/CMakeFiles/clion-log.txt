@@ -1,5 +1,0 @@
-/usr/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/miao/myproject/P-ART
--- Build type is set to Debug
--- Configuring done
--- Generating done
--- Build files have been written to: /home/miao/myproject/P-ART/cmake-build-debug-teaker-22

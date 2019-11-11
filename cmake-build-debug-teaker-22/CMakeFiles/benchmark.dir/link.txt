@@ -1,1 +1,0 @@
-/usr/bin/c++   -std=c++14 -g -march=native -mavx -mavx2  -DNDEBUG -g  -rdynamic CMakeFiles/benchmark.dir/perf/main.cpp.o  -o benchmark -lpthread -latomic -lboost_system -lboost_thread -lgtest libIndexes.a -lpthread -latomic -lboost_system -lboost_thread -lgtest -ltbb 

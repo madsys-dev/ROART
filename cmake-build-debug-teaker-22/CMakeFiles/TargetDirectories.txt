@@ -1,6 +1,0 @@
-/home/miao/myproject/P-ART/cmake-build-debug-teaker-22/CMakeFiles/rebuild_cache.dir
-/home/miao/myproject/P-ART/cmake-build-debug-teaker-22/CMakeFiles/edit_cache.dir
-/home/miao/myproject/P-ART/cmake-build-debug-teaker-22/CMakeFiles/unittest.dir
-/home/miao/myproject/P-ART/cmake-build-debug-teaker-22/CMakeFiles/Indexes.dir
-/home/miao/myproject/P-ART/cmake-build-debug-teaker-22/CMakeFiles/benchmark.dir
-/home/miao/myproject/P-ART/cmake-build-debug-teaker-22/CMakeFiles/art_simple_bench.dir
