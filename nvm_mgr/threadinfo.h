@@ -55,7 +55,9 @@ class thread_info {
 
     void *get_static_log() { return (void *)static_log; }
     int get_thread_id() { return id; }
-    inline void JoinEpoch() { md->last_active_epoch = GetGlobalEpoch(); }
+    inline void JoinEpoch() {
+        md->last_active_epoch = Epoch_Mgr::GetGlobalEpoch();
+    }
 
     inline void LeaveEpoch() {
         // This will make ie never be counted as active for GC
@@ -100,6 +102,7 @@ void LeaveThisEpoch();
 void MarkNodeGarbage(void *node);
 uint64_t SummarizeGCEpoch();
 
+size_t size_align(size_t s, int align);
 void *alloc_new_node(PART_ns::NTypes type);
 void free_node(PART_ns::NTypes type, void *addr);
 

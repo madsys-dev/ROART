@@ -12,7 +12,7 @@
 
 using namespace NVMMgr_ns;
 
-inline void clear_data() { system("rm -rf /mnt/dax/matianmao/part.data"); }
+inline void clear_data() { system("rm -rf /mnt/pmem0/matianmao/part.data"); }
 
 TEST(TestNVMMgr, nvm_mgr) {
     std::cout << "[TEST]\tstart to test nvm_mgr\n";
@@ -140,15 +140,15 @@ TEST(TestNVMMgr, thread_info) {
 
     thread_info *ti = reinterpret_cast<thread_info *>(get_threadinfo());
     ASSERT_EQ(ti->node4_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::N4) - 1);
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N4), 64) - 1);
     ASSERT_EQ(ti->node16_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::N16) - 1);
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N16), 64) - 1);
     ASSERT_EQ(ti->node48_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::N48) - 1);
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N48), 64) - 1);
     ASSERT_EQ(ti->node256_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::N256) - 1);
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N256), 64) - 1);
     ASSERT_EQ(ti->leaf_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::Leaf) - 1);
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::Leaf), 64) - 1);
 
     std::cout << "[TEST]\tcheck every freelist's size successfully\n";
 
@@ -161,17 +161,17 @@ TEST(TestNVMMgr, thread_info) {
     std::cout << "[TEST]\tfree nodes successfully\n";
 
     ASSERT_EQ(ti->node4_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::N4));
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N4), 64));
     ASSERT_EQ(ti->node16_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::N16));
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N16), 64));
     ASSERT_EQ(ti->node48_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::N48));
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N48), 64));
     ASSERT_EQ(ti->node256_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::N256));
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N256), 64));
     ASSERT_EQ(ti->leaf_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / sizeof(PART_ns::Leaf));
+              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::Leaf), 64));
 
-    std::cout << "[TEST]]\tfreelist's size correct\n";
+    std::cout << "[TEST]\tfreelist's size correct\n";
 
     unregister_threadinfo();
     close_nvm_mgr();

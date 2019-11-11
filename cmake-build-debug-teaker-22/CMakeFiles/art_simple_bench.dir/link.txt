@@ -1,0 +1,1 @@
+/usr/bin/c++   -std=c++14 -g -march=native -mavx -mavx2  -DNDEBUG -g  -rdynamic CMakeFiles/art_simple_bench.dir/perf/art_simple_bench.cpp.o  -o art_simple_bench -lpthread -latomic -lboost_system -lboost_thread -lgtest libIndexes.a -lpthread -latomic -lboost_system -lboost_thread -lgtest -ltbb 

@@ -64,7 +64,6 @@ class Tree {
 
     void rebuild();
 
-
     void *lookup(const Key *k) const;
 
     bool lookupRange(const Key *start, const Key *end, const Key *continueKey,

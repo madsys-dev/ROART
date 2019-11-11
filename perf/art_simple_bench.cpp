@@ -9,7 +9,10 @@ using namespace std;
 #include "Tree.h"
 
 using namespace PART_ns;
+
+inline void clear_data() { system("rm -rf /mnt/pmem0/matianmao/part.data"); }
 void run(char **argv) {
+    clear_data();
     std::cout << "Simple Example of P-ART" << std::endl;
 
     uint64_t n = std::atoll(argv[1]);
@@ -18,13 +21,12 @@ void run(char **argv) {
 
     Keys.reserve(n);
     Tree *tree = new Tree();
-    auto t = tree->getThreadInfo();
     // Generate keys
     for (uint64_t i = 0; i < n; i++) {
         keys[i] = i;
         // Keys[i] = Keys[i]->make_leaf(i, sizeof(uint64_t), i);
         Keys[i] = new Key(keys[i], sizeof(uint64_t), keys[i]);
-        tree->insert(Keys[i], t);
+        tree->insert(Keys[i]);
     }
 
     const int num_thread = atoi(argv[2]);
@@ -40,10 +42,9 @@ void run(char **argv) {
         tbb::parallel_for(
             tbb::blocked_range<uint64_t>(0, n),
             [&](const tbb::blocked_range<uint64_t> &range) {
-                auto t = tree->getThreadInfo();
                 for (uint64_t i = range.begin(); i != range.end(); i++) {
                     Keys[i]->Init(2 * keys[i], sizeof(uint64_t), keys[i]);
-                    tree->insert(Keys[i], t);
+                    tree->insert(Keys[i]);
                 }
             });
 
@@ -60,14 +61,13 @@ void run(char **argv) {
         auto starttime = std::chrono::system_clock::now();
         tbb::parallel_for(tbb::blocked_range<uint64_t>(0, n),
                           [&](const tbb::blocked_range<uint64_t> &range) {
-                              auto t = tree->getThreadInfo();
                               for (uint64_t i = range.begin(); i != range.end();
                                    i++) {
                                   //   Keys[i] = Keys[i]->make_leaf(i,
                                   //   sizeof(i), i);
                                   // Keys[i]->Init(keys[i], sizeof(uint64_t),
                                   // keys[i]);
-                                  tree->lookup(Keys[i], t);
+                                  tree->lookup(Keys[i]);
                               }
                           });
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(

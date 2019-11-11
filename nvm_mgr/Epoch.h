@@ -1,8 +1,8 @@
 #pragma once
 
 #include <chrono>
-#include <thread>
 #include <iostream>
+#include <thread>
 
 namespace NVMMgr_ns {
 
@@ -10,7 +10,8 @@ static const int GC_NODE_COUNT_THREADHOLD = 1024;
 
 static const int GC_INTERVAL = 50;
 
-int epoch;
+extern int epoch;
+extern bool exit_flag;
 
 class GarbageNode {
   public:
@@ -60,18 +61,16 @@ class GCMetaData {
 
 class Epoch_Mgr {
   public:
-    bool exited_flag;
     std::thread *thread_p;
 
   public:
-    Epoch_Mgr() {
-        epoch = 0;
-        exited_flag = false;
-    }
+    Epoch_Mgr() {}
 
-    ~Epoch_Mgr() {}
+    ~Epoch_Mgr() { exit_flag = true; }
 
     inline void IncreaseEpoch() { epoch++; }
+
+    static uint64_t GetGlobalEpoch() { return epoch; }
 
     /*
      * ThreadFunc() - The cleaner thread executes this every GC_INTERVAL ms
@@ -83,8 +82,8 @@ class Epoch_Mgr {
         // We do not worry about race condition here
         // since even if we missed one we could always
         // hit the correct value on next try
-        std::cout<<"[EPOCH]\tglobal epoch thread start\n";
-        while (exited_flag == false) {
+        std::cout << "[EPOCH]\tglobal epoch thread start\n";
+        while (exit_flag == false) {
             // printf("Start new epoch cycle\n");
             IncreaseEpoch();
 
@@ -92,7 +91,7 @@ class Epoch_Mgr {
             std::chrono::milliseconds duration(GC_INTERVAL);
             std::this_thread::sleep_for(duration);
         }
-        std::cout<<"[EPOCH]\tglobal epoch thread exit\n";
+        std::cout << "[EPOCH]\tglobal epoch thread exit\n";
         return;
     }
 
@@ -109,5 +108,4 @@ class Epoch_Mgr {
     }
 } __attribute__((aligned(64)));
 
-inline uint64_t GetGlobalEpoch() { return epoch; }
 } // namespace NVMMgr_ns

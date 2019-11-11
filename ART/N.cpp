@@ -1,13 +1,15 @@
 #include "N.h"
+#include "EpochGuard.h"
 #include "N16.h"
 #include "N256.h"
 #include "N4.h"
 #include "N48.h"
 #include "threadinfo.h"
-#include "EpochGuard.h"
 #include <algorithm>
 #include <assert.h>
 #include <iostream>
+
+using namespace NVMMgr_ns;
 
 namespace PART_ns {
 static unsigned long write_latency_in_ns = 0;
@@ -47,16 +49,6 @@ void N::clflush(char *data, int len, bool front, bool back) {
     if (back)
         mfence();
 }
-#ifdef LOCK_INIT
-void lock_initialization() {
-    printf("lock table size = %lu\n", lock_initializer.size());
-    for (uint64_t i = 0; i < lock_initializer.size(); i++) {
-        // check if the node is locked
-        if (lock_initializer[i]->isLocked(lock_initializer[i]->getVersion()))
-            lock_initializer[i]->writeUnlock();
-    }
-}
-#endif
 
 void N::helpFlush(std::atomic<N *> *n) {
     if (n == nullptr)
@@ -168,8 +160,7 @@ void N::change(N *node, uint8_t key, N *val) {
 
 template <typename curN, typename biggerN>
 void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
-                   N *val, NTypes type,
-                   bool &needRestart) {
+                   N *val, NTypes type, bool &needRestart) {
     if (n->insert(key, val, true)) {
         n->writeUnlock();
         return;
@@ -201,8 +192,7 @@ void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
 
 template <typename curN>
 void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
-                      N *val, NTypes type,
-                      bool &needRestart) {
+                      N *val, NTypes type, bool &needRestart) {
     // compact and lock parent
     parentNode->writeLockOrRestart(needRestart);
     if (needRestart) {
@@ -227,28 +217,28 @@ void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
 }
 
 void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
-                        N *val,  bool &needRestart) {
+                        N *val, bool &needRestart) {
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
         if (n->compactCount == 4 && n->count <= 3) {
             insertCompact<N4>(n, parentNode, keyParent, key, val, NTypes::N4,
-                               needRestart);
+                              needRestart);
             break;
         }
         insertGrow<N4, N16>(n, parentNode, keyParent, key, val, NTypes::N16,
-                             needRestart);
+                            needRestart);
         break;
     }
     case NTypes::N16: {
         auto n = static_cast<N16 *>(node);
         if (n->compactCount == 16 && n->count <= 14) {
             insertCompact<N16>(n, parentNode, keyParent, key, val, NTypes::N16,
-                                needRestart);
+                               needRestart);
             break;
         }
         insertGrow<N16, N48>(n, parentNode, keyParent, key, val, NTypes::N48,
-                              needRestart);
+                             needRestart);
         break;
     }
     case NTypes::N48: {
@@ -259,7 +249,7 @@ void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
             break;
         }
         insertGrow<N48, N256>(n, parentNode, keyParent, key, val, NTypes::N256,
-                               needRestart);
+                              needRestart);
         break;
     }
     case NTypes::N256: {
@@ -326,8 +316,7 @@ void N::deleteChildren(N *node) {
 
 template <typename curN, typename smallerN>
 void N::removeAndShrink(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
-                        NTypes type,
-                        bool &needRestart) {
+                        NTypes type, bool &needRestart) {
     if (n->remove(key, parentNode == nullptr, true)) {
         n->writeUnlock();
         return;
@@ -381,7 +370,7 @@ void N::removeAndUnlock(N *node, uint8_t key, N *parentNode, uint8_t keyParent,
     case NTypes::N256: {
         auto n = static_cast<N256 *>(node);
         removeAndShrink<N256, N48>(n, parentNode, keyParent, key, NTypes::N48,
-                                    needRestart);
+                                   needRestart);
         break;
     }
     }

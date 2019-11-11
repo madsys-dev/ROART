@@ -68,8 +68,6 @@ template <typename K, typename V, int size> class Coordinator {
         stick_this_thread_to_core(workerid);
         bar->wait();
 
-        auto tinfo = art->getThreadInfo();
-
         unsigned long tx = 0;
 
         double total_update_latency_breaks[3] = {0.0, 0.0, 0.0};
@@ -146,17 +144,17 @@ template <typename K, typename V, int size> class Coordinator {
                 // break;
             case INSERT:
                 // printf("[%d] start insert %lld\n", workerid, d);
-                res = art->insert(k, tinfo);
+                res = art->insert(k);
                 if (res == PART_ns::Tree::OperationResults::Success) {
                     count++;
                 }
                 break;
             case REMOVE:
 
-                art->remove(k, tinfo);
+                art->remove(k);
                 break;
             case GET:
-                art->lookup(k, tinfo);
+                art->lookup(k);
 
                 // if (tx % 100 == 0) {
                 //     sync_latency(total_find_latency_breaks,
@@ -360,19 +358,17 @@ template <typename K, typename V, int size> class Coordinator {
             std::thread **pid = new std::thread *[conf.num_threads];
             bar = new boost::barrier(conf.num_threads + 1);
 
-            auto tinfo = art->getThreadInfo();
-
             PART_ns::Key *k = new PART_ns::Key();
             for (unsigned long i = 0; i < conf.init_keys; i++) {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
                     k->Init(kk, sizeof(uint64_t), kk);
-                    art->insert(k, tinfo);
+                    art->insert(k);
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
                     k->Init((char *)s.c_str(), sizeof(uint64_t),
                             (char *)s.c_str());
-                    art->insert(k, tinfo);
+                    art->insert(k);
                 }
             }
             printf("init insert finished\n");

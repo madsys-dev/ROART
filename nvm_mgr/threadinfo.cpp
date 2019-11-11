@@ -21,7 +21,10 @@ thread_info *ti_list_head = NULL;
 __thread thread_info *ti = NULL;
 
 // global thread id
-int id = 0;
+int tid = 0;
+
+// global Epoch_Mgr
+Epoch_Mgr *epoch_mgr = NULL;
 
 PMFreeList::PMFreeList(PMBlockAllocator *pmb_) : pmb(pmb_) {
     free_node_list.clear();
@@ -45,10 +48,14 @@ size_t get_node_size(PART_ns::NTypes type) {
     }
 }
 
+size_t size_align(size_t s, int align) {
+    return ((s + align - 1) / align) * align;
+}
+
 void *PMFreeList::alloc_node(PART_ns::NTypes type) {
     // TODO: according to nt, alloc different node
     if (free_node_list.empty()) {
-        size_t node_size = get_node_size(type);
+        size_t node_size = size_align(get_node_size(type), 64);
         std::cout << "[ALLOC NODE]\tnode type " << (int)type << ", node size "
                   << node_size << "\n";
         void *addr = pmb->alloc_block((int)type);
@@ -66,7 +73,7 @@ void PMFreeList::free_node(void *addr) {
     free_node_list.push_back((uint64_t)addr);
 }
 
-thread_info::thread_info(){
+thread_info::thread_info() {
     node4_free_list = new PMFreeList(pmblock);
     node16_free_list = new PMFreeList(pmblock);
     node48_free_list = new PMFreeList(pmblock);
@@ -75,9 +82,7 @@ thread_info::thread_info(){
 
     md = new GCMetaData();
     _lock = 0;
-    next = ti_list_head;
-    ti_list_head = ti;
-    id = id++;
+    id = tid++;
 }
 
 thread_info::~thread_info() {
@@ -91,14 +96,15 @@ thread_info::~thread_info() {
 
 void thread_info::AddGarbageNode(void *node_p) {
     GarbageNode *garbage_node_p =
-        new GarbageNode(GetGlobalEpoch(), (void *)(node_p));
+        new GarbageNode(Epoch_Mgr::GetGlobalEpoch(), node_p);
     assert(garbage_node_p != nullptr);
 
     // Link this new node to the end of the linked list
     // and then update last_p
     md->last_p->next_p = garbage_node_p;
     md->last_p = garbage_node_p;
-
+    PART_ns::BaseNode *n = (PART_ns::BaseNode *)node_p;
+    std::cout << "[TEST]\tgarbage node type " << (int)(n->type) << "\n";
     // Update the counter
     md->node_count++;
 
@@ -151,7 +157,30 @@ void thread_info::PerformGC() {
 }
 
 void thread_info::FreeEpochDeltaChain(void *node_p) {
-    // TODO: free different node
+    // TODO: free node to the allocation thread's free list
+    // TODO: free whole block
+    PART_ns::BaseNode *n = reinterpret_cast<PART_ns::BaseNode *>(node_p);
+    std::cout << "[TEST]\tnode type is " << (int)n->type << "\n";
+    switch (n->type) {
+    case PART_ns::NTypes::N4:
+        ti->node4_free_list->free_node(node_p);
+        break;
+    case PART_ns::NTypes::N16:
+        ti->node16_free_list->free_node(node_p);
+        break;
+    case PART_ns::NTypes::N48:
+        ti->node48_free_list->free_node(node_p);
+        break;
+    case PART_ns::NTypes::N256:
+        ti->node256_free_list->free_node(node_p);
+        break;
+    case PART_ns::NTypes::Leaf:
+        ti->leaf_free_list->free_node(node_p);
+        break;
+    default:
+        std::cout << "[FREE NODE]\twrong type\n";
+        assert(0);
+    }
 }
 
 void *alloc_new_node(PART_ns::NTypes type) {
@@ -202,14 +231,23 @@ void register_threadinfo() {
         pmblock = new PMBlockAllocator();
         std::cout << "[THREAD]\tfirst new pmblock\n";
     }
+    if (epoch_mgr == NULL) {
+        epoch_mgr = new Epoch_Mgr();
+
+        // need to call function to create a new thread to increase epoch
+        epoch_mgr->StartThread();
+        std::cout << "[THREAD]\tfirst new epoch_mgr and add global epoch\n";
+    }
     if (ti == NULL) {
-        if (id == NVMMgr::max_threads) {
+        if (tid == NVMMgr::max_threads) {
             std::cout << "[THREAD]\tno available threadinfo to allocate\n";
             assert(0);
         }
         NVMMgr *mgr = get_nvm_mgr();
 
         ti = new (mgr->alloc_thread_info()) thread_info();
+        ti->next = ti_list_head;
+        ti_list_head = ti;
         std::cout << "[THREAD]\talloc thread info " << ti->id << "\n";
     }
 }
@@ -232,11 +270,7 @@ void unregister_threadinfo() {
         }
     }
     std::cout << "[THREAD]\tunregister thread\n";
-    if (ti_list_head == NULL) {
-        // last one leave
-        close_nvm_mgr();
-    }
-    delete ti;
+    //    delete ti;
     ti = NULL;
 }
 

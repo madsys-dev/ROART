@@ -186,7 +186,7 @@ bool init_nvm_mgr() {
 
 void close_nvm_mgr() {
     std::lock_guard<std::mutex> lock(_mtx);
-
+    std::cout << "[NVM MGR]\tclose nvm mgr\n";
     if (nvm_mgr != NULL) {
         delete nvm_mgr;
         nvm_mgr = NULL;

@@ -52,7 +52,6 @@ Tree::~Tree() {
     close_nvm_mgr();
 }
 
-
 void *Tree::lookup(const Key *k) const {
     // enter a new epoch
     EpochGuard NewEpoch;

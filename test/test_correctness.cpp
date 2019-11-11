@@ -9,7 +9,7 @@
 
 using namespace PART_ns;
 
-inline void clear_data() { system("rm -rf /mnt/dax/matianmao/part.data"); }
+inline void clear_data() { system("rm -rf /mnt/pmem0/matianmao/part.data"); }
 
 TEST(TestCorrectness, PM_ART) {
     std::cout << "[TEST]\tstart to test correctness\n";
@@ -25,7 +25,6 @@ TEST(TestCorrectness, PM_ART) {
 
     Tree *art = new Tree();
     std::thread *tid[nthreads];
-    auto t = art->getThreadInfo();
 
     // Generate keys
     std::cout << "[TEST]\tstart to build tree\n";
@@ -34,7 +33,7 @@ TEST(TestCorrectness, PM_ART) {
         Keys[i] = new Key(keys[i], sizeof(uint64_t), i + 1);
         // Keys[i] = Keys[i]->make_leaf(i, sizeof(uint64_t), i + 1);
         //        printf("insert start %d\n", i);
-        Tree::OperationResults res = art->insert(Keys[i], t);
+        Tree::OperationResults res = art->insert(Keys[i]);
         //        printf("insert success\n");
         ASSERT_EQ(res, Tree::OperationResults::Success)
             << "insert failed on key " << i;
@@ -45,12 +44,11 @@ TEST(TestCorrectness, PM_ART) {
     for (int i = 0; i < nthreads; i++) {
         tid[i] = new std::thread(
             [&](int id) {
-                auto t = art->getThreadInfo();
                 NVMMgr_ns::register_threadinfo();
                 // read
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
-                    void *ret = art->lookup(Keys[kk], t);
+                    void *ret = art->lookup(Keys[kk]);
 
                     ASSERT_TRUE(ret) << "lookup not find the key" << kk;
 
@@ -63,7 +61,7 @@ TEST(TestCorrectness, PM_ART) {
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
 
-                    Tree::OperationResults res = art->remove(Keys[kk], t);
+                    Tree::OperationResults res = art->remove(Keys[kk]);
                     ASSERT_EQ(res, Tree::OperationResults::Success)
                         << "fail to remove key " << kk;
                 }
@@ -71,14 +69,14 @@ TEST(TestCorrectness, PM_ART) {
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
 
-                    void *ret = art->lookup(Keys[kk], t);
+                    void *ret = art->lookup(Keys[kk]);
                     ASSERT_FALSE(ret)
                         << "find key " << kk << ", but it should be removed";
                 }
                 // insert
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
-                    Tree::OperationResults res = art->insert(Keys[kk], t);
+                    Tree::OperationResults res = art->insert(Keys[kk]);
 
                     ASSERT_EQ(res, Tree::OperationResults::Success)
                         << "insert failed on key " << kk;
@@ -87,7 +85,7 @@ TEST(TestCorrectness, PM_ART) {
                 // read
                 for (int j = 0; j < test_iter; j++) {
                     uint64_t kk = j * nthreads + id;
-                    void *ret = art->lookup(Keys[kk], t);
+                    void *ret = art->lookup(Keys[kk]);
 
                     ASSERT_TRUE(ret) << "lookup not find the key" << kk;
 
@@ -105,7 +103,7 @@ TEST(TestCorrectness, PM_ART) {
         tid[i]->join();
     }
     for (int i = 0; i < nthreads * test_iter; i++) {
-        void *ret = art->lookup(Keys[i], t);
+        void *ret = art->lookup(Keys[i]);
         ASSERT_TRUE(ret) << "not find key " << i << "but it has been inserted";
     }
 

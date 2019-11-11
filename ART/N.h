@@ -22,12 +22,13 @@ namespace PART_ns {
 enum class NTypes : uint8_t { N4 = 1, N16 = 2, N48 = 3, N256 = 4, Leaf = 5 };
 
 class BaseNode {
-public:
+  public:
     NTypes type;
-    BaseNode(NTypes type_) : type(type_){}
+    BaseNode(NTypes type_) : type(type_) {}
+    virtual ~BaseNode() {}
 };
 
-class Leaf : public BaseNode{
+class Leaf : public BaseNode {
   public:
     size_t key_len;
     uint64_t key;
@@ -37,7 +38,7 @@ class Leaf : public BaseNode{
     uint64_t value;
 
   public:
-    Leaf(const Key *k): BaseNode(NTypes::Leaf) {
+    Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
         key_len = k->key_len;
         value = k->value;
 #ifdef KEY_INLINE
@@ -49,6 +50,8 @@ class Leaf : public BaseNode{
         memcpy(fkey, k->fkey, key_len);
 #endif
     }
+    // use for test
+    Leaf() : BaseNode(NTypes::Leaf) {}
 
     virtual ~Leaf() {
         // TODO
@@ -69,38 +72,30 @@ struct Prefix {
     uint8_t prefix[maxStoredPrefixLength];
 };
 static_assert(sizeof(Prefix) == 8, "Prefix should be 64 bit long");
-#ifdef LOCK_INIT
-class N;
-static tbb::concurrent_vector<N *> lock_initializer;
-void lock_initialization();
-#endif
-class N : public BaseNode{
+
+class N : public BaseNode {
   protected:
     N(NTypes type, uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : BaseNode(type), level(level) {
         setType(type);
         setPrefix(prefix, prefixLength, false);
-#ifdef LOCK_INIT
-        lock_initializer.push_back(this);
-#endif
     }
 
     N(NTypes type, uint32_t level, const Prefix &prefi)
         : BaseNode(type), prefix(prefi), level(level) {
         setType(type);
-#ifdef LOCK_INIT
-        lock_initializer.push_back(this);
-#endif
     }
 
     N(const N &) = delete;
 
     N(N &&) = delete;
 
+    virtual ~N() {}
+
     // 3b type 60b version 1b lock 1b obsolete
     std::atomic<uint64_t> typeVersionLockObsolete{0b100};
     // version 1, unlocked, not obsolete
-    std::atomic<Prefix> prefix;
+    alignas(64) std::atomic<Prefix> prefix;
     const uint32_t level;
     uint16_t count = 0;
     uint16_t compactCount = 0;
@@ -156,14 +151,12 @@ class N : public BaseNode{
     static std::atomic<N *> *getChild(const uint8_t k, N *node);
 
     static void insertAndUnlock(N *node, N *parentNode, uint8_t keyParent,
-                                uint8_t key, N *val,
-                                bool &needRestart);
+                                uint8_t key, N *val, bool &needRestart);
 
     static void change(N *node, uint8_t key, N *val);
 
     static void removeAndUnlock(N *node, uint8_t key, N *parentNode,
-                                uint8_t keyParent,
-                                bool &needRestart);
+                                uint8_t keyParent, bool &needRestart);
 
     Prefix getPrefi() const;
 
@@ -189,18 +182,16 @@ class N : public BaseNode{
 
     template <typename curN, typename biggerN>
     static void insertGrow(curN *n, N *parentNode, uint8_t keyParent,
-                           uint8_t key, N *val, NTypes type,
-                            bool &needRestart);
+                           uint8_t key, N *val, NTypes type, bool &needRestart);
 
     template <typename curN>
     static void insertCompact(curN *n, N *parentNode, uint8_t keyParent,
                               uint8_t key, N *val, NTypes type,
-                               bool &needRestart);
+                              bool &needRestart);
 
     template <typename curN, typename smallerN>
     static void removeAndShrink(curN *n, N *parentNode, uint8_t keyParent,
-                                uint8_t key, NTypes type,
-                                 bool &needRestart);
+                                uint8_t key, NTypes type, bool &needRestart);
 
     static void getChildren(N *node, uint8_t start, uint8_t end,
                             std::tuple<uint8_t, std::atomic<N *> *> children[],
