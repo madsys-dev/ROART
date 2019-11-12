@@ -127,8 +127,8 @@ bool NVMMgr::reload_free_blocks() {
         }
         break;
     }
-    std::cout << "[NVM MGR]\treload free blocks, now free_page_list size is "
-              << free_page_list.size() << "\n";
+//    std::cout << "[NVM MGR]\treload free blocks, now free_page_list size is "
+//              << free_page_list.size() << "\n";
     return true;
 }
 
@@ -153,7 +153,7 @@ void *NVMMgr::alloc_block(int type) {
 
     meta_data->bitmap[id] = type;
     flush_data((void *)&(meta_data->bitmap[id]), sizeof(int));
-    printf("[NVM MGR]\talloc a new block %d, type is %d\n", id, type);
+//    printf("[NVM MGR]\talloc a new block %d, type is %d\n", id, type);
 
     // TODO: crash consistency allocation to avoid memory leak
 

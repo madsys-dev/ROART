@@ -88,7 +88,7 @@ class thread_info {
      * GetCurrentGCMetaData()
      */
     void PerformGC();
-    void FreeEpochDeltaChain(void *node_p);
+    void FreeEpochNode(void *node_p);
 
 } __attribute__((aligned(64)));
 

@@ -56,8 +56,8 @@ void *PMFreeList::alloc_node(PART_ns::NTypes type) {
     // TODO: according to nt, alloc different node
     if (free_node_list.empty()) {
         size_t node_size = size_align(get_node_size(type), 64);
-        std::cout << "[ALLOC NODE]\tnode type " << (int)type << ", node size "
-                  << node_size << "\n";
+//        std::cout << "[ALLOC NODE]\tnode type " << (int)type << ", node size "
+//                  << node_size << "\n";
         void *addr = pmb->alloc_block((int)type);
         for (int i = 0; i + node_size <= NVMMgr::PGSIZE; i += node_size) {
             free_node_list.push_back((uint64_t)addr + i);
@@ -138,7 +138,7 @@ void thread_info::PerformGC() {
         header_p->next_p = first_p->next_p;
 
         // Then free memory
-        FreeEpochDeltaChain(first_p->node_p);
+        FreeEpochNode(first_p->node_p);
 
         delete first_p;
         assert(md->node_count != 0UL);
@@ -156,7 +156,7 @@ void thread_info::PerformGC() {
     return;
 }
 
-void thread_info::FreeEpochDeltaChain(void *node_p) {
+void thread_info::FreeEpochNode(void *node_p) {
     // TODO: free node to the allocation thread's free list
     // TODO: free whole block
     PART_ns::BaseNode *n = reinterpret_cast<PART_ns::BaseNode *>(node_p);
