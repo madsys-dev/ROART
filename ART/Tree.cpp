@@ -29,6 +29,7 @@ Tree::Tree() {
     bool init = init_nvm_mgr();
     register_threadinfo();
     NVMMgr *mgr = get_nvm_mgr();
+//    Epoch_Mgr * epoch_mgr = new Epoch_Mgr();
 
     if (init) {
         // first open
@@ -586,7 +587,7 @@ restart:
                         goto restart;
                 }
                 // remove the leaf
-                EpochGuard::DeleteNode((void *)nextNode);
+                EpochGuard::DeleteNode((void *)leaf);
 
                 return OperationResults::Success;
             }

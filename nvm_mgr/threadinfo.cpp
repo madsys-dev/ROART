@@ -103,8 +103,8 @@ void thread_info::AddGarbageNode(void *node_p) {
     // and then update last_p
     md->last_p->next_p = garbage_node_p;
     md->last_p = garbage_node_p;
-    PART_ns::BaseNode *n = (PART_ns::BaseNode *)node_p;
-    std::cout << "[TEST]\tgarbage node type " << (int)(n->type) << "\n";
+//    PART_ns::BaseNode *n = (PART_ns::BaseNode *)node_p;
+//    std::cout << "[TEST]\tgarbage node type " << (int)(n->type) << "\n";
     // Update the counter
     md->node_count++;
 
@@ -160,7 +160,6 @@ void thread_info::FreeEpochDeltaChain(void *node_p) {
     // TODO: free node to the allocation thread's free list
     // TODO: free whole block
     PART_ns::BaseNode *n = reinterpret_cast<PART_ns::BaseNode *>(node_p);
-    std::cout << "[TEST]\tnode type is " << (int)n->type << "\n";
     switch (n->type) {
     case PART_ns::NTypes::N4:
         ti->node4_free_list->free_node(node_p);
@@ -178,7 +177,8 @@ void thread_info::FreeEpochDeltaChain(void *node_p) {
         ti->leaf_free_list->free_node(node_p);
         break;
     default:
-        std::cout << "[FREE NODE]\twrong type\n";
+//        std::cout << "[TEST]\tnode type is " << (int)n->type << "\n";
+        std::cout << "[FREE GC NODE]\twrong type\n";
         assert(0);
     }
 }
@@ -272,6 +272,10 @@ void unregister_threadinfo() {
     std::cout << "[THREAD]\tunregister thread\n";
     //    delete ti;
     ti = NULL;
+    if(ti_list_head == NULL){
+        delete epoch_mgr;
+        epoch_mgr = NULL;
+    }
 }
 
 void *get_threadinfo() { return (void *)ti; }

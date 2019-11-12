@@ -17,6 +17,8 @@ class N256 : public N {
         memset(children, '\0', sizeof(children));
     }
 
+    virtual ~N256(){}
+
     bool insert(uint8_t key, N *val, bool flush);
 
     template <class NODE> void copyTo(NODE *n) const {

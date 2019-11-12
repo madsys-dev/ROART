@@ -50,6 +50,18 @@ TEST(TestEpoch, Epoch_Mgr) {
     std::this_thread::sleep_for(duration3);
     ASSERT_EQ(e, Epoch_Mgr::GetGlobalEpoch());
     std::cout << "[TEST]\ttest exit global epoch thread successfully\n";
+
+    init_nvm_mgr();
+    register_threadinfo();
+    std::chrono::milliseconds duration4(GC_INTERVAL * 5);
+    std::this_thread::sleep_for(duration4);
+    std::cout<<"[TEST]\trestart epoch mgr again, now epoch is "<<Epoch_Mgr::GetGlobalEpoch() <<"\n";
+    ASSERT_GT(Epoch_Mgr::GetGlobalEpoch(), e);
+
+    unregister_threadinfo();
+    std::chrono::milliseconds duration1(GC_INTERVAL);
+    std::this_thread::sleep_for(duration1);
+    close_nvm_mgr();
 }
 
 TEST(TestEpoch, epoch_based_gc) {
@@ -76,14 +88,14 @@ TEST(TestEpoch, epoch_based_gc) {
     PART_ns::Leaf *leaf =
         new (alloc_new_node(PART_ns::NTypes::Leaf)) PART_ns::Leaf();
 
-    PART_ns::BaseNode *ll = (PART_ns::BaseNode *)leaf;
-
-    PART_ns::BaseNode *aa = (PART_ns::BaseNode *)((void *)leaf);
-
-    PART_ns::BaseNode *bb = reinterpret_cast<PART_ns::BaseNode *>(leaf);
-
-    printf("virtual different type %d %d %d %d\n", (int)(leaf->type),
-           (int)(ll->type), (int)(aa->type), (int)(bb->type));
+//    PART_ns::BaseNode *ll = (PART_ns::BaseNode *)leaf;
+//
+//    PART_ns::BaseNode *aa = (PART_ns::BaseNode *)((void *)leaf);
+//
+//    PART_ns::BaseNode *bb = reinterpret_cast<PART_ns::BaseNode *>(leaf);
+//
+//    printf("virtual different type %d %d %d %d\n", (int)(leaf->type),
+//           (int)(ll->type), (int)(aa->type), (int)(bb->type));
 
     std::cout << "[TEST]\talloc different nodes\n";
 
@@ -136,5 +148,8 @@ TEST(TestEpoch, epoch_based_gc) {
     std::cout << "[TEST]\tcheck GC successfully\n";
 
     unregister_threadinfo();
+    std::chrono::milliseconds duration1(GC_INTERVAL);
+    std::this_thread::sleep_for(duration1);
     close_nvm_mgr();
 }
+

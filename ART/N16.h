@@ -51,6 +51,8 @@ class N16 : public N {
         memset(children, 0, sizeof(children));
     }
 
+    virtual ~N16(){}
+
     bool insert(uint8_t key, N *n, bool flush);
 
     template <class NODE> void copyTo(NODE *n) const {
