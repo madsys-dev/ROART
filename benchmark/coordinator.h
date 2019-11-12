@@ -25,6 +25,13 @@ template <typename K, typename V, int size> class Coordinator {
         double update_latency_breaks[3];
         double find_latency_breaks[3];
 
+        Result(){
+            throughput = 0;
+            for(int i = 0; i < 3; i++){
+                update_latency_breaks[i] = find_latency_breaks[i] = 0;
+            }
+        }
+
         void operator+=(Result &r) {
             this->throughput += r.throughput;
             for (int i = 0; i < 3; i++) {
@@ -343,13 +350,10 @@ template <typename K, typename V, int size> class Coordinator {
     void run() {
         printf("[COORDINATOR]\tStart benchmark..\n");
 
-        init_nvm_mgr();
-
         if (conf.type == PART) {
             // ART
             printf("test ART---------------------\n");
             PART_ns::Tree *art = new PART_ns::Tree();
-            register_threadinfo();
             Benchmark *benchmark = getBenchmark(conf);
 
             Result *results = new Result[conf.num_threads];
@@ -399,7 +403,7 @@ template <typename K, typename V, int size> class Coordinator {
             delete[] results;
         } else if (conf.type == FAST_FAIR) {
             // FAST_FAIR
-
+            init_nvm_mgr();
             printf("test FAST_FAIR---------------------\n");
             fastfair::btree *bt = new fastfair::btree();
             register_threadinfo();
@@ -446,6 +450,8 @@ template <typename K, typename V, int size> class Coordinator {
             delete bt;
             delete[] pid;
             delete[] results;
+            unregister_threadinfo();
+            close_nvm_mgr();
         }
 
 #ifdef PERF_LATENCY
@@ -466,8 +472,6 @@ template <typename K, typename V, int size> class Coordinator {
         printf("\n");
 #endif // PERF_LATENCY
 
-        unregister_threadinfo();
-        close_nvm_mgr();
     }
 
   private:
