@@ -248,6 +248,9 @@ void register_threadinfo() {
         ti = new (mgr->alloc_thread_info()) thread_info();
         ti->next = ti_list_head;
         ti_list_head = ti;
+
+        //persist thread info
+        flush_data((void *)ti, 64);
         std::cout << "[THREAD]\talloc thread info " << ti->id << "\n";
     }
 }

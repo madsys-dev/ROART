@@ -12,6 +12,12 @@
 
 namespace NVMMgr_ns {
 
+    // log for crash consistency allocation
+    struct alloc_log {
+        int bit;
+        uint64_t addr;
+    };
+
 class NVMMgr {
     /*
      *

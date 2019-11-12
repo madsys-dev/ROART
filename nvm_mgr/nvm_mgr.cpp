@@ -1,5 +1,5 @@
 #include "nvm_mgr.h"
-
+#include "threadinfo.h"
 #include <cassert>
 #include <mutex>
 #include <stdio.h>
@@ -149,13 +149,21 @@ void *NVMMgr::alloc_block(int type) {
     }
     uint64_t id = free_page_list.front();
     void *addr = (void *)(data_block_start + id * PGSIZE);
+
+    // TODO: logging for crash consistency
+//    thread_info *ti = (thread_info *)get_threadinfo();
+//    alloc_log *log = (alloc_log *)ti->get_static_log();
+//    log->addr = (uint64_t)addr;
+//    log->bit = 1;
+//    flush_data((void *)log, sizeof(alloc_log));
+
+
     free_page_list.pop_front();
 
     meta_data->bitmap[id] = type;
     flush_data((void *)&(meta_data->bitmap[id]), sizeof(int));
 //    printf("[NVM MGR]\talloc a new block %d, type is %d\n", id, type);
 
-    // TODO: crash consistency allocation to avoid memory leak
 
     return addr;
 }
