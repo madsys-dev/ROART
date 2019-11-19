@@ -12,11 +12,10 @@
 
 namespace NVMMgr_ns {
 
-    // log for crash consistency allocation
-    struct alloc_log {
-        int bit;
-        uint64_t addr;
-    };
+// log for crash consistency allocation
+struct alloc_log {
+    uint64_t addr; // lowest bit is valid bit
+};
 
 class NVMMgr {
     /*
@@ -53,7 +52,7 @@ class NVMMgr {
     static const int max_threads = 64;
 
     static const int PGSIZE = 256 * 1024;                   // 256K
-    static const long long filesize = 16LL * 1024 * PGSIZE; // 4GB
+    static const long long filesize = 64LL * 1024 * PGSIZE; // 16GB
 
     static const size_t start_addr = 0x50000000;
     static const size_t thread_local_start = start_addr + PGSIZE;
@@ -68,10 +67,10 @@ class NVMMgr {
     struct Head {
         // TODO: some other meta data for recovery
         char root[4096]; // for root
-
-        int status;        // if equal to magic_number, it is reopen
-        int threads;       // threads number
-        uint8_t bitmap[0]; // show every page type
+        uint64_t free_bit_offset;
+        int status;         // if equal to magic_number, it is reopen
+        int threads;        // threads number
+        uint16_t bitmap[0]; // show every page type
         // 0: free, 1: N4, 2: N16, 3: N48, 4: N256, 5: Leaf
     };
 
@@ -90,11 +89,11 @@ class NVMMgr {
 
     void *alloc_thread_info();
 
+    void *get_thread_info(int tid);
+
     void *alloc_block(int type);
 
     // volatile metadata and rebuild when recovery
-    uint64_t free_bit_offset;
-    std::list<uint64_t> free_page_list;
     int fd;
 
     // persist it as the head of nvm region

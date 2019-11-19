@@ -71,14 +71,13 @@ NVMMgr::NVMMgr() {
 
         meta_data->status = magic_number;
         meta_data->threads = 0;
-        free_bit_offset = 0;
+        meta_data->free_bit_offset = 0;
 
         flush_data((void *)meta_data, PGSIZE);
         printf("[NVM MGR]\tinitialize nvm file's head\n");
+    } else {
+        // TODO: recovery freelist of every thread
     }
-    free_page_list.clear();
-
-    reload_free_blocks();
 }
 
 NVMMgr::~NVMMgr() {
@@ -96,41 +95,41 @@ NVMMgr::~NVMMgr() {
 //        flush_data((void *) head, sizeof(Head));
 //    }
 
-bool NVMMgr::reload_free_blocks() {
-    assert(free_page_list.empty());
-
-    while (true) {
-        if (free_bit_offset >= (filesize / PGSIZE) - (max_threads + 1)) {
-            return false;
-        }
-
-        uint8_t value = meta_data->bitmap[free_bit_offset];
-
-        // not free
-        if (value != 0) {
-            free_bit_offset++;
-            continue;
-        } else if (value == 0) { // free
-            for (int i = 0; i < 8; i++) {
-                if (free_bit_offset >=
-                    (filesize / PGSIZE) - (max_threads + 1)) {
-                    break;
-                }
-                if (meta_data->bitmap[free_bit_offset] != 0) {
-                    free_bit_offset++;
-                    continue;
-                }
-
-                free_page_list.push_back(free_bit_offset);
-                free_bit_offset++;
-            }
-        }
-        break;
-    }
-//    std::cout << "[NVM MGR]\treload free blocks, now free_page_list size is "
-//              << free_page_list.size() << "\n";
-    return true;
-}
+// bool NVMMgr::reload_free_blocks() {
+//    assert(free_page_list.empty());
+//
+//    while (true) {
+//        if (free_bit_offset >= (filesize / PGSIZE) - (max_threads + 1)) {
+//            return false;
+//        }
+//
+//        uint16_t value = meta_data->bitmap[free_bit_offset];
+//
+//        // not free
+//        if (value != 0) {
+//            free_bit_offset++;
+//            continue;
+//        } else if (value == 0) { // free
+//            for (int i = 0; i < 8; i++) {
+//                if (free_bit_offset >=
+//                    (filesize / PGSIZE) - (max_threads + 1)) {
+//                    break;
+//                }
+//                if (meta_data->bitmap[free_bit_offset] != 0) {
+//                    free_bit_offset++;
+//                    continue;
+//                }
+//
+//                free_page_list.push_back(free_bit_offset);
+//                free_bit_offset++;
+//            }
+//        }
+//        break;
+//    }
+////    std::cout << "[NVM MGR]\treload free blocks, now free_page_list size is
+///" /              << free_page_list.size() << "\n";
+//    return true;
+//}
 
 void *NVMMgr::alloc_thread_info() {
     // not thread safe
@@ -139,31 +138,30 @@ void *NVMMgr::alloc_thread_info() {
     return (void *)(thread_local_start + index * PGSIZE);
 }
 
+void *NVMMgr::get_thread_info(int tid) {
+    return (void *)(thread_local_start + tid * PGSIZE);
+}
+
+uint16_t set_type_and_tid(int type, int tid) { return (type << 8) | tid; }
+
+int get_type(uint16_t value) { return (value >> 8) & ((1 << 8) - 1); }
+
+int get_tid(uint16_t value) { return value & ((1 << 8) - 1); }
+
 void *NVMMgr::alloc_block(int type) {
     std::lock_guard<std::mutex> lock(_mtx);
 
-    if (free_page_list.empty()) {
-        if (!reload_free_blocks()) {
-            return NULL;
-        }
-    }
-    uint64_t id = free_page_list.front();
+    thread_info *ti = (thread_info *)get_threadinfo();
+
+    uint64_t id = meta_data->free_bit_offset;
+    meta_data->free_bit_offset++;
+    meta_data->bitmap[id] = set_type_and_tid(type, ti->id);
+    flush_data((void *)&(meta_data->bitmap[id]), sizeof(uint16_t));
+    flush_data((void *)&(meta_data->free_bit_offset), sizeof(uint64_t));
+
     void *addr = (void *)(data_block_start + id * PGSIZE);
 
-    // TODO: logging for crash consistency
-//    thread_info *ti = (thread_info *)get_threadinfo();
-//    alloc_log *log = (alloc_log *)ti->get_static_log();
-//    log->addr = (uint64_t)addr;
-//    log->bit = 1;
-//    flush_data((void *)log, sizeof(alloc_log));
-
-
-    free_page_list.pop_front();
-
-    meta_data->bitmap[id] = type;
-    flush_data((void *)&(meta_data->bitmap[id]), sizeof(int));
-//    printf("[NVM MGR]\talloc a new block %d, type is %d\n", id, type);
-
+    //    printf("[NVM MGR]\talloc a new block %d, type is %d\n", id, type);
 
     return addr;
 }

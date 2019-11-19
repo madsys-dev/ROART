@@ -20,6 +20,7 @@ class PMBlockAllocator {
 
   public:
     PMBlockAllocator(NVMMgr *mgr_ = NULL) { mgr = mgr_; }
+    ~PMBlockAllocator() {}
 
     void *alloc_block(int type) {
         if (mgr == NULL) {

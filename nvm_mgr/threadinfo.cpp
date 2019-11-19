@@ -56,9 +56,11 @@ void *PMFreeList::alloc_node(PART_ns::NTypes type) {
     // TODO: according to nt, alloc different node
     if (free_node_list.empty()) {
         size_t node_size = size_align(get_node_size(type), 64);
-//        std::cout << "[ALLOC NODE]\tnode type " << (int)type << ", node size "
-//                  << node_size << "\n";
+        //        std::cout << "[ALLOC NODE]\tnode type " << (int)type << ",
+        //        node size "
+        //                  << node_size << "\n";
         void *addr = pmb->alloc_block((int)type);
+
         for (int i = 0; i + node_size <= NVMMgr::PGSIZE; i += node_size) {
             free_node_list.push_back((uint64_t)addr + i);
         }
@@ -103,8 +105,8 @@ void thread_info::AddGarbageNode(void *node_p) {
     // and then update last_p
     md->last_p->next_p = garbage_node_p;
     md->last_p = garbage_node_p;
-//    PART_ns::BaseNode *n = (PART_ns::BaseNode *)node_p;
-//    std::cout << "[TEST]\tgarbage node type " << (int)(n->type) << "\n";
+    //    PART_ns::BaseNode *n = (PART_ns::BaseNode *)node_p;
+    //    std::cout << "[TEST]\tgarbage node type " << (int)(n->type) << "\n";
     // Update the counter
     md->node_count++;
 
@@ -177,7 +179,7 @@ void thread_info::FreeEpochNode(void *node_p) {
         ti->leaf_free_list->free_node(node_p);
         break;
     default:
-//        std::cout << "[TEST]\tnode type is " << (int)n->type << "\n";
+        //        std::cout << "[TEST]\tnode type is " << (int)n->type << "\n";
         std::cout << "[FREE GC NODE]\twrong type\n";
         assert(0);
     }
@@ -249,8 +251,8 @@ void register_threadinfo() {
         ti->next = ti_list_head;
         ti_list_head = ti;
 
-        //persist thread info
-        flush_data((void *)ti, 64);
+        // persist thread info
+        flush_data((void *)ti, 128);
         std::cout << "[THREAD]\talloc thread info " << ti->id << "\n";
     }
 }
@@ -275,7 +277,7 @@ void unregister_threadinfo() {
     std::cout << "[THREAD]\tunregister thread\n";
     //    delete ti;
     ti = NULL;
-    if(ti_list_head == NULL){
+    if (ti_list_head == NULL) {
         delete epoch_mgr;
         epoch_mgr = NULL;
     }

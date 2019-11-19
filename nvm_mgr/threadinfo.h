@@ -23,6 +23,7 @@ class PMFreeList {
 
   public:
     PMFreeList(PMBlockAllocator *pmb_);
+    ~PMFreeList() {}
 
     void *alloc_node(PART_ns::NTypes nt);
     void free_node(void *addr);

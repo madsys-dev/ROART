@@ -29,7 +29,7 @@ Tree::Tree() {
     bool init = init_nvm_mgr();
     register_threadinfo();
     NVMMgr *mgr = get_nvm_mgr();
-//    Epoch_Mgr * epoch_mgr = new Epoch_Mgr();
+    //    Epoch_Mgr * epoch_mgr = new Epoch_Mgr();
 
     if (init) {
         // first open

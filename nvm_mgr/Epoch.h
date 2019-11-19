@@ -64,11 +64,11 @@ class Epoch_Mgr {
     std::thread *thread_p;
 
   public:
-    Epoch_Mgr() {exit_flag = false;}
+    Epoch_Mgr() { exit_flag = false; }
 
     ~Epoch_Mgr() {
         exit_flag = true;
-        std::cout<<"[EPOCH]\tepoch mgr exit\n";
+        std::cout << "[EPOCH]\tepoch mgr exit\n";
     }
 
     inline void IncreaseEpoch() { epoch++; }

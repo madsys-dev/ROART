@@ -22,7 +22,7 @@ class N48 : public N {
         memset(children, 0, sizeof(children));
     }
 
-    virtual ~N48(){}
+    virtual ~N48() {}
 
     bool insert(uint8_t key, N *n, bool flush);
 

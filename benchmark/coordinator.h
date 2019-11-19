@@ -25,9 +25,9 @@ template <typename K, typename V, int size> class Coordinator {
         double update_latency_breaks[3];
         double find_latency_breaks[3];
 
-        Result(){
+        Result() {
             throughput = 0;
-            for(int i = 0; i < 3; i++){
+            for (int i = 0; i < 3; i++) {
                 update_latency_breaks[i] = find_latency_breaks[i] = 0;
             }
         }
@@ -471,7 +471,6 @@ template <typename K, typename V, int size> class Coordinator {
                final_result.find_latency_breaks[1]);
         printf("\n");
 #endif // PERF_LATENCY
-
     }
 
   private:
