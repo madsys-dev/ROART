@@ -116,6 +116,23 @@ TEST(TestNVMMgr, buddy_allocator) {
     ASSERT_EQ((uint64_t)addr, start);
     ASSERT_EQ(mgr->meta_data->free_bit_offset, 1);
     ASSERT_EQ(mgr->meta_data->bitmap[0], ti->id);
+
+    std::cout<<"[TEST]\tstart to test reclaim\n";
+    ba->insert_into_freelist(0, 64+32);
+    ASSERT_EQ(ba->get_freelist_size(2), 1);
+    ASSERT_EQ(ba->get_freelist_size(3), 1);
+    ba->insert_into_freelist(0, 1024 + 256+128 + 32 + 8);
+    ASSERT_EQ(ba->get_freelist_size(7), 1);
+    ASSERT_EQ(ba->get_freelist_size(5), 1);
+    ASSERT_EQ(ba->get_freelist_size(4), 1);
+    ASSERT_EQ(ba->get_freelist_size(2), 2);
+    ASSERT_EQ(ba->get_freelist_size(0), 1);
+    ba->insert_into_freelist(0, 256+256 + 64 + 16);
+    ASSERT_EQ(ba->get_freelist_size(6), 1);
+    ASSERT_EQ(ba->get_freelist_size(3), 2);
+    ASSERT_EQ(ba->get_freelist_size(1), 1);
+    std::cout<<"[TEST]\ttest reclaim successfully\n";
+
     unregister_threadinfo();
     delete ba;
     delete pmb;

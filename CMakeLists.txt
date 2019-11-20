@@ -35,9 +35,9 @@ add_library(Indexes ${DIR_ART_SRCS} ${DIR_BENCH_SRCS} ${DIR_FF_SRCS} ${DIR_NVMMG
 target_link_libraries(Indexes ${TbbLib})
 
 
-set(P_ART_BENCH perf/art_simple_bench.cpp)
-add_executable(art_simple_bench ${P_ART_BENCH})
-target_link_libraries(art_simple_bench Indexes)
+#set(P_ART_BENCH perf/art_simple_bench.cpp)
+#add_executable(art_simple_bench ${P_ART_BENCH})
+#target_link_libraries(art_simple_bench Indexes)
 
 set(BENCHMARK perf/main.cpp)
 add_executable(benchmark ${BENCHMARK})
