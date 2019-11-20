@@ -39,7 +39,7 @@ Tree::Tree() {
     } else {
         // recovery
         root = reinterpret_cast<N256 *>(mgr->alloc_tree_root());
-        std::cout << "[P-ART]\trecovery P-ART and reclaim the memory\n";
+        std::cout << "[RECOVERY]\trecovery P-ART and reclaim the memory\n";
         rebuild(mgr->recovery_set);
         mgr->recovery_free_memory();
     }
