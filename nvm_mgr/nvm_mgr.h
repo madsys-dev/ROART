@@ -12,11 +12,6 @@
 
 namespace NVMMgr_ns {
 
-// log for crash consistency allocation
-struct alloc_log {
-    uint64_t addr; // lowest bit is valid bit
-};
-
 class NVMMgr {
     /*
      *

@@ -9,6 +9,7 @@
 #include "N48.h"
 #include "pmalloc_wrap.h"
 #include <list>
+#include "tbb/concurrent_queue.h"
 
 namespace NVMMgr_ns {
 /*
@@ -17,6 +18,8 @@ namespace NVMMgr_ns {
  *
  * TODO: support leaf node recycling by add freed node to the free list.
  */
+const static int free_list_number = 10; // from 8byte to 4K
+
 class PMFreeList {
     std::list<uint64_t> free_node_list;
     PMBlockAllocator *pmb;
@@ -31,6 +34,22 @@ class PMFreeList {
     int get_freelist_size() { return free_node_list.size(); }
 } __attribute__((aligned(64)));
 
+// maintain free memory like buddy system in linux
+class buddy_allocator{
+private:
+    const int power_two[free_list_number] = {8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096};
+    tbb::concurrent_queue<uint64_t> free_list[free_list_number];
+    PMBlockAllocator *pmb;
+public:
+    buddy_allocator(PMBlockAllocator *pmb_): pmb(pmb_){
+        for(int i = 0; i < free_list_number; i++) free_list[i].clear();
+    }
+    ~buddy_allocator(){}
+    void insert_into_freelist(uint64_t addr, size_t size);
+    void *alloc_node(size_t size);
+    uint64_t get_addr(int id);
+};
+
 class thread_info {
   public:
     int id;
@@ -43,6 +62,8 @@ class thread_info {
     PMFreeList *node48_free_list;
     PMFreeList *node256_free_list;
     PMFreeList *leaf_free_list;
+
+    buddy_allocator *free_list;
 
     // epoch based GC metadata
     GCMetaData *md;
