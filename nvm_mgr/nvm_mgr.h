@@ -63,9 +63,9 @@ class NVMMgr {
         // TODO: some other meta data for recovery
         char root[4096]; // for root
         uint64_t free_bit_offset;
-        int status;         // if equal to magic_number, it is reopen
-        int threads;        // threads number
-        uint16_t bitmap[0]; // show every page type
+        int status;        // if equal to magic_number, it is reopen
+        int threads;       // threads number
+        uint8_t bitmap[0]; // show every page type
         // 0: free, 1: N4, 2: N16, 3: N48, 4: N256, 5: Leaf
     };
 
@@ -86,7 +86,7 @@ class NVMMgr {
 
     void *get_thread_info(int tid);
 
-    void *alloc_block(int type);
+    void *alloc_block(int tid);
 
     // volatile metadata and rebuild when recovery
     int fd;

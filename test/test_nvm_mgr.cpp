@@ -51,12 +51,15 @@ TEST(TestNVMMgr, PMBlockAllocator) {
     register_threadinfo();
 
     int bl_num = 10;
-    int type = 2;
+    int tid = 2;
     uint64_t start = NVMMgr::data_block_start;
+    NVMMgr *mgr = get_nvm_mgr();
     for (int i = 0; i < bl_num; i++) {
         // alloc some blocks using interface of pmblockalloctor
-        void *addr = pmb->alloc_block(type);
+        void *addr = pmb->alloc_block(tid);
         ASSERT_EQ((uint64_t)addr, start + i * NVMMgr::PGSIZE);
+        ASSERT_EQ(mgr->meta_data->free_bit_offset, i + 1);
+        ASSERT_EQ(mgr->meta_data->bitmap[i], tid);
     }
     std::cout << "[TEST]\tpmb alloc block successfully\n";
 
@@ -65,38 +68,62 @@ TEST(TestNVMMgr, PMBlockAllocator) {
     close_nvm_mgr();
 }
 
-TEST(TestNVMMgr, PMFreeList) {
-    std::cout << "[TEST]\tstart to test PMFreeList\n";
+// TEST(TestNVMMgr, PMFreeList) {
+//    std::cout << "[TEST]\tstart to test PMFreeList\n";
+//    clear_data();
+//
+//    init_nvm_mgr();
+//    PMBlockAllocator *pmb = new PMBlockAllocator(get_nvm_mgr());
+//    PMFreeList *pf = new PMFreeList(pmb);
+//
+//    register_threadinfo();
+//
+//    int node_num = 10;
+//    PART_ns::NTypes type = PART_ns::NTypes::N4;
+//    size_t node_size = sizeof(PART_ns::N4);
+//    uint64_t start = NVMMgr::data_block_start;
+//    for (int i = 0; i < node_num; i++) {
+//        // alloc some node from a block using interface of pmfreelist
+//        void *addr = pf->alloc_node(type);
+//        ASSERT_EQ((uint64_t)addr, start + i * node_size);
+//    }
+//    std::cout << "[TEST]\tpf alloc node successfully\n";
+//    std::cout << "[TEST]\tnode size is " << node_size << ", freelist size is "
+//              << pf->get_freelist_size() << "\n";
+//    ASSERT_EQ(pf->get_freelist_size(), NVMMgr::PGSIZE / node_size - node_num);
+//
+//    unregister_threadinfo();
+//    delete pf;
+//    delete pmb;
+//    close_nvm_mgr();
+//}
+
+TEST(TestNVMMgr, buddy_allocator) {
+    std::cout << "[TEST]\tstart to test buddy allocator\n";
     clear_data();
 
     init_nvm_mgr();
+    NVMMgr *mgr = get_nvm_mgr();
     PMBlockAllocator *pmb = new PMBlockAllocator(get_nvm_mgr());
-    PMFreeList *pf = new PMFreeList(pmb);
-
+    buddy_allocator *ba = new buddy_allocator(pmb);
     register_threadinfo();
+    thread_info *ti = (thread_info *)get_threadinfo();
 
-    int node_num = 10;
-    PART_ns::NTypes type = PART_ns::NTypes::N4;
-    size_t node_size = sizeof(PART_ns::N4);
+    void *addr = ba->alloc_node(4096);
     uint64_t start = NVMMgr::data_block_start;
-    for (int i = 0; i < node_num; i++) {
-        // alloc some node from a block using interface of pmfreelist
-        void *addr = pf->alloc_node(type);
-        ASSERT_EQ((uint64_t)addr, start + i * node_size);
-    }
-    std::cout << "[TEST]\tpf alloc node successfully\n";
-    std::cout << "[TEST]\tnode size is " << node_size << ", freelist size is "
-              << pf->get_freelist_size() << "\n";
-    ASSERT_EQ(pf->get_freelist_size(), NVMMgr::PGSIZE / node_size - node_num);
-
+    ASSERT_EQ(ba->get_freelist_size(free_list_number - 1),
+              (NVMMgr::PGSIZE / 4096) - 1);
+    ASSERT_EQ((uint64_t)addr, start);
+    ASSERT_EQ(mgr->meta_data->free_bit_offset, 1);
+    ASSERT_EQ(mgr->meta_data->bitmap[0], ti->id);
     unregister_threadinfo();
-    delete pf;
+    delete ba;
     delete pmb;
     close_nvm_mgr();
 }
 
 TEST(TestNVMMgr, thread_info) {
-    std::cout << "[TEST]\tstart to test PMFreeList\n";
+    std::cout << "[TEST]\tstart to test thread_info\n";
     clear_data();
 
     // initialize a global nvm_mgr
@@ -104,58 +131,53 @@ TEST(TestNVMMgr, thread_info) {
 
     // initialize a thread and global pmblockallocator
     register_threadinfo();
+    NVMMgr *mgr = get_nvm_mgr();
+    thread_info *ti = (thread_info *)get_threadinfo();
 
     //    ASSERT_EQ(get_thread_id(), 0);
-    void *n4 = alloc_new_node(PART_ns::NTypes::N4);
-    void *n16 = alloc_new_node(PART_ns::NTypes::N16);
-    void *n48 = alloc_new_node(PART_ns::NTypes::N48);
-    void *n256 = alloc_new_node(PART_ns::NTypes::N256);
-    void *leaf = alloc_new_node(PART_ns::NTypes::Leaf);
+    void *n4 = alloc_new_node_from_type(PART_ns::NTypes::N4);
+    void *n16 = alloc_new_node_from_type(PART_ns::NTypes::N16);
+    void *n48 = alloc_new_node_from_type(PART_ns::NTypes::N48);
+    void *n256 = alloc_new_node_from_type(PART_ns::NTypes::N256);
+    void *leaf = alloc_new_node_from_type(PART_ns::NTypes::Leaf);
 
     std::cout << "[TEST]\talloc different nodes\n";
 
-    NVMMgr *mgr = get_nvm_mgr();
     uint64_t start = NVMMgr::data_block_start;
+
+    for (int i = 0; i < free_list_number; i++) {
+        std::cout << ti->free_list->get_freelist_size(i) << "\n";
+    }
+
+    ASSERT_EQ(ti->free_list->get_freelist_size(free_list_number - 1),
+              (NVMMgr::PGSIZE / 4096) - 2);
     ASSERT_EQ((uint64_t)n4, start);
-    ASSERT_EQ((uint64_t)n16, start + 1 * NVMMgr::PGSIZE);
-    ASSERT_EQ((uint64_t)n48, start + 2 * NVMMgr::PGSIZE);
-    ASSERT_EQ((uint64_t)n256, start + 3 * NVMMgr::PGSIZE);
-    ASSERT_EQ((uint64_t)leaf, start + 4 * NVMMgr::PGSIZE);
+    //    std::cout<<"n4 addr "<<(uint64_t)n4<<"\n";
+    //    std::cout<<"meta data addr "<< (uint64_t)(mgr->meta_data)<<"\n";
+    //    std::cout<<"mgr addr" <<(uint64_t)mgr<<"\n";
+    ASSERT_EQ(mgr->meta_data->free_bit_offset, 1);
+    ASSERT_EQ(mgr->meta_data->bitmap[0], ti->id);
+
+    int currnum = 0;
+    for (int i = 0; i < free_list_number; i++) {
+        currnum += ti->free_list->get_freelist_size(i);
+    }
 
     std::cout << "[TEST]\tcheck every node's address successfully\n";
 
-    thread_info *ti = reinterpret_cast<thread_info *>(get_threadinfo());
-    ASSERT_EQ(ti->node4_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N4), 64) - 1);
-    ASSERT_EQ(ti->node16_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N16), 64) - 1);
-    ASSERT_EQ(ti->node48_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N48), 64) - 1);
-    ASSERT_EQ(ti->node256_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N256), 64) - 1);
-    ASSERT_EQ(ti->leaf_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::Leaf), 64) - 1);
-
-    std::cout << "[TEST]\tcheck every freelist's size successfully\n";
-
-    free_node(PART_ns::NTypes::N4, n4);
-    free_node(PART_ns::NTypes::N16, n16);
-    free_node(PART_ns::NTypes::N48, n48);
-    free_node(PART_ns::NTypes::N256, n256);
-    free_node(PART_ns::NTypes::Leaf, leaf);
+    free_node_from_type((uint64_t)n4, PART_ns::NTypes::N4);
+    free_node_from_type((uint64_t)n16, PART_ns::NTypes::N16);
+    free_node_from_type((uint64_t)n48, PART_ns::NTypes::N48);
+    free_node_from_type((uint64_t)n256, PART_ns::NTypes::N256);
+    free_node_from_type((uint64_t)leaf, PART_ns::NTypes::Leaf);
 
     std::cout << "[TEST]\tfree nodes successfully\n";
 
-    ASSERT_EQ(ti->node4_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N4), 64));
-    ASSERT_EQ(ti->node16_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N16), 64));
-    ASSERT_EQ(ti->node48_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N48), 64));
-    ASSERT_EQ(ti->node256_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N256), 64));
-    ASSERT_EQ(ti->leaf_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::Leaf), 64));
+    int nownum = 0;
+    for (int i = 0; i < free_list_number; i++) {
+        nownum += ti->free_list->get_freelist_size(i);
+    }
+    ASSERT_EQ(nownum, currnum + 5);
 
     std::cout << "[TEST]\tfreelist's size correct\n";
 

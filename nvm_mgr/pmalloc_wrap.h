@@ -22,7 +22,7 @@ class PMBlockAllocator {
     PMBlockAllocator(NVMMgr *mgr_ = NULL) { mgr = mgr_; }
     ~PMBlockAllocator() {}
 
-    void *alloc_block(int type) {
+    void *alloc_block(int tid) {
         if (mgr == NULL) {
             mgr = get_nvm_mgr();
             if (mgr == NULL) {
@@ -32,7 +32,7 @@ class PMBlockAllocator {
         }
 #ifdef USE_NVM_MALLOC
         // mgr is thread safe
-        return mgr->alloc_block(type);
+        return mgr->alloc_block(tid);
 #else
         return aligned_alloc(alignment, NVMMgr::PGSIZE);
 #endif // USE_NVM_MALLOC

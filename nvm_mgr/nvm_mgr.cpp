@@ -103,7 +103,7 @@ NVMMgr::~NVMMgr() {
 //            return false;
 //        }
 //
-//        uint16_t value = meta_data->bitmap[free_bit_offset];
+//        uint8_t value = meta_data->bitmap[free_bit_offset];
 //
 //        // not free
 //        if (value != 0) {
@@ -142,26 +142,21 @@ void *NVMMgr::get_thread_info(int tid) {
     return (void *)(thread_local_start + tid * PGSIZE);
 }
 
-uint16_t set_type_and_tid(int type, int tid) { return (type << 8) | tid; }
-
-int get_type(uint16_t value) { return (value >> 8) & ((1 << 8) - 1); }
-
-int get_tid(uint16_t value) { return value & ((1 << 8) - 1); }
-
-void *NVMMgr::alloc_block(int type) {
+void *NVMMgr::alloc_block(int tid) {
     std::lock_guard<std::mutex> lock(_mtx);
-
-    thread_info *ti = (thread_info *)get_threadinfo();
 
     uint64_t id = meta_data->free_bit_offset;
     meta_data->free_bit_offset++;
-    meta_data->bitmap[id] = set_type_and_tid(type, ti->id);
-    flush_data((void *)&(meta_data->bitmap[id]), sizeof(uint16_t));
+    meta_data->bitmap[id] = tid;
+    flush_data((void *)&(meta_data->bitmap[id]), sizeof(uint8_t));
     flush_data((void *)&(meta_data->free_bit_offset), sizeof(uint64_t));
 
     void *addr = (void *)(data_block_start + id * PGSIZE);
 
     //    printf("[NVM MGR]\talloc a new block %d, type is %d\n", id, type);
+    //    std::cout<<"alloc a new block "<< meta_data->free_bit_offset<<"\n";
+    //    std::cout<<"meta data addr "<< meta_data<<"\n";
+    //    std::cout<<"mgr addr" <<this<<"\n";
 
     return addr;
 }

@@ -369,12 +369,12 @@ restart:
             // prefix, level to this node
             Prefix prefi = node->getPrefi();
             prefi.prefixCount = nextLevel - level;
-            auto newNode = new (alloc_new_node(NTypes::N4))
+            auto newNode = new (alloc_new_node_from_type(NTypes::N4))
                 N4(nextLevel, prefi); // not persist
 
             // 2)  add node and (tid, *k) as children
-            Leaf *newLeaf =
-                new (alloc_new_node(NTypes::Leaf)) Leaf(k); // not persist
+            Leaf *newLeaf = new (alloc_new_node_from_type(NTypes::Leaf))
+                Leaf(k); // not persist
             N::clflush((char *)newLeaf, sizeof(Leaf), true,
                        true); // persist leaf
 
@@ -418,7 +418,8 @@ restart:
             if (needRestart)
                 goto restart;
 
-            Leaf *newLeaf = new (alloc_new_node(NTypes::Leaf)) Leaf(k);
+            Leaf *newLeaf =
+                new (alloc_new_node_from_type(NTypes::Leaf)) Leaf(k);
             N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
 
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
@@ -453,9 +454,10 @@ restart:
                 return OperationResults::Existed;
             }
 
-            auto n4 = new (alloc_new_node(NTypes::N4))
+            auto n4 = new (alloc_new_node_from_type(NTypes::N4))
                 N4(level + prefixLength, &k->fkey[level], prefixLength);
-            Leaf *newLeaf = new (alloc_new_node(NTypes::Leaf)) Leaf(k);
+            Leaf *newLeaf =
+                new (alloc_new_node_from_type(NTypes::Leaf)) Leaf(k);
             N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
 
             n4->insert(k->fkey[level + prefixLength], N::setLeaf(newLeaf),

@@ -79,16 +79,16 @@ TEST(TestEpoch, epoch_based_gc) {
     uint32_t prefixlen = 4;
     memcpy(prefix, "abc", 3);
 
-    PART_ns::N4 *n4 = new (alloc_new_node(PART_ns::NTypes::N4))
+    PART_ns::N4 *n4 = new (alloc_new_node_from_type(PART_ns::NTypes::N4))
         PART_ns::N4(level, prefix, prefixlen);
-    PART_ns::N16 *n16 = new (alloc_new_node(PART_ns::NTypes::N16))
+    PART_ns::N16 *n16 = new (alloc_new_node_from_type(PART_ns::NTypes::N16))
         PART_ns::N16(level, prefix, prefixlen);
-    PART_ns::N48 *n48 = new (alloc_new_node(PART_ns::NTypes::N48))
+    PART_ns::N48 *n48 = new (alloc_new_node_from_type(PART_ns::NTypes::N48))
         PART_ns::N48(level, prefix, prefixlen);
-    PART_ns::N256 *n256 = new (alloc_new_node(PART_ns::NTypes::N256))
+    PART_ns::N256 *n256 = new (alloc_new_node_from_type(PART_ns::NTypes::N256))
         PART_ns::N256(level, prefix, prefixlen);
     PART_ns::Leaf *leaf =
-        new (alloc_new_node(PART_ns::NTypes::Leaf)) PART_ns::Leaf();
+        new (alloc_new_node_from_type(PART_ns::NTypes::Leaf)) PART_ns::Leaf();
 
     //    PART_ns::BaseNode *ll = (PART_ns::BaseNode *)leaf;
     //
@@ -102,28 +102,16 @@ TEST(TestEpoch, epoch_based_gc) {
     std::cout << "[TEST]\talloc different nodes\n";
 
     NVMMgr *mgr = get_nvm_mgr();
-    uint64_t start = NVMMgr::data_block_start;
-    ASSERT_EQ((uint64_t)n4, start);
-    ASSERT_EQ((uint64_t)n16, start + 1 * NVMMgr::PGSIZE);
-    ASSERT_EQ((uint64_t)n48, start + 2 * NVMMgr::PGSIZE);
-    ASSERT_EQ((uint64_t)n256, start + 3 * NVMMgr::PGSIZE);
-    ASSERT_EQ((uint64_t)leaf, start + 4 * NVMMgr::PGSIZE);
+    thread_info *ti = (thread_info *)get_threadinfo();
+    ASSERT_EQ(mgr->meta_data->free_bit_offset, 1);
+    printf("[TEST]\taddr: %x %x %x %x %x\n", n4, n16, n48, n256, leaf);
+    int num[free_list_number];
+    for (int i = 0; i < free_list_number; i++) {
+        num[i] = ti->free_list->get_freelist_size(i);
+        printf("[TEST]\t2^%d byte freelist size is %d\n", i, num[i]);
+    }
 
     std::cout << "[TEST]\tcheck every node's address successfully\n";
-
-    thread_info *ti = (thread_info *)get_threadinfo();
-    ASSERT_EQ(ti->node4_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N4), 64) - 1);
-    ASSERT_EQ(ti->node16_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N16), 64) - 1);
-    ASSERT_EQ(ti->node48_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N48), 64) - 1);
-    ASSERT_EQ(ti->node256_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N256), 64) - 1);
-    ASSERT_EQ(ti->leaf_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::Leaf), 64) - 1);
-
-    std::cout << "[TEST]\tcheck every freelist's size successfully\n";
 
     MarkNodeGarbage(n4); // delete at an active epoch
     MarkNodeGarbage(n16);
@@ -133,20 +121,11 @@ TEST(TestEpoch, epoch_based_gc) {
 
     // GC for different types nodes
     ti->PerformGC();
+    for (int i = 0; i < free_list_number; i++) {
+        num[i] = ti->free_list->get_freelist_size(i);
+        printf("[TEST]\t2^%d byte freelist size is %d\n", i, num[i]);
+    }
     std::cout << "[TEST]\tperform GC finish\n";
-
-    ASSERT_EQ(ti->node4_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N4), 64));
-    ASSERT_EQ(ti->node16_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N16), 64));
-    ASSERT_EQ(ti->node48_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N48), 64));
-    ASSERT_EQ(ti->node256_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::N256), 64));
-    ASSERT_EQ(ti->leaf_free_list->get_freelist_size(),
-              NVMMgr::PGSIZE / size_align(sizeof(PART_ns::Leaf), 64));
-
-    std::cout << "[TEST]\tcheck GC successfully\n";
 
     unregister_threadinfo();
     std::chrono::milliseconds duration1(GC_INTERVAL);

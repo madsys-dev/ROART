@@ -26,12 +26,6 @@ int tid = 0;
 // global Epoch_Mgr
 Epoch_Mgr *epoch_mgr = NULL;
 
-/**************************PMFreeList interface*****************************/
-
-PMFreeList::PMFreeList(PMBlockAllocator *pmb_) : pmb(pmb_) {
-    free_node_list.clear();
-}
-
 size_t get_node_size(PART_ns::NTypes type) {
     switch (type) {
     case PART_ns::NTypes::N4:
@@ -54,43 +48,49 @@ size_t size_align(size_t s, int align) {
     return ((s + align - 1) / align) * align;
 }
 
-void *PMFreeList::alloc_node(PART_ns::NTypes type) {
-    // TODO: according to nt, alloc different node
-    if (free_node_list.empty()) {
-        size_t node_size = size_align(get_node_size(type), 64);
-        //        std::cout << "[ALLOC NODE]\tnode type " << (int)type << ",
-        //        node size "
-        //                  << node_size << "\n";
-        void *addr = pmb->alloc_block((int)type);
+/**************************PMFreeList interface*****************************/
 
-        for (int i = 0; i + node_size <= NVMMgr::PGSIZE; i += node_size) {
-            free_node_list.push_back((uint64_t)addr + i);
-        }
-    }
-    uint64_t pos = free_node_list.front();
-    free_node_list.pop_front();
+// PMFreeList::PMFreeList(PMBlockAllocator *pmb_) : pmb(pmb_) {
+//    free_node_list.clear();
+//}
 
-    return (void *)pos;
-}
-
-void PMFreeList::free_node(void *addr) {
-    free_node_list.push_back((uint64_t)addr);
-}
+// void *PMFreeList::alloc_node(PART_ns::NTypes type) {
+//
+//    if (free_node_list.empty()) {
+//        size_t node_size = size_align(get_node_size(type), 64);
+//        //        std::cout << "[ALLOC NODE]\tnode type " << (int)type << ",
+//        //        node size "
+//        //                  << node_size << "\n";
+//        void *addr = pmb->alloc_block((int)type);
+//
+//        for (int i = 0; i + node_size <= NVMMgr::PGSIZE; i += node_size) {
+//            free_node_list.push_back((uint64_t)addr + i);
+//        }
+//    }
+//    uint64_t pos = free_node_list.front();
+//    free_node_list.pop_front();
+//
+//    return (void *)pos;
+//}
+//
+// void PMFreeList::free_node(void *addr) {
+//    free_node_list.push_back((uint64_t)addr);
+//}
 
 /*************************buddy_allocator interface**************************/
 
-void buddy_allocator::insert_into_freelist(uint64_t addr, size_t size){
+void buddy_allocator::insert_into_freelist(uint64_t addr, size_t size) {
     uint64_t curr_addr = addr;
     size_t curr_size = size;
-    int curr_id = free_list_number - 1;
-    while(curr_size && curr_id >= 0){
-        if(curr_addr % power_two[curr_id] == 0 && curr_size >= power_two[curr_id]){
-            free_list[curr_id].push(curr_addr);
-            curr_addr += power_two[curr_id];
-            curr_size -= power_two[curr_id];
-        }
-        else{
-            curr_id--;
+    while (curr_size) {
+        for (int curr_id = free_list_number - 1; curr_id >= 0; curr_id--) {
+            if (curr_addr % power_two[curr_id] == 0 &&
+                curr_size >= power_two[curr_id]) {
+                free_list[curr_id].push(curr_addr);
+                curr_addr += power_two[curr_id];
+                curr_size -= power_two[curr_id];
+                break;
+            }
         }
     }
     assert(curr_size == 0);
@@ -98,11 +98,13 @@ void buddy_allocator::insert_into_freelist(uint64_t addr, size_t size){
 
 uint64_t buddy_allocator::get_addr(int id) {
     uint64_t addr;
-    if(id == free_list_number - 1){
-        if(!free_list[id].try_pop(addr)){
+    if (id == free_list_number - 1) {
+        if (!free_list[id].try_pop(addr)) {
             // empty, allocate block from nvm_mgr
-            addr = (uint64_t)pmb->alloc_block(1);
-            for(int i = power_two[id]; i < NVMMgr::PGSIZE; i+= power_two[id]){
+            thread_info *ti = (thread_info *)get_threadinfo();
+            addr = (uint64_t)pmb->alloc_block(ti->id);
+            for (int i = power_two[id]; i < NVMMgr::PGSIZE;
+                 i += power_two[id]) {
                 free_list[id].push(addr + (uint64_t)i);
             }
         }
@@ -110,9 +112,9 @@ uint64_t buddy_allocator::get_addr(int id) {
     }
 
     // pop successfully
-    if(free_list[id].try_pop(addr)){
+    if (free_list[id].try_pop(addr)) {
         return addr;
-    }else{ // empty
+    } else { // empty
         addr = get_addr(id + 1);
         // get a bigger page and split half into free_list
         free_list[id].push(addr + power_two[id]);
@@ -121,10 +123,10 @@ uint64_t buddy_allocator::get_addr(int id) {
 }
 
 // alloc size smaller than 4k
-void *buddy_allocator::alloc_node(size_t size){
+void *buddy_allocator::alloc_node(size_t size) {
     int id;
-    for(int i = 0; i < free_list_number; i++){
-        if(power_two[i] >= size){
+    for (int i = 0; i < free_list_number; i++) {
+        if (power_two[i] >= size) {
             id = i;
             break;
         }
@@ -132,14 +134,26 @@ void *buddy_allocator::alloc_node(size_t size){
     return (void *)get_addr(id);
 }
 
+size_t buddy_allocator::get_power_two_size(size_t s) {
+    int id = free_list_number;
+    for (int i = 0; i < free_list_number; i++) {
+        if (power_two[i] >= s) {
+            id = i;
+            break;
+        }
+    }
+    assert(id < free_list_number);
+    return power_two[id];
+}
+
 /*************************thread_info interface**************************/
 
 thread_info::thread_info() {
-    node4_free_list = new PMFreeList(pmblock);
-    node16_free_list = new PMFreeList(pmblock);
-    node48_free_list = new PMFreeList(pmblock);
-    node256_free_list = new PMFreeList(pmblock);
-    leaf_free_list = new PMFreeList(pmblock);
+    //    node4_free_list = new PMFreeList(pmblock);
+    //    node16_free_list = new PMFreeList(pmblock);
+    //    node48_free_list = new PMFreeList(pmblock);
+    //    node256_free_list = new PMFreeList(pmblock);
+    //    leaf_free_list = new PMFreeList(pmblock);
 
     free_list = new buddy_allocator(pmblock);
 
@@ -149,11 +163,13 @@ thread_info::thread_info() {
 }
 
 thread_info::~thread_info() {
-    delete node4_free_list;
-    delete node16_free_list;
-    delete node48_free_list;
-    delete node256_free_list;
-    delete leaf_free_list;
+    //    delete node4_free_list;
+    //    delete node16_free_list;
+    //    delete node48_free_list;
+    //    delete node256_free_list;
+    //    delete leaf_free_list;
+
+    delete free_list;
     delete md;
 }
 
@@ -220,79 +236,43 @@ void thread_info::PerformGC() {
 }
 
 void thread_info::FreeEpochNode(void *node_p) {
-    // TODO: free node to the allocation thread's free list
-    // TODO: free whole block
     PART_ns::BaseNode *n = reinterpret_cast<PART_ns::BaseNode *>(node_p);
-    switch (n->type) {
-    case PART_ns::NTypes::N4:
-        ti->node4_free_list->free_node(node_p);
-        break;
-    case PART_ns::NTypes::N16:
-        ti->node16_free_list->free_node(node_p);
-        break;
-    case PART_ns::NTypes::N48:
-        ti->node48_free_list->free_node(node_p);
-        break;
-    case PART_ns::NTypes::N256:
-        ti->node256_free_list->free_node(node_p);
-        break;
-    case PART_ns::NTypes::Leaf:
-        ti->leaf_free_list->free_node(node_p);
-        break;
-    default:
-        //        std::cout << "[TEST]\tnode type is " << (int)n->type << "\n";
-        std::cout << "[FREE GC NODE]\twrong type\n";
-        assert(0);
+
+    free_node_from_type((uint64_t)n, n->type);
+
+    if (n->type == PART_ns::NTypes::Leaf) {
+        // TODO: reclaim leaf key and value
     }
 }
 
-void *alloc_new_node(PART_ns::NTypes type) {
-    switch (type) {
-    case PART_ns::NTypes::N4:
-        return ti->node4_free_list->alloc_node(PART_ns::NTypes::N4);
-    case PART_ns::NTypes::N16:
-        return ti->node16_free_list->alloc_node(PART_ns::NTypes::N16);
-    case PART_ns::NTypes::N48:
-        return ti->node48_free_list->alloc_node(PART_ns::NTypes::N48);
-    case PART_ns::NTypes::N256:
-        return ti->node256_free_list->alloc_node(PART_ns::NTypes::N256);
-    case PART_ns::NTypes::Leaf:
-        return ti->leaf_free_list->alloc_node(PART_ns::NTypes::Leaf);
-    default:
-        std::cout << "[ALLOC NODE]\twrong type\n";
-        assert(0);
-    }
+void *alloc_new_node_from_type(PART_ns::NTypes type) {
+    size_t node_size = size_align(get_node_size(type), 64);
+    return ti->free_list->alloc_node(node_size);
 }
 
-void free_node(PART_ns::NTypes type, void *addr) {
-    switch (type) {
-    case PART_ns::NTypes::N4:
-        ti->node4_free_list->free_node(addr);
-        break;
-    case PART_ns::NTypes::N16:
-        ti->node16_free_list->free_node(addr);
-        break;
-    case PART_ns::NTypes::N48:
-        ti->node48_free_list->free_node(addr);
-        break;
-    case PART_ns::NTypes::N256:
-        ti->node256_free_list->free_node(addr);
-        break;
-    case PART_ns::NTypes::Leaf:
-        ti->leaf_free_list->free_node(addr);
-        break;
-    default:
-        std::cout << "[FREE NODE]\twrong type\n";
-        assert(0);
-    }
+void *alloc_new_node_from_size(size_t size) {
+    return ti->free_list->alloc_node(size);
+}
+
+void free_node_from_type(uint64_t addr, PART_ns::NTypes type) {
+    size_t node_size = size_align(get_node_size(type), 64);
+    node_size = ti->free_list->get_power_two_size(node_size);
+    ti->free_list->insert_into_freelist(addr, node_size);
+}
+
+void free_node_from_size(uint64_t addr, size_t size) {
+    size_t node_size = ti->free_list->get_power_two_size(size);
+    ti->free_list->insert_into_freelist(addr, node_size);
 }
 
 void register_threadinfo() {
     std::lock_guard<std::mutex> lock_guard(ti_lock);
 
     if (pmblock == NULL) {
-        pmblock = new PMBlockAllocator();
+        pmblock = new PMBlockAllocator(get_nvm_mgr());
         std::cout << "[THREAD]\tfirst new pmblock\n";
+        //        std::cout<<"PPPPP meta data addr "<<
+        //        get_nvm_mgr()->meta_data<<"\n";
     }
     if (epoch_mgr == NULL) {
         epoch_mgr = new Epoch_Mgr();
@@ -307,6 +287,8 @@ void register_threadinfo() {
             assert(0);
         }
         NVMMgr *mgr = get_nvm_mgr();
+        //        std::cout<<"in thread get mgr meta data addr
+        //        "<<mgr->meta_data<<"\n";
 
         ti = new (mgr->alloc_thread_info()) thread_info();
         ti->next = ti_list_head;
@@ -339,8 +321,12 @@ void unregister_threadinfo() {
     //    delete ti;
     ti = NULL;
     if (ti_list_head == NULL) {
+        // reset all, only use for gtest
         delete epoch_mgr;
         epoch_mgr = NULL;
+        delete pmblock;
+        pmblock = NULL;
+        tid = 0;
     }
 }
 

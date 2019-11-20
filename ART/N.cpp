@@ -176,7 +176,7 @@ void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     }
 
     // allocate a bigger node from NVMMgr
-    auto nBig = new (NVMMgr_ns::alloc_new_node(type))
+    auto nBig = new (NVMMgr_ns::alloc_new_node_from_type(type))
         biggerN(n->getLevel(), n->getPrefi()); // not persist
     n->copyTo(nBig);                           // not persist
     nBig->insert(key, val, false);             // not persist
@@ -202,7 +202,7 @@ void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     }
 
     // allocate a new node from NVMMgr
-    auto nNew = new (NVMMgr_ns::alloc_new_node(type))
+    auto nNew = new (NVMMgr_ns::alloc_new_node_from_type(type))
         curN(n->getLevel(), n->getPrefi()); // not persist
     n->copyTo(nNew);                        // not persist
     nNew->insert(key, val, false);          // not persist
@@ -331,7 +331,7 @@ void N::removeAndShrink(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     }
 
     // allocate a smaller node from NVMMgr
-    auto nSmall = new (NVMMgr_ns::alloc_new_node(type))
+    auto nSmall = new (NVMMgr_ns::alloc_new_node_from_type(type))
         smallerN(n->getLevel(), n->getPrefi()); // not persist
 
     n->remove(key, true, true);
