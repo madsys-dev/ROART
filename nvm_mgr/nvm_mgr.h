@@ -4,6 +4,7 @@
 #include "util.h"
 #include <fcntl.h>
 #include <list>
+#include <set>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
@@ -88,9 +89,13 @@ class NVMMgr {
 
     void *alloc_block(int tid);
 
+    void recovery_free_memory();
+
     // volatile metadata and rebuild when recovery
     int fd;
-
+    bool first_created;
+    std::set<std::pair<uint64_t, size_t>>
+        recovery_set; // used for memory recovery
     // persist it as the head of nvm region
     Head *meta_data;
 } __attribute__((aligned(64)));

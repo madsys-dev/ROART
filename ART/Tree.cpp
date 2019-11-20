@@ -26,12 +26,12 @@ namespace PART_ns {
 Tree::Tree() {
     std::cout << "[P-ART]\tnew P-ART\n";
 
-    bool init = init_nvm_mgr();
+    init_nvm_mgr();
     register_threadinfo();
     NVMMgr *mgr = get_nvm_mgr();
     //    Epoch_Mgr * epoch_mgr = new Epoch_Mgr();
 
-    if (init) {
+    if (mgr->first_created) {
         // first open
         root = new (mgr->alloc_tree_root()) N256(0, {});
         N::clflush((char *)root, sizeof(N256), true, true);
@@ -39,8 +39,9 @@ Tree::Tree() {
     } else {
         // recovery
         root = reinterpret_cast<N256 *>(mgr->alloc_tree_root());
-        std::cout << "[P-ART]\trecovery P-ART\n";
-        rebuild();
+        std::cout << "[P-ART]\trecovery P-ART and reclaim the memory\n";
+        rebuild(mgr->recovery_set);
+        mgr->recovery_free_memory();
     }
 }
 
@@ -599,9 +600,10 @@ restart:
     }
 }
 
-void Tree::rebuild() {
-    N::rebuild_node(root);
-    // TODO: reclaim the garbage node
+void Tree::rebuild(std::set<std::pair<uint64_t, size_t>> &rs) {
+    // rebuild meta data count/compactcount
+    // record all used memory (offset, size) into rs set
+    N::rebuild_node(root, rs);
 }
 
 typename Tree::CheckPrefixResult Tree::checkPrefix(N *n, const Key *k,

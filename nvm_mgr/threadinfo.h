@@ -131,6 +131,8 @@ void MarkNodeGarbage(void *node);
 uint64_t SummarizeGCEpoch();
 
 size_t size_align(size_t s, int align);
+size_t get_node_size(PART_ns::NTypes type);
+size_t convert_power_two(size_t s);
 
 void *alloc_new_node_from_type(PART_ns::NTypes type);
 void *alloc_new_node_from_size(size_t size);

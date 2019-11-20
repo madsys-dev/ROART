@@ -48,6 +48,10 @@ size_t size_align(size_t s, int align) {
     return ((s + align - 1) / align) * align;
 }
 
+size_t convert_power_two(size_t s) {
+    return ti->free_list->get_power_two_size(s);
+}
+
 /**************************PMFreeList interface*****************************/
 
 // PMFreeList::PMFreeList(PMBlockAllocator *pmb_) : pmb(pmb_) {

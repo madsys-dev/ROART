@@ -1,6 +1,7 @@
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include <cassert>
+#include <iostream>
 #include <mutex>
 #include <stdio.h>
 
@@ -30,6 +31,8 @@ int create_file(const char *file_name, uint64_t file_size) {
 NVMMgr::NVMMgr() {
     // access 的返回结果， 0: 存在， 1: 不存在
     int initial = access(get_filename(), F_OK);
+    first_created = false;
+    recovery_set.clear();
 
     if (initial) {
         int result = create_file(get_filename(), filesize);
@@ -37,6 +40,7 @@ NVMMgr::NVMMgr() {
             printf("[NVM MGR]\tcreate file failed when initalizing\n");
             exit(1);
         }
+        first_created = true;
         printf("[NVM MGR]\tcreate file success.\n");
     }
 
@@ -75,8 +79,6 @@ NVMMgr::NVMMgr() {
 
         flush_data((void *)meta_data, PGSIZE);
         printf("[NVM MGR]\tinitialize nvm file's head\n");
-    } else {
-        // TODO: recovery freelist of every thread
     }
 }
 
@@ -159,6 +161,52 @@ void *NVMMgr::alloc_block(int tid) {
     //    std::cout<<"mgr addr" <<this<<"\n";
 
     return addr;
+}
+
+// mutiple threads to recovery free list for
+// threads using recovery_set
+void NVMMgr::recovery_free_memory() {
+    const int thread_num = 10;
+    std::thread *tid[thread_num];
+    int per_thread_block = meta_data->free_bit_offset / thread_num;
+    if (meta_data->free_bit_offset % thread_num != 0)
+        per_thread_block++;
+
+    for (int i = 0; i < thread_num; i++) {
+        tid[i] = new std::thread(
+            [&](int id) {
+                // [start, end]
+                int start = id * per_thread_block;
+                int end = (id + 1) * per_thread_block;
+                for (int j = start;
+                     j < std::min(end, (int)meta_data->free_bit_offset); j++) {
+                    uint64_t start_addr = data_block_start + j * PGSIZE;
+                    uint64_t end_addr = start_addr + PGSIZE;
+                    int tid =
+                        meta_data
+                            ->bitmap[j]; // this block belong to which thread
+                    thread_info *the_ti = (thread_info *)get_thread_info(tid);
+
+                    auto iter =
+                        recovery_set.upper_bound(std::make_pair(start_addr, 0));
+                    while (iter != recovery_set.end() && iter->first < end_addr) {
+                        uint64_t this_addr = iter->first;
+                        uint64_t this_size = iter->second;
+                        the_ti->free_list->insert_into_freelist(
+                            start_addr, this_addr - start_addr);
+                        start_addr = this_addr + this_size;
+                        iter++;
+                    }
+                    if(end_addr - start_addr > 0){
+                        the_ti->free_list->insert_into_freelist(start_addr, end_addr-start_addr);
+                    }
+                }
+            },
+            i);
+    }
+    for(int i = 0; i < thread_num; i++){
+        tid[i]->join();
+    }
 }
 
 /*

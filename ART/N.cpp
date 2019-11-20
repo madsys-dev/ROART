@@ -553,13 +553,25 @@ void N::getChildren(N *node, uint8_t start, uint8_t end,
     }
 }
 
-void N::rebuild_node(N *node) {
+void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     if (N::isLeaf(node)) {
+        Leaf *leaf = N::getLeaf(node);
+        NTypes type = leaf->type;
+        size_t size = size_align(get_node_size(type), 64);
+        size = convert_power_two(size);
+        rs.insert(std::make_pair((uint64_t)leaf, size));
+
+        // TODO: leaf内部的数据，要存进去
         return;
     }
+    // insert internal node into set
+    NTypes type = node->type;
+    size_t size = size_align(get_node_size(type), 64);
+    size = convert_power_two(size);
+    rs.insert(std::make_pair((uint64_t)node, size));
+
     int xcount = 0;
     int xcompactCount = 0;
-    NTypes type = node->getType();
     // type is persistent when first create this node
     // TODO: using SIMD to accelerate recovery
     switch (type) {
@@ -570,7 +582,7 @@ void N::rebuild_node(N *node) {
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
-                rebuild_node(child);
+                rebuild_node(child, rs);
             }
         }
         break;
@@ -582,7 +594,7 @@ void N::rebuild_node(N *node) {
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
-                rebuild_node(child);
+                rebuild_node(child, rs);
             }
         }
         break;
@@ -594,7 +606,7 @@ void N::rebuild_node(N *node) {
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
-                rebuild_node(child);
+                rebuild_node(child, rs);
             }
         }
         break;
@@ -606,7 +618,7 @@ void N::rebuild_node(N *node) {
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
-                rebuild_node(child);
+                rebuild_node(child, rs);
             }
         }
         break;

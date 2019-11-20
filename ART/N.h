@@ -5,6 +5,7 @@
 #include "Epoch.h"
 #include "Key.h"
 #include <atomic>
+#include <set>
 #include <stdint.h>
 #include <string.h>
 #ifdef LOCK_INIT
@@ -197,7 +198,8 @@ class N : public BaseNode {
                             std::tuple<uint8_t, std::atomic<N *> *> children[],
                             uint32_t &childrenCount);
 
-    static void rebuild_node(N *node);
+    static void rebuild_node(N *node,
+                             std::set<std::pair<uint64_t, size_t>> &rs);
 
     static void mfence();
 

@@ -5,6 +5,7 @@
 #include "N256.h"
 #include "N4.h"
 #include "N48.h"
+#include <set>
 
 namespace PART_ns {
 class Tree {
@@ -60,9 +61,7 @@ class Tree {
 
     ~Tree();
 
-    void rebuild_node(N *n);
-
-    void rebuild();
+    void rebuild(std::set<std::pair<uint64_t, size_t>> &rs);
 
     void *lookup(const Key *k) const;
 
