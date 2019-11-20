@@ -242,11 +242,15 @@ void thread_info::PerformGC() {
 void thread_info::FreeEpochNode(void *node_p) {
     PART_ns::BaseNode *n = reinterpret_cast<PART_ns::BaseNode *>(node_p);
 
+    if (n->type == PART_ns::NTypes::Leaf) {
+        // reclaim leaf key
+        PART_ns::Leaf *leaf = (PART_ns::Leaf *)n;
+        free_node_from_size((uint64_t)(leaf->fkey), leaf->key_len);
+    }
+
+    // reclaim the node
     free_node_from_type((uint64_t)n, n->type);
 
-    if (n->type == PART_ns::NTypes::Leaf) {
-        // TODO: reclaim leaf key and value
-    }
 }
 
 void *alloc_new_node_from_type(PART_ns::NTypes type) {

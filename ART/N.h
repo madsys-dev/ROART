@@ -33,30 +33,16 @@ class Leaf : public BaseNode {
   public:
     size_t key_len;
     uint64_t key;
-    //    uint8_t *fkey;
-    // TODO: variable key
-    uint8_t fkey[16];
+    // variable key
+    uint8_t *fkey;
     uint64_t value;
 
   public:
-    Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
-        key_len = k->key_len;
-        value = k->value;
-#ifdef KEY_INLINE
-        key = k->key; // compare to store the key, new an array will decrease
-                      // 30% performance
-        fkey = (uint8_t *)&key;
-#else
-        //        fkey = new uint8_t[key_len];
-        memcpy(fkey, k->fkey, key_len);
-#endif
-    }
+    Leaf(const Key *k);
     // use for test
     Leaf() : BaseNode(NTypes::Leaf) {}
 
-    virtual ~Leaf() {
-        // TODO
-    }
+    virtual ~Leaf() {}
 
     inline uint64_t getValue() { return value; }
     inline bool checkKey(const Key *k) const {

@@ -75,11 +75,7 @@ class NVMMgr {
 
     ~NVMMgr();
 
-    bool reload_free_blocks();
-
-    // TODO: raise exception if this function is not invoked before any alloc
-    // function.
-    //        void recover_done();
+//    bool reload_free_blocks();
 
     void *alloc_tree_root() { return (void *)meta_data; }
 

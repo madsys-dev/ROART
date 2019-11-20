@@ -377,7 +377,7 @@ restart:
             Leaf *newLeaf = new (alloc_new_node_from_type(NTypes::Leaf))
                 Leaf(k); // not persist
             N::clflush((char *)newLeaf, sizeof(Leaf), true,
-                       true); // persist leaf
+                       true); // persist leaf and key pointer
 
             // not persist
             newNode->insert(k->fkey[nextLevel], N::setLeaf(newLeaf), false);
@@ -401,8 +401,7 @@ restart:
             break;
         }
         assert(nextLevel < k->getKeyLen()); // prevent duplicate key
-        // TODO
-        // maybe one string is substring of another, so it fkey[level] will be 0
+        // TODO: maybe one string is substring of another, so it fkey[level] will be 0
         // solve problem of substring
         level = nextLevel;
         nodeKey = k->fkey[level];
@@ -519,7 +518,7 @@ restart:
 
             if (nextNode == nullptr) {
                 if (N::isObsolete(v) ||
-                    !node->readUnlockOrRestart(v)) { // TODO benötigt??
+                    !node->readUnlockOrRestart(v)) { // TODO
                     goto restart;
                 }
                 return OperationResults::NotFound;
@@ -651,7 +650,7 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
         if (!needRecover) {
             // Inconsistent state due to prior system crash is suspected --> Do
             // recovery
-            // TODO: recovery algorithm will be added
+
             // 1) Picking up arbitrary two leaf nodes and then 2) rebuilding
             // correct compressed prefix
             art_cout << __func__ << " PERFORMING RECOVERY" << std::endl;

@@ -28,6 +28,24 @@ static inline unsigned long read_tsc(void) {
     return var;
 }
 
+Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
+        key_len = k->key_len;
+        value = k->value; // value is 8byte, offen store a pointer to row in a table
+#ifdef KEY_INLINE
+        key = k->key; // compare to store the key, new an array will decrease
+                      // 30% performance
+        fkey = (uint8_t *)&key;
+#else
+        // allocate from NVM for variable key
+        fkey = new(alloc_new_node_from_size(key_len)) uint8_t[key_len];
+        memcpy(fkey, k->fkey, key_len);
+        flush_data((void *)fkey, key_len);
+        // persist the key, without persist the link to leaf
+        // no one can see the key
+        // if crash without link the leaf, key can be reclaimed safely
+#endif
+    }
+
 void N::mfence() { asm volatile("mfence" ::: "memory"); }
 
 void N::clflush(char *data, int len, bool front, bool back) {
@@ -555,13 +573,16 @@ void N::getChildren(N *node, uint8_t start, uint8_t end,
 
 void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     if (N::isLeaf(node)) {
+        // leaf node
         Leaf *leaf = N::getLeaf(node);
         NTypes type = leaf->type;
         size_t size = size_align(get_node_size(type), 64);
         size = convert_power_two(size);
         rs.insert(std::make_pair((uint64_t)leaf, size));
 
-        // TODO: leaf内部的数据，要存进去
+        // leaf key also need to insert into rs set
+        size = convert_power_two(leaf->key_len);
+        rs.insert(std::make_pair((uint64_t)(leaf->fkey), size));
         return;
     }
     // insert internal node into set
