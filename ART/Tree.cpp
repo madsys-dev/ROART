@@ -401,8 +401,8 @@ restart:
             break;
         }
         assert(nextLevel < k->getKeyLen()); // prevent duplicate key
-        // TODO: maybe one string is substring of another, so it fkey[level] will be 0
-        // solve problem of substring
+        // TODO: maybe one string is substring of another, so it fkey[level]
+        // will be 0 solve problem of substring
         level = nextLevel;
         nodeKey = k->fkey[level];
 
@@ -517,8 +517,7 @@ restart:
                 nextNode = N::clearDirty(curref->load());
 
             if (nextNode == nullptr) {
-                if (N::isObsolete(v) ||
-                    !node->readUnlockOrRestart(v)) { // TODO
+                if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) { // TODO
                     goto restart;
                 }
                 return OperationResults::NotFound;

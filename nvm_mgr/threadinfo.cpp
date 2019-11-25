@@ -250,7 +250,6 @@ void thread_info::FreeEpochNode(void *node_p) {
 
     // reclaim the node
     free_node_from_type((uint64_t)n, n->type);
-
 }
 
 void *alloc_new_node_from_type(PART_ns::NTypes type) {

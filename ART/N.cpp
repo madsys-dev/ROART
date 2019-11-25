@@ -29,22 +29,22 @@ static inline unsigned long read_tsc(void) {
 }
 
 Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
-        key_len = k->key_len;
-        value = k->value; // value is 8byte, offen store a pointer to row in a table
+    key_len = k->key_len;
+    value = k->value; // value is 8byte, offen store a pointer to row in a table
 #ifdef KEY_INLINE
-        key = k->key; // compare to store the key, new an array will decrease
-                      // 30% performance
-        fkey = (uint8_t *)&key;
+    key = k->key; // compare to store the key, new an array will decrease
+                  // 30% performance
+    fkey = (uint8_t *)&key;
 #else
-        // allocate from NVM for variable key
-        fkey = new(alloc_new_node_from_size(key_len)) uint8_t[key_len];
-        memcpy(fkey, k->fkey, key_len);
-        flush_data((void *)fkey, key_len);
-        // persist the key, without persist the link to leaf
-        // no one can see the key
-        // if crash without link the leaf, key can be reclaimed safely
+    // allocate from NVM for variable key
+    fkey = new (alloc_new_node_from_size(key_len)) uint8_t[key_len];
+    memcpy(fkey, k->fkey, key_len);
+    flush_data((void *)fkey, key_len);
+    // persist the key, without persist the link to leaf
+    // no one can see the key
+    // if crash without link the leaf, key can be reclaimed safely
 #endif
-    }
+}
 
 void N::mfence() { asm volatile("mfence" ::: "memory"); }
 

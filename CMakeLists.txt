@@ -16,6 +16,7 @@ add_definitions(-DCLFLUSH)
 #add_definitions(-DCLWB)
 
 link_libraries(pthread atomic boost_system boost_thread gtest)
+link_libraries(pmemobj)
 find_library(TbbLib tbb)
 
 include_directories(./ART

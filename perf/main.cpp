@@ -4,7 +4,10 @@
 
 using namespace std;
 
-inline void clear_data() { system("rm -rf /mnt/pmem0/matianmao/part.data"); }
+inline void clear_data() {
+    system("rm -rf /mnt/pmem0/matianmao/part.data");
+    system("rm -rf /mnt/pmem0/matianmao/fast_fair.data");
+}
 
 int main(int argc, char **argv) {
     clear_data();

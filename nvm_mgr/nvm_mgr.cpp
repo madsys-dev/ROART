@@ -189,7 +189,8 @@ void NVMMgr::recovery_free_memory() {
 
                     auto iter =
                         recovery_set.upper_bound(std::make_pair(start_addr, 0));
-                    while (iter != recovery_set.end() && iter->first < end_addr) {
+                    while (iter != recovery_set.end() &&
+                           iter->first < end_addr) {
                         uint64_t this_addr = iter->first;
                         uint64_t this_size = iter->second;
                         the_ti->free_list->insert_into_freelist(
@@ -197,14 +198,15 @@ void NVMMgr::recovery_free_memory() {
                         start_addr = this_addr + this_size;
                         iter++;
                     }
-                    if(end_addr - start_addr > 0){
-                        the_ti->free_list->insert_into_freelist(start_addr, end_addr-start_addr);
+                    if (end_addr - start_addr > 0) {
+                        the_ti->free_list->insert_into_freelist(
+                            start_addr, end_addr - start_addr);
                     }
                 }
             },
             i);
     }
-    for(int i = 0; i < thread_num; i++){
+    for (int i = 0; i < thread_num; i++) {
         tid[i]->join();
     }
 }

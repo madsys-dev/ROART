@@ -75,7 +75,7 @@ class NVMMgr {
 
     ~NVMMgr();
 
-//    bool reload_free_blocks();
+    //    bool reload_free_blocks();
 
     void *alloc_tree_root() { return (void *)meta_data; }
 

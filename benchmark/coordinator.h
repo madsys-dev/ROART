@@ -6,7 +6,7 @@
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
-#include "fast_fair.h"
+#include "fast_fair_2.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "timer.h"
@@ -211,7 +211,6 @@ template <typename K, typename V, int size> class Coordinator {
         //            Benchmark *benchmark = getBenchmark(conf);
         Benchmark *benchmark = b;
         printf("[WORKER]\thello, I am worker %d\n", workerid);
-        register_threadinfo();
         stick_this_thread_to_core(workerid);
         bar->wait();
 
@@ -342,8 +341,6 @@ template <typename K, typename V, int size> class Coordinator {
         }
 #endif // PERF_LATENCY
 
-        unregister_threadinfo();
-
         printf("[WORKER]\tworker %d finished\n", workerid);
     }
 
@@ -403,10 +400,11 @@ template <typename K, typename V, int size> class Coordinator {
             delete[] results;
         } else if (conf.type == FAST_FAIR) {
             // FAST_FAIR
-            init_nvm_mgr();
             printf("test FAST_FAIR---------------------\n");
-            fastfair::btree *bt = new fastfair::btree();
-            register_threadinfo();
+            fastfair::init_pmem();
+            fastfair::btree *bt =
+                new (fastfair::allocate(sizeof(fastfair::btree)))
+                    fastfair::btree();
             Benchmark *benchmark = getBenchmark(conf);
 
             Result *results = new Result[conf.num_threads];
@@ -447,11 +445,8 @@ template <typename K, typename V, int size> class Coordinator {
             printf("[COORDINATOR]\ttotal throughput: %.3lf Mtps\n",
                    (double)final_result.throughput / 1000000.0 / conf.duration);
 
-            delete bt;
             delete[] pid;
             delete[] results;
-            unregister_threadinfo();
-            close_nvm_mgr();
         }
 
 #ifdef PERF_LATENCY
