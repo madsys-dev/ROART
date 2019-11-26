@@ -75,7 +75,8 @@ void N::helpFlush(std::atomic<N *> *n) {
     // printf("help\n");
     if (N::isDirty(now_node)) {
         printf("help\n");
-        clflush((char *)n, sizeof(N *), true, true);
+        flush_data((void *)n, sizeof(N *));
+        //        clflush((char *)n, sizeof(N *), true, true);
         n->compare_exchange_strong(now_node, N::clearDirty(now_node));
     }
 }
@@ -199,7 +200,8 @@ void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     n->copyTo(nBig);                           // not persist
     nBig->insert(key, val, false);             // not persist
     // persist the node
-    clflush((char *)nBig, sizeof(biggerN), true, true);
+    flush_data((void *)nBig, sizeof(biggerN));
+    //    clflush((char *)nBig, sizeof(biggerN), true, true);
 
     N::change(parentNode, keyParent, nBig);
     parentNode->writeUnlock();
@@ -225,7 +227,8 @@ void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     n->copyTo(nNew);                        // not persist
     nNew->insert(key, val, false);          // not persist
     // persist the node
-    clflush((char *)nNew, sizeof(curN), true, true);
+    flush_data((void *)nNew, sizeof(curN));
+    //    clflush((char *)nNew, sizeof(curN), true, true);
 
     N::change(parentNode, keyParent, nNew);
     parentNode->writeUnlock();
@@ -356,7 +359,8 @@ void N::removeAndShrink(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     n->copyTo(nSmall); // not persist
 
     // persist the node
-    clflush((char *)nSmall, sizeof(smallerN), true, true);
+    flush_data((void *)nSmall, sizeof(smallerN));
+    //    clflush((char *)nSmall, sizeof(smallerN), true, true);
     N::change(parentNode, keyParent, nSmall);
 
     parentNode->writeUnlock();
@@ -454,7 +458,8 @@ void N::setPrefix(const uint8_t *prefix, uint32_t length, bool flush) {
         this->prefix.store(p, std::memory_order_release);
     }
     if (flush)
-        clflush((char *)&(this->prefix), sizeof(Prefix), false, true);
+        flush_data((void *)&(this->prefix), sizeof(Prefix));
+    //        clflush((char *)&(this->prefix), sizeof(Prefix), false, true);
 }
 
 void N::addPrefixBefore(N *node, uint8_t key) {
@@ -471,7 +476,8 @@ void N::addPrefixBefore(N *node, uint8_t key) {
     }
     p.prefixCount += nodeP.prefixCount + 1;
     this->prefix.store(p, std::memory_order_release);
-    clflush((char *)&this->prefix, sizeof(Prefix), false, true);
+    flush_data((void *)&(this->prefix), sizeof(Prefix));
+    //    clflush((char *)&this->prefix, sizeof(Prefix), false, true);
 }
 
 bool N::isLeaf(const N *n) {

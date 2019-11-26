@@ -11,11 +11,14 @@ bool N16::insert(uint8_t key, N *n, bool flush) {
     }
     keys[compactCount].store(flipSign(key), std::memory_order_seq_cst);
     if (flush)
-        clflush((char *)&keys[compactCount], sizeof(N *), false, true);
+        flush_data((void *)&keys[compactCount], sizeof(N *));
+    //        clflush((char *)&keys[compactCount], sizeof(N *), false, true);
 
     children[compactCount].store(N::setDirty(n), std::memory_order_seq_cst);
     if (flush)
-        clflush((char *)&children[compactCount], sizeof(N *), false, true);
+        flush_data((void *)&children[compactCount], sizeof(N *));
+    //        clflush((char *)&children[compactCount], sizeof(N *), false,
+    //        true);
     children[compactCount].store(n, std::memory_order_seq_cst);
     compactCount++;
     count++;
@@ -29,7 +32,8 @@ void N16::change(uint8_t key, N *val) {
     auto childPos = getChildPos(key);
     assert(childPos != nullptr);
     childPos->store(N::setDirty(val), std::memory_order_seq_cst);
-    clflush((char *)childPos, sizeof(N *), false, true);
+    flush_data((void *)childPos, sizeof(N *));
+    //    clflush((char *)childPos, sizeof(N *), false, true);
     childPos->store(val, std::memory_order_seq_cst);
 }
 
@@ -73,7 +77,8 @@ bool N16::remove(uint8_t k, bool force, bool flush) {
     auto leafPlace = getChildPos(k);
     assert(leafPlace != nullptr);
     leafPlace->store(N::setDirty(nullptr), std::memory_order_seq_cst);
-    clflush((char *)leafPlace, sizeof(N *), false, true);
+    flush_data((void *)leafPlace, sizeof(N *));
+    //    clflush((char *)leafPlace, sizeof(N *), false, true);
     leafPlace->store(nullptr, std::memory_order_seq_cst);
     count--;
     assert(getChild(k) == nullptr);

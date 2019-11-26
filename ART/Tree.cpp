@@ -34,7 +34,8 @@ Tree::Tree() {
     if (mgr->first_created) {
         // first open
         root = new (mgr->alloc_tree_root()) N256(0, {});
-        N::clflush((char *)root, sizeof(N256), true, true);
+        flush_data((void *)root, sizeof(N256));
+        //        N::clflush((char *)root, sizeof(N256), true, true);
         std::cout << "[P-ART]\tfirst create a P-ART\n";
     } else {
         // recovery
@@ -376,14 +377,16 @@ restart:
             // 2)  add node and (tid, *k) as children
             Leaf *newLeaf = new (alloc_new_node_from_type(NTypes::Leaf))
                 Leaf(k); // not persist
-            N::clflush((char *)newLeaf, sizeof(Leaf), true,
-                       true); // persist leaf and key pointer
+            flush_data((void *)newLeaf, sizeof(Leaf));
+            //            N::clflush((char *)newLeaf, sizeof(Leaf), true,
+            //                       true); // persist leaf and key pointer
 
             // not persist
             newNode->insert(k->fkey[nextLevel], N::setLeaf(newLeaf), false);
             newNode->insert(nonMatchingKey, node, false);
             // persist the new node
-            N::clflush((char *)newNode, sizeof(N4), true, true);
+            flush_data((void *)newNode, sizeof(N4));
+            //            N::clflush((char *)newNode, sizeof(N4), true, true);
 
             N::change(parentNode, parentKey, newNode);
             parentNode->writeUnlock();
@@ -420,7 +423,8 @@ restart:
 
             Leaf *newLeaf =
                 new (alloc_new_node_from_type(NTypes::Leaf)) Leaf(k);
-            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
+            flush_data((void *)newLeaf, sizeof(Leaf));
+            //            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
 
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeaf(newLeaf), needRestart);
@@ -458,12 +462,14 @@ restart:
                 N4(level + prefixLength, &k->fkey[level], prefixLength);
             Leaf *newLeaf =
                 new (alloc_new_node_from_type(NTypes::Leaf)) Leaf(k);
-            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
+            flush_data((void *)newLeaf, sizeof(Leaf));
+            //            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
 
             n4->insert(k->fkey[level + prefixLength], N::setLeaf(newLeaf),
                        false);
             n4->insert(key->fkey[level + prefixLength], nextNode, false);
-            N::clflush((char *)n4, sizeof(N4), true, true);
+            flush_data((void *)n4, sizeof(N4));
+            //            N::clflush((char *)n4, sizeof(N4), true, true);
 
             N::change(node, k->fkey[level - 1], n4);
             node->writeUnlock();

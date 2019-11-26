@@ -4,6 +4,7 @@
 //#define ART_NOWRITELOCK
 #include "Epoch.h"
 #include "Key.h"
+#include "util.h"
 #include <atomic>
 #include <set>
 #include <stdint.h>

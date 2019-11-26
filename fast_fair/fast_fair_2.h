@@ -1,6 +1,7 @@
 #ifndef BTREE_H_
 #define BTREE_H_
 
+#include "util.h"
 #include <cassert>
 #include <climits>
 #include <fstream>
@@ -209,7 +210,7 @@ class page {
 
         hdr.last_index = 0;
 
-        clflush((char *)this, sizeof(page));
+        flush_data((void *)this, sizeof(page));
     }
 
     // this is called when tree grows
@@ -222,7 +223,7 @@ class page {
 
         hdr.last_index = 0;
 
-        clflush((char *)this, sizeof(page));
+        flush_data((void *)this, sizeof(page));
     }
 
 #ifndef USE_PMDK
@@ -289,7 +290,7 @@ class page {
                       1) &&
                      ((remainder + sizeof(entry)) % CACHE_LINE_SIZE) != 0);
                 if (do_flush) {
-                    clflush((char *)records_ptr, CACHE_LINE_SIZE);
+                    flush_data((void *)records_ptr, CACHE_LINE_SIZE);
                 }
             }
         }
@@ -329,14 +330,14 @@ class page {
 
             array_end->ptr = (char *)nullptr;
 
-            clflush((char *)this, CACHE_LINE_SIZE);
+            flush_data((void *)this, CACHE_LINE_SIZE);
         } else {
             int i = *num_entries - 1, inserted = 0, to_flush_cnt = 0;
             records[*num_entries + 1].ptr = records[*num_entries].ptr;
             if ((uint64_t) &
                 (records[*num_entries + 1].ptr) % CACHE_LINE_SIZE == 0)
-                clflush((char *)&(records[*num_entries + 1].ptr),
-                        sizeof(char *));
+                flush_data((void *)&(records[*num_entries + 1].ptr),
+                           sizeof(char *));
 
             // FAST
             for (i = *num_entries - 1; i >= 0; i--) {
@@ -353,7 +354,7 @@ class page {
                            CACHE_LINE_SIZE) == 1) &&
                          ((remainder + sizeof(entry)) % CACHE_LINE_SIZE) != 0);
                     if (do_flush) {
-                        clflush((char *)records_ptr, CACHE_LINE_SIZE);
+                        flush_data((void *)records_ptr, CACHE_LINE_SIZE);
                         to_flush_cnt = 0;
                     } else
                         ++to_flush_cnt;
@@ -363,7 +364,7 @@ class page {
                     records[i + 1].key.ikey = key;
                     records[i + 1].ptr = ptr;
 
-                    clflush((char *)&records[i + 1], sizeof(entry));
+                    flush_data((void *)&records[i + 1], sizeof(entry));
                     inserted = 1;
                     break;
                 }
@@ -372,7 +373,7 @@ class page {
                 records[0].ptr = (char *)hdr.leftmost_ptr;
                 records[0].key.ikey = key;
                 records[0].ptr = ptr;
-                clflush((char *)&records[0], sizeof(entry));
+                flush_data((void *)&records[0], sizeof(entry));
             }
         }
 
@@ -401,7 +402,7 @@ class page {
             array_end->ptr = (char *)nullptr;
 
             if (flush) {
-                clflush((char *)this, CACHE_LINE_SIZE);
+                flush_data((void *)this, CACHE_LINE_SIZE);
             }
         } else {
             int i = *num_entries - 1, inserted = 0, to_flush_cnt = 0;
@@ -409,8 +410,8 @@ class page {
 
             if ((uint64_t) &
                 (records[*num_entries + 1].ptr) % CACHE_LINE_SIZE == 0)
-                clflush((char *)&(records[*num_entries + 1].ptr),
-                        sizeof(char *));
+                flush_data((void *)&(records[*num_entries + 1].ptr),
+                           sizeof(char *));
 
             // FAST
             for (i = *num_entries - 1; i >= 0; i--) {
@@ -429,7 +430,7 @@ class page {
                            CACHE_LINE_SIZE) == 1) &&
                          ((remainder + sizeof(entry)) % CACHE_LINE_SIZE) != 0);
                     if (do_flush) {
-                        clflush((char *)records_ptr, CACHE_LINE_SIZE);
+                        flush_data((void *)records_ptr, CACHE_LINE_SIZE);
                         to_flush_cnt = 0;
                     } else
                         ++to_flush_cnt;
@@ -447,7 +448,7 @@ class page {
                         key_item *k = (key_item *)pmemobj_direct(p);
                         k->key_len = key->key_len;
                         memcpy(k->key, key->key, key->key_len);
-                        clflush((char *)k, sizeof(key_item) + k->key_len);
+                        flush_data((void *)k, sizeof(key_item) + k->key_len);
 
                         records[i + 1].key.skey = k;
                         records[i + 1].ptr = ptr;
@@ -456,7 +457,7 @@ class page {
 #else
                     records[i + 1].key.skey = key;
                     records[i + 1].ptr = ptr;
-                    clflush((char *)&records[i + 1], sizeof(entry));
+                    flush_data((void *)&records[i + 1], sizeof(entry));
 #endif
                     inserted = 1;
                     break;
@@ -475,7 +476,7 @@ class page {
                     key_item *k = (key_item *)pmemobj_direct(p);
                     k->key_len = key->key_len;
                     memcpy(k->key, key->key, key->key_len);
-                    clflush((char *)k, sizeof(key_item) + k->key_len);
+                    flush_data((void *)k, sizeof(key_item) + k->key_len);
 
                     records[0].key.skey = k;
                     records[0].ptr = ptr;
@@ -484,7 +485,7 @@ class page {
 #else
                 records[0].key.skey = key;
                 records[0].ptr = ptr;
-                clflush((char *)&records[0], sizeof(entry));
+                flush_data((void *)&records[0], sizeof(entry));
 #endif
             }
         }
@@ -596,7 +597,7 @@ class page {
 
                 sibling->hdr.highest.ikey = records[m].key.ikey;
                 sibling->hdr.sibling_ptr = hdr.sibling_ptr;
-                clflush((char *)sibling, sizeof(page));
+                flush_data((void *)sibling, sizeof(page));
 
                 if (hdr.leftmost_ptr == nullptr)
                     sibling->hdr.mtx->lock();
@@ -631,7 +632,7 @@ class page {
 
             sibling->hdr.highest.ikey = records[m].key.ikey;
             sibling->hdr.sibling_ptr = hdr.sibling_ptr;
-            clflush((char *)sibling, sizeof(page));
+            flush_data((void *)sibling, sizeof(page));
 
             if (hdr.leftmost_ptr == nullptr)
                 sibling->hdr.mtx->lock();
@@ -642,14 +643,14 @@ class page {
                 hdr.switch_counter += 2;
             mfence();
             hdr.sibling_ptr = sibling;
-            clflush((char *)&hdr, sizeof(hdr));
+            flush_data((void *)&hdr, sizeof(hdr));
 #endif
             // set to nullptr
             records[m].ptr = nullptr;
-            clflush((char *)&records[m], sizeof(entry));
+            flush_data((void *)&records[m], sizeof(entry));
 
             hdr.last_index = m - 1;
-            clflush((char *)&(hdr.last_index), sizeof(int16_t));
+            flush_data((void *)&(hdr.last_index), sizeof(int16_t));
 
             num_entries = hdr.last_index + 1;
 
@@ -824,7 +825,7 @@ class page {
 
                 sibling->hdr.highest.skey = records[m].key.skey;
                 sibling->hdr.sibling_ptr = hdr.sibling_ptr;
-                clflush((char *)sibling, sizeof(page));
+                flush_data((void *)sibling, sizeof(page));
 
                 if (hdr.leftmost_ptr == nullptr)
                     sibling->hdr.mtx->lock();
@@ -861,7 +862,7 @@ class page {
 
             sibling->hdr.highest.skey = records[m].key.skey;
             sibling->hdr.sibling_ptr = hdr.sibling_ptr;
-            clflush((char *)sibling, sizeof(page));
+            flush_data((void *)sibling, sizeof(page));
 
             if (hdr.leftmost_ptr == nullptr)
                 sibling->hdr.mtx->lock();
@@ -873,14 +874,14 @@ class page {
                 hdr.switch_counter += 2;
             mfence();
             hdr.sibling_ptr = sibling;
-            clflush((char *)&hdr, sizeof(hdr));
+            flush_data((void *)&hdr, sizeof(hdr));
 #endif
 
             records[m].ptr = nullptr;
-            clflush((char *)&records[m], sizeof(entry));
+            flush_data((void *)&records[m], sizeof(entry));
 
             hdr.last_index = m - 1;
-            clflush((char *)&(hdr.last_index), sizeof(int16_t));
+            flush_data((void *)&(hdr.last_index), sizeof(int16_t));
 
             num_entries = hdr.last_index + 1;
 
@@ -1860,20 +1861,20 @@ btree::btree() {
         PMEMoid ptr =
             pmemobj_tx_alloc(sizeof(char) * PAGESIZE, TOID_TYPE_NUM(char));
         root = (char *)(new (pmemobj_direct(ptr)) page());
-        clflush((char *)root, sizeof(page));
+        flush_data((void *)root, sizeof(page));
     }
     TX_END
     std::cout << "[FAST FAIR]\talloc root successfully\n";
 #else
     root = (char *)new page();
-    clflush((char *)root, sizeof(page));
+    flush_data((void *)root, sizeof(page));
 #endif
     height = 1;
 }
 
 void btree::setNewRoot(char *new_root) {
     this->root = (char *)new_root;
-    clflush((char *)&this->root, sizeof(char *));
+    flush_data((void *)&this->root, sizeof(char *));
     ++height;
 }
 
@@ -1885,7 +1886,7 @@ key_item *btree::make_key_item(char *key, size_t key_len, bool flush) {
     //    new_key->key = key;
     memcpy(new_key->key, key, key_len); // copy including nullptr character
 
-    //    clflush((char *)new_key, sizeof(key_item) + key_len);
+    //    flush_data((void *)new_key, sizeof(key_item) + key_len);
 
     return new_key;
 }

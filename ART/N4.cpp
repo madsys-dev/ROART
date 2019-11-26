@@ -21,11 +21,13 @@ bool N4::insert(uint8_t key, N *n, bool flush) {
     }
     keys[compactCount].store(key, std::memory_order_seq_cst);
     if (flush)
-        clflush((char *)&keys[compactCount], sizeof(uint8_t), true, true);
+        flush_data((void *)&keys[compactCount], sizeof(uint8_t));
+    //        clflush((char *)&keys[compactCount], sizeof(uint8_t), true, true);
 
     children[compactCount].store(N::setDirty(n), std::memory_order_seq_cst);
     if (flush)
-        clflush((char *)&children[compactCount], sizeof(N *), true, true);
+        flush_data((void *)&children[compactCount], sizeof(N *));
+    //        clflush((char *)&children[compactCount], sizeof(N *), true, true);
     children[compactCount].store(n, std::memory_order_seq_cst);
     compactCount++;
     count++;
@@ -40,7 +42,9 @@ void N4::change(uint8_t key, N *val) {
         N *child = children[i].load();
         if (child != nullptr && keys[i].load() == key) {
             children[i].store(N::setDirty(val), std::memory_order_seq_cst);
-            clflush((char *)&children[i], sizeof(N *), false, true);
+            flush_data((void *)&children[i], sizeof(N *));
+            //            clflush((char *)&children[i], sizeof(N *), false,
+            //            true);
             children[i].store(val, std::memory_order_seq_cst);
             return;
         }
@@ -63,7 +67,9 @@ bool N4::remove(uint8_t k, bool force, bool flush) {
     for (uint32_t i = 0; i < compactCount; ++i) {
         if (children[i] != nullptr && keys[i].load() == k) {
             children[i].store(N::setDirty(nullptr), std::memory_order_seq_cst);
-            clflush((char *)&children[i], sizeof(N *), false, true);
+            flush_data((void *)&children[i], sizeof(N *));
+            //            clflush((char *)&children[i], sizeof(N *), false,
+            //            true);
             children[i].store(nullptr, std::memory_order_seq_cst);
             count--;
             return true;
