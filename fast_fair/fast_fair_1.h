@@ -15,7 +15,6 @@
 #include <time.h>
 #include <unistd.h>
 #include <vector>
-
 #ifdef LOCK_INIT
 #include "tbb/concurrent_vector.h"
 #endif
@@ -214,11 +213,7 @@ class page {
 
     void *operator new(size_t size) {
         void *ret;
-#ifdef USE_PMDK
-        // TODO
-#else
         posix_memalign(&ret, 64, size);
-#endif
         return ret;
     }
 
@@ -558,14 +553,18 @@ class page {
 
             array_end->ptr = (char *)NULL;
 
-            clflush((char *)this, CACHE_LINE_SIZE);
+            if (flush) {
+                clflush((char *)this, CACHE_LINE_SIZE);
+            }
         } else {
             int i = *num_entries - 1, inserted = 0, to_flush_cnt = 0;
             records[*num_entries + 1].ptr = records[*num_entries].ptr;
-            if ((uint64_t) &
-                (records[*num_entries + 1].ptr) % CACHE_LINE_SIZE == 0)
-                clflush((char *)&(records[*num_entries + 1].ptr),
-                        sizeof(char *));
+            if (flush) {
+                if ((uint64_t) &
+                    (records[*num_entries + 1].ptr) % CACHE_LINE_SIZE == 0)
+                    clflush((char *)&(records[*num_entries + 1].ptr),
+                            sizeof(char *));
+            }
 
             // FAST
             for (i = *num_entries - 1; i >= 0; i--) {
@@ -573,26 +572,28 @@ class page {
                     records[i + 1].ptr = records[i].ptr;
                     records[i + 1].key.ikey = records[i].key.ikey;
 
-                    uint64_t records_ptr = (uint64_t)(&records[i + 1]);
+                    if (flush) {
+                        uint64_t records_ptr = (uint64_t)(&records[i + 1]);
 
-                    int remainder = records_ptr % CACHE_LINE_SIZE;
-                    bool do_flush =
-                        (remainder == 0) ||
-                        ((((int)(remainder + sizeof(entry)) /
-                           CACHE_LINE_SIZE) == 1) &&
-                         ((remainder + sizeof(entry)) % CACHE_LINE_SIZE) != 0);
-                    if (do_flush) {
-                        clflush((char *)records_ptr, CACHE_LINE_SIZE);
-                        to_flush_cnt = 0;
-                    } else
-                        ++to_flush_cnt;
-
+                        int remainder = records_ptr % CACHE_LINE_SIZE;
+                        bool do_flush = (remainder == 0) ||
+                                        ((((int)(remainder + sizeof(entry)) /
+                                           CACHE_LINE_SIZE) == 1) &&
+                                         ((remainder + sizeof(entry)) %
+                                          CACHE_LINE_SIZE) != 0);
+                        if (do_flush) {
+                            clflush((char *)records_ptr, CACHE_LINE_SIZE);
+                            to_flush_cnt = 0;
+                        } else
+                            ++to_flush_cnt;
+                    }
                 } else {
                     records[i + 1].ptr = records[i].ptr;
                     records[i + 1].key.ikey = key;
                     records[i + 1].ptr = ptr;
 
-                    clflush((char *)&records[i + 1], sizeof(entry));
+                    if (flush)
+                        clflush((char *)&records[i + 1], sizeof(entry));
                     inserted = 1;
                     break;
                 }
@@ -601,7 +602,8 @@ class page {
                 records[0].ptr = (char *)hdr.leftmost_ptr;
                 records[0].key.ikey = key;
                 records[0].ptr = ptr;
-                clflush((char *)&records[0], sizeof(entry));
+                if (flush)
+                    clflush((char *)&records[0], sizeof(entry));
             }
         }
 
@@ -634,11 +636,12 @@ class page {
         } else {
             int i = *num_entries - 1, inserted = 0, to_flush_cnt = 0;
             records[*num_entries + 1].ptr = records[*num_entries].ptr;
-
-            if ((uint64_t) &
-                (records[*num_entries + 1].ptr) % CACHE_LINE_SIZE == 0)
-                clflush((char *)&(records[*num_entries + 1].ptr),
-                        sizeof(char *));
+            if (flush) {
+                if ((uint64_t) &
+                    (records[*num_entries + 1].ptr) % CACHE_LINE_SIZE == 0)
+                    clflush((char *)&(records[*num_entries + 1].ptr),
+                            sizeof(char *));
+            }
 
             // FAST
             for (i = *num_entries - 1; i >= 0; i--) {
@@ -648,26 +651,28 @@ class page {
                     records[i + 1].ptr = records[i].ptr;
                     records[i + 1].key.skey = records[i].key.skey;
 
-                    uint64_t records_ptr = (uint64_t)(&records[i + 1]);
+                    if (flush) {
+                        uint64_t records_ptr = (uint64_t)(&records[i + 1]);
 
-                    int remainder = records_ptr % CACHE_LINE_SIZE;
-                    bool do_flush =
-                        (remainder == 0) ||
-                        ((((int)(remainder + sizeof(entry)) /
-                           CACHE_LINE_SIZE) == 1) &&
-                         ((remainder + sizeof(entry)) % CACHE_LINE_SIZE) != 0);
-                    if (do_flush) {
-                        clflush((char *)records_ptr, CACHE_LINE_SIZE);
-                        to_flush_cnt = 0;
-                    } else
-                        ++to_flush_cnt;
-
+                        int remainder = records_ptr % CACHE_LINE_SIZE;
+                        bool do_flush = (remainder == 0) ||
+                                        ((((int)(remainder + sizeof(entry)) /
+                                           CACHE_LINE_SIZE) == 1) &&
+                                         ((remainder + sizeof(entry)) %
+                                          CACHE_LINE_SIZE) != 0);
+                        if (do_flush) {
+                            clflush((char *)records_ptr, CACHE_LINE_SIZE);
+                            to_flush_cnt = 0;
+                        } else
+                            ++to_flush_cnt;
+                    }
                 } else {
                     records[i + 1].ptr = records[i].ptr;
                     records[i + 1].key.skey = key;
                     records[i + 1].ptr = ptr;
 
-                    clflush((char *)&records[i + 1], sizeof(entry));
+                    if (flush)
+                        clflush((char *)&records[i + 1], sizeof(entry));
                     inserted = 1;
                     break;
                 }
@@ -676,7 +681,8 @@ class page {
                 records[0].ptr = (char *)hdr.leftmost_ptr;
                 records[0].key.skey = key;
                 records[0].ptr = ptr;
-                clflush((char *)&records[0], sizeof(entry));
+                if (flush)
+                    clflush((char *)&records[0], sizeof(entry));
             }
         }
 
@@ -753,7 +759,7 @@ class page {
         } else { // FAIR
             // overflow
             // create a new node
-            page *sibling = new page(hdr.level); // 重载了new运算符
+            page *sibling = new page(hdr.level);
             register int m = (int)ceil(num_entries / 2);
             uint64_t split_key = records[m].key.ikey;
 
@@ -1888,15 +1894,13 @@ void btree::setNewRoot(char *new_root) {
 
 key_item *btree::make_key_item(char *key, size_t key_len, bool flush) {
     void *aligned_alloc;
-#ifdef USE_PMDK
-#else
     posix_memalign(&aligned_alloc, 64, sizeof(key_item) + key_len);
-#endif
     key_item *new_key = (key_item *)aligned_alloc;
     new_key->key_len = key_len;
     memcpy(new_key->key, key, key_len); // copy including NULL character
 
-    clflush((char *)new_key, sizeof(key_item) + key_len);
+    if (flush)
+        clflush((char *)new_key, sizeof(key_item) + key_len);
 
     return new_key;
 }

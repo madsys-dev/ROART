@@ -6,7 +6,7 @@
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
-#include "fast_fair_1.h"
+#include "fast_fair_2.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "timer.h"
@@ -360,6 +360,7 @@ template <typename K, typename V, int size> class Coordinator {
             bar = new boost::barrier(conf.num_threads + 1);
 
             PART_ns::Key *k = new PART_ns::Key();
+            printf("init keys: %d\n", (int)conf.init_keys);
             for (unsigned long i = 0; i < conf.init_keys; i++) {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
@@ -392,8 +393,11 @@ template <typename K, typename V, int size> class Coordinator {
             }
 
             printf("[COORDINATOR]\tFinish benchmark..\n");
-            printf("[COORDINATOR]\ttotal throughput: %.3lf Mtps\n",
-                   (double)final_result.throughput / 1000000.0 / conf.duration);
+            printf("[RESULT]\ttotal throughput: %.3lf Mtps, %d threads, %s, "
+                   "%s, benchmark %d\n",
+                   (double)final_result.throughput / 1000000.0 / conf.duration,
+                   conf.num_threads, (conf.type == PART) ? "ART" : "FF",
+                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark);
 
             delete art;
             delete[] pid;
@@ -401,11 +405,16 @@ template <typename K, typename V, int size> class Coordinator {
         } else if (conf.type == FAST_FAIR) {
             // FAST_FAIR
             printf("test FAST_FAIR---------------------\n");
-//            fastfair::init_pmem();
-//            fastfair::btree *bt =
-//                new (fastfair::allocate(sizeof(fastfair::btree)))
-//                    fastfair::btree();
+#ifdef USE_PMDK
+            fastfair::init_pmem();
+            fastfair::btree *bt =
+                new (fastfair::allocate(sizeof(fastfair::btree)))
+                    fastfair::btree();
+            std::cout << "[FF]\tPM create tree\n";
+#else
             fastfair::btree *bt = new fastfair::btree();
+            std::cout << "[FF]\tmemory create tree\n";
+#endif
             Benchmark *benchmark = getBenchmark(conf);
 
             Result *results = new Result[conf.num_threads];
@@ -413,12 +422,13 @@ template <typename K, typename V, int size> class Coordinator {
 
             std::thread **pid = new std::thread *[conf.num_threads];
             bar = new boost::barrier(conf.num_threads + 1);
-
+            printf("init keys: %d\n", (int)conf.init_keys);
             for (unsigned long i = 0; i < conf.init_keys; i++) {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
                     bt->btree_insert(kk, (char *)kk);
-//                    std::cout<<"insert key "<<kk << " id: "<<i<<"\n";
+                    //                    std::cout << "insert key " << kk << "
+                    //                    id: " << i << "\n";
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
                     bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
@@ -444,8 +454,11 @@ template <typename K, typename V, int size> class Coordinator {
             }
 
             printf("[COORDINATOR]\tFinish benchmark..\n");
-            printf("[COORDINATOR]\ttotal throughput: %.3lf Mtps\n",
-                   (double)final_result.throughput / 1000000.0 / conf.duration);
+            printf("[RESULT]\ttotal throughput: %.3lf Mtps, %d threads, %s, "
+                   "%s, benchmark %d\n",
+                   (double)final_result.throughput / 1000000.0 / conf.duration,
+                   conf.num_threads, (conf.type == PART) ? "ART" : "FF",
+                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark);
 
             delete[] pid;
             delete[] results;

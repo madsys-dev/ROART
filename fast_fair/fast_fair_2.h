@@ -22,7 +22,6 @@
 #endif
 
 namespace fastfair {
-//#define USE_PMDK
 #define PAGESIZE 512
 
 static uint64_t CPU_FREQ_MHZ = 2100;
@@ -106,7 +105,7 @@ union Key {
 class page;
 
 class btree {
-  private:
+  public:
     int height;
     char *root;
 
@@ -564,6 +563,8 @@ class page {
                  // overflow
                  // create a new node
 #ifdef USE_PMDK
+            //            printf("num %d %d, start pmdk allocate\n",
+            //            num_entries, cardinality);
             register int m;
             uint64_t split_key;
             page *sibling;
@@ -574,7 +575,6 @@ class page {
                 PMEMoid ptr = pmemobj_tx_alloc(sizeof(char) * PAGESIZE,
                                                TOID_TYPE_NUM(char));
                 sibling = new (pmemobj_direct(ptr)) page(hdr.level);
-
                 // copy half to sibling and init sibling
                 m = (int)ceil(num_entries / 2);
                 split_key = records[m].key.ikey;
@@ -606,7 +606,6 @@ class page {
                 else
                     hdr.switch_counter += 2;
                 mfence();
-
                 hdr.sibling_ptr = sibling;
             }
             TX_END
@@ -671,16 +670,19 @@ class page {
             if (bt->root ==
                 (char *)this) { // only one node can update the root ptr
 #ifdef USE_PMDK
+                //                printf("split root\n");
                 page *new_root;
                 TX_BEGIN(pmem_pool) {
-                    char *root = bt->getRoot();
                     pmemobj_tx_add_range_direct(
-                        &root, sizeof(uint64_t)); // root undo log
+                        &(bt->root), sizeof(uint64_t)); // root undo log
+                    pmemobj_tx_add_range_direct(&(bt->height),
+                                                sizeof(uint64_t));
                     PMEMoid ptr = pmemobj_tx_alloc(sizeof(char) * PAGESIZE,
                                                    TOID_TYPE_NUM(char));
                     new_root = new (pmemobj_direct(ptr))
                         page((page *)this, split_key, sibling, hdr.level + 1);
-                    bt->setNewRoot((char *)new_root);
+                    bt->root = (char *)new_root;
+                    bt->height++;
                 }
                 TX_END
 #else
@@ -802,6 +804,7 @@ class page {
                 PMEMoid ptr = pmemobj_tx_alloc(sizeof(char) * PAGESIZE,
                                                TOID_TYPE_NUM(char));
                 sibling = new (pmemobj_direct(ptr)) page(hdr.level);
+
                 m = (int)ceil(num_entries / 2);
                 split_key = records[m].key.skey;
                 sibling_cnt = 0;
@@ -902,14 +905,16 @@ class page {
 #ifdef USE_PMDK
                 page *new_root;
                 TX_BEGIN(pmem_pool) {
-                    char *root = bt->getRoot();
                     pmemobj_tx_add_range_direct(
-                        &root, sizeof(uint64_t)); // root undo log
+                        &(bt->root), sizeof(uint64_t)); // root undo log
+                    pmemobj_tx_add_range_direct(&(bt->height),
+                                                sizeof(uint64_t));
                     PMEMoid ptr = pmemobj_tx_alloc(sizeof(char) * PAGESIZE,
                                                    TOID_TYPE_NUM(char));
                     new_root = new (pmemobj_direct(ptr))
                         page((page *)this, split_key, sibling, hdr.level + 1);
-                    bt->setNewRoot((char *)new_root);
+                    bt->root = (char *)new_root;
+                    bt->height++;
                 }
                 TX_END
 #else
@@ -1812,15 +1817,14 @@ class page {
 
 void init_pmem() {
     // create pool
-#ifdef USE_PMDK
     const char *pool_name = "/mnt/pmem0/matianmao/fast_fair.data";
     const char *layout_name = "fast_fair";
     size_t pool_size = 16LL * 1024 * 1024 * 1024; // 16GB
 
     if (access(pool_name, 0)) {
         pmem_pool = pmemobj_create(pool_name, layout_name, pool_size, 0666);
-        if(pmem_pool == nullptr){
-            std::cout<<"[FAST FAIR]\tcreate fail\n";
+        if (pmem_pool == nullptr) {
+            std::cout << "[FAST FAIR]\tcreate fail\n";
             assert(0);
         }
         std::cout << "[FAST FAIR]\tcreate\n";
@@ -1829,11 +1833,9 @@ void init_pmem() {
         std::cout << "[FAST FAIR]\topen\n";
     }
     std::cout << "[FAST FAIR]\topen pmem pool successfully\n";
-#endif
 }
 
 void *allocate(size_t size) {
-#ifdef USE_PMDK
     void *addr;
     PMEMoid ptr;
     int ret = pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * size,
@@ -1844,12 +1846,6 @@ void *allocate(size_t size) {
     }
     addr = (char *)pmemobj_direct(ptr);
     return addr;
-#else
-    void *aligned_alloc;
-    posix_memalign(&aligned_alloc, 64, size);
-    return aligned_alloc;
-#endif
-
 }
 
 /*
@@ -1935,6 +1931,7 @@ char *btree::btree_search(char *key) {
 // insert the key in the leaf node
 void btree::btree_insert(uint64_t key, char *right) { // need to be string
     page *p = (page *)root;
+    //    printf("btree_insert key %lld\n", key);
 
     while (p->hdr.leftmost_ptr != nullptr) {
         p = (page *)p->linear_search(this, key);

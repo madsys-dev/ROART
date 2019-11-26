@@ -81,7 +81,7 @@ static void usage_exit(FILE *out) {
         "Command line options : nstore <options> \n"
         "   -h --help              : Print help message \n"
         "   -t --type              : Index type : 0 (PART) 1 (FAST_FAIR) \n"
-        "   -K --key_type           : Key type : 0 (Integer) 1 (String) \n"
+        "   -K --key_type          : Key type : 0 (Integer) 1 (String) \n"
         "   -n --num_threads       : Number of workers \n"
         "   -k --keys              : Number of key-value pairs at begin\n"
         "   -s --non_share_memory  : Use different index instances among "
@@ -101,7 +101,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     state.type = PART;
     state.num_threads = 4;
     state.key_type = Integer;
-    state.init_keys = 1000000;
+    state.init_keys = 10000000;
     state.time = 5;
     state.share_memory = true;
     state.duration = 1;
