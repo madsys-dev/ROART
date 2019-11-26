@@ -22,7 +22,7 @@
 #endif
 
 namespace fastfair {
-#define USE_PMDK
+//#define USE_PMDK
 #define PAGESIZE 512
 
 static uint64_t CPU_FREQ_MHZ = 2100;
@@ -1810,26 +1810,30 @@ class page {
     }
 };
 
-void init_pmem();
-void *allocate(size_t size);
-
 void init_pmem() {
     // create pool
+#ifdef USE_PMDK
     const char *pool_name = "/mnt/pmem0/matianmao/fast_fair.data";
     const char *layout_name = "fast_fair";
-    size_t pool_size = 1024 * 1024 * 1024 * 16; // 16GB
+    size_t pool_size = 16LL * 1024 * 1024 * 1024; // 16GB
 
     if (access(pool_name, 0)) {
         pmem_pool = pmemobj_create(pool_name, layout_name, pool_size, 0666);
+        if(pmem_pool == nullptr){
+            std::cout<<"[FAST FAIR]\tcreate fail\n";
+            assert(0);
+        }
         std::cout << "[FAST FAIR]\tcreate\n";
     } else {
         pmem_pool = pmemobj_open(pool_name, layout_name);
         std::cout << "[FAST FAIR]\topen\n";
     }
     std::cout << "[FAST FAIR]\topen pmem pool successfully\n";
+#endif
 }
 
 void *allocate(size_t size) {
+#ifdef USE_PMDK
     void *addr;
     PMEMoid ptr;
     int ret = pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * size,
@@ -1840,6 +1844,12 @@ void *allocate(size_t size) {
     }
     addr = (char *)pmemobj_direct(ptr);
     return addr;
+#else
+    void *aligned_alloc;
+    posix_memalign(&aligned_alloc, 64, size);
+    return aligned_alloc;
+#endif
+
 }
 
 /*

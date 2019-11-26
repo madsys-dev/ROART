@@ -6,7 +6,7 @@
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
-#include "fast_fair_2.h"
+#include "fast_fair_1.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "timer.h"
@@ -401,10 +401,11 @@ template <typename K, typename V, int size> class Coordinator {
         } else if (conf.type == FAST_FAIR) {
             // FAST_FAIR
             printf("test FAST_FAIR---------------------\n");
-            fastfair::init_pmem();
-            fastfair::btree *bt =
-                new (fastfair::allocate(sizeof(fastfair::btree)))
-                    fastfair::btree();
+//            fastfair::init_pmem();
+//            fastfair::btree *bt =
+//                new (fastfair::allocate(sizeof(fastfair::btree)))
+//                    fastfair::btree();
+            fastfair::btree *bt = new fastfair::btree();
             Benchmark *benchmark = getBenchmark(conf);
 
             Result *results = new Result[conf.num_threads];
@@ -417,6 +418,7 @@ template <typename K, typename V, int size> class Coordinator {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
                     bt->btree_insert(kk, (char *)kk);
+//                    std::cout<<"insert key "<<kk << " id: "<<i<<"\n";
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
                     bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
