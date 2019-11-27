@@ -153,8 +153,13 @@ class threadinfo {
             // This could set it to nullptr
             TX_BEGIN(pool){
                 pmemobj_tx_add_range_direct(&header_p->next_p, sizeof(uint64_t));
-                PMEMoid ptr = pmemobj_oid(first_p->node_p);
+                pmemobj_tx_add_range_direct(&md->node_count, sizeof(int));
                 header_p->next_p = first_p->next_p;
+
+                PMEMoid ptr = pmemobj_oid(first_p->node_p);
+                pmemobj_tx_free(ptr);
+
+                md->node_count--;
             }
             TX_END
 
@@ -162,9 +167,6 @@ class threadinfo {
 //            FreeEpochNode(first_p->node_p);
 
             delete first_p;
-            assert(md->node_count != 0UL);
-            md->node_count--;
-
             first_p = header_p->next_p;
         }
 

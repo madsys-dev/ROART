@@ -212,6 +212,7 @@ template <typename K, typename V, int size> class Coordinator {
         Benchmark *benchmark = b;
         printf("[WORKER]\thello, I am worker %d\n", workerid);
         stick_this_thread_to_core(workerid);
+        fastfair::register_thread();
         bar->wait();
 
         unsigned long tx = 0;
