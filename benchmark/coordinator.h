@@ -6,7 +6,7 @@
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
-#include "fast_fair_2.h"
+#include "fast_fair_3.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "timer.h"

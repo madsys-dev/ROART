@@ -59,7 +59,7 @@ class thread_info {
   public:
     int id;
     volatile int _lock;
-    struct thread_info *next;
+    thread_info *next;
 
     //    // fixed length free list
     //    PMFreeList *node4_free_list;
