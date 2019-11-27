@@ -8,7 +8,8 @@ else ()
     message(STATUS "Build type is set to ${CMAKE_BUILD_TYPE}")
 endif ()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -g -march=native -mavx -mavx2  -DNDEBUG")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O0 -g -march=native -mavx -mavx2")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O0 -g -mavx -mavx2")
 
 ## Instruction options for Cache line flush
 #add_definitions(-DCLFLUSH)
@@ -16,6 +17,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -g -march=native -mavx -mavx2
 add_definitions(-DCLWB)
 add_definitions(-DVARIABLE_LENGTH)
 add_definitions(-DUSE_PMDK)
+add_definitions(-DFF_GC) # ff_gc
 
 link_libraries(pthread atomic boost_system boost_thread gtest)
 link_libraries(pmemobj)

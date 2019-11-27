@@ -286,14 +286,32 @@ template <typename K, typename V, int size> class Coordinator {
                 //                  update_latency_breaks, update_count);
                 // }
                 // break;
-            case REMOVE:
             case INSERT:
                 // printf("[%d] start insert %lld\n", workerid, d);
 
                 if (conf.key_type == Integer) {
+//                    std::cout<<"insert key "<<d<<"\n";
                     bt->btree_insert(d, (char *)d);
                 } else if (conf.key_type == String) {
                     bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
+                }
+
+                break;
+            case REMOVE:
+                // first insert then remove
+                if (conf.key_type == Integer) {
+//                    std::cout<<"insert key "<<d<<"\n";
+                    bt->btree_insert(d, (char *)d);
+                } else if (conf.key_type == String) {
+                    bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
+                }
+
+                if (conf.key_type == Integer) {
+//                    std::cout<<"delete key "<<d<<"\n";
+                    bt->btree_delete(d);
+                } else if (conf.key_type == String) {
+//                    std::cout<<"delete key "<<s<<"\n";
+                    bt->btree_delete((char *)s.c_str());
                 }
 
                 break;

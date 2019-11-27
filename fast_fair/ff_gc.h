@@ -166,7 +166,7 @@ class threadinfo {
             // Then free memory
 //            FreeEpochNode(first_p->node_p);
 
-            delete first_p;
+//            delete first_p;
             first_p = header_p->next_p;
         }
 

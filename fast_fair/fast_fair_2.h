@@ -17,6 +17,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <vector>
+#include <algorithm>
 
 #ifdef LOCK_INIT
 #include "tbb/concurrent_vector.h"
@@ -166,12 +167,14 @@ class header {
 
 class entry {
   private:
-    union Key key; // 8 bytes
+    uint64_t ikey; // 8 bytes
+    key_item *skey; // 8bytes
     char *ptr;     // 8 bytes
 
   public:
     entry() {
-        key.ikey = UINT64_MAX;
+        ikey = UINT64_MAX;
+        skey = nullptr;
         ptr = nullptr;
     }
 
@@ -185,7 +188,7 @@ const int count_in_line = CACHE_LINE_SIZE / sizeof(entry);
 class page {
   private:
     header hdr;                 // header in persistent memory, 16 bytes
-    entry records[cardinality]; // slots in persistent memory, 16 bytes * n
+    entry records[cardinality]; // slots in persistent memory, 24 bytes * n
 
   public:
     friend class btree;
@@ -204,7 +207,7 @@ class page {
     page(page *left, uint64_t key, page *right, uint32_t level = 0) {
         hdr.leftmost_ptr = left;
         hdr.level = level;
-        records[0].key.ikey = key;
+        records[0].ikey = key;
         records[0].ptr = (char *)right;
         records[1].ptr = nullptr;
 
@@ -217,7 +220,7 @@ class page {
     page(page *left, key_item *key, page *right, uint32_t level = 0) {
         hdr.leftmost_ptr = left;
         hdr.level = level;
-        records[0].key.skey = key;
+        records[0].skey = key;
         records[0].ptr = (char *)right;
         records[1].ptr = nullptr;
 
@@ -234,7 +237,7 @@ class page {
     }
 #endif
 
-    inline int count() {
+    int count() {
         uint32_t previous_switch_counter;
         int count = 0;
         do {
@@ -261,7 +264,8 @@ class page {
         return count;
     }
 
-    inline bool remove_key(uint64_t key) {
+    // integer
+     bool remove_key(uint64_t key) {
         // Set the switch_counter
         if (IS_FORWARD(hdr.switch_counter))
             ++hdr.switch_counter;
@@ -271,14 +275,14 @@ class page {
         bool shift = false;
         int i;
         for (i = 0; records[i].ptr != nullptr; ++i) {
-            if (!shift && records[i].key.ikey == key) {
+            if (!shift && records[i].ikey == key) {
                 records[i].ptr =
                     (i == 0) ? (char *)hdr.leftmost_ptr : records[i - 1].ptr;
                 shift = true;
             }
 
             if (shift) {
-                records[i].key.ikey = records[i + 1].key.ikey;
+                records[i].ikey = records[i + 1].ikey;
                 records[i].ptr = records[i + 1].ptr;
 
                 // flush
@@ -301,6 +305,7 @@ class page {
         return shift;
     }
 
+    // integer
     bool remove(btree *bt, uint64_t key, bool only_rebalance = false,
                 bool with_lock = true) {
         hdr.mtx->lock();
@@ -313,7 +318,7 @@ class page {
     }
 
     // integer
-    inline void insert_key(uint64_t key, char *ptr, int *num_entries,
+    void insert_key(uint64_t key, char *ptr, int *num_entries,
                            bool flush = true, bool update_last_index = true) {
         // update switch_counter
         if (!IS_FORWARD(hdr.switch_counter))
@@ -325,7 +330,7 @@ class page {
         if (*num_entries == 0) { // this page is empty
             entry *new_entry = (entry *)&records[0];
             entry *array_end = (entry *)&records[1];
-            new_entry->key.ikey = (uint64_t)key;
+            new_entry->ikey = (uint64_t)key;
             new_entry->ptr = (char *)ptr;
 
             array_end->ptr = (char *)nullptr;
@@ -341,9 +346,9 @@ class page {
 
             // FAST
             for (i = *num_entries - 1; i >= 0; i--) {
-                if (key < records[i].key.ikey) {
+                if (key < records[i].ikey) {
                     records[i + 1].ptr = records[i].ptr;
-                    records[i + 1].key.ikey = records[i].key.ikey;
+                    records[i + 1].ikey = records[i].ikey;
 
                     uint64_t records_ptr = (uint64_t)(&records[i + 1]);
 
@@ -361,7 +366,7 @@ class page {
 
                 } else {
                     records[i + 1].ptr = records[i].ptr;
-                    records[i + 1].key.ikey = key;
+                    records[i + 1].ikey = key;
                     records[i + 1].ptr = ptr;
 
                     flush_data((void *)&records[i + 1], sizeof(entry));
@@ -371,7 +376,7 @@ class page {
             }
             if (inserted == 0) {
                 records[0].ptr = (char *)hdr.leftmost_ptr;
-                records[0].key.ikey = key;
+                records[0].ikey = key;
                 records[0].ptr = ptr;
                 flush_data((void *)&records[0], sizeof(entry));
             }
@@ -384,7 +389,7 @@ class page {
     }
 
     // variable string
-    inline void insert_key(key_item *key, char *ptr, int *num_entries,
+    void insert_key(key_item *key, char *ptr, int *num_entries,
                            bool flush = true, bool update_last_index = true) {
         // update switch_counter
         if (!IS_FORWARD(hdr.switch_counter))
@@ -396,7 +401,7 @@ class page {
         if (*num_entries == 0) { // this page is empty
             entry *new_entry = (entry *)&records[0];
             entry *array_end = (entry *)&records[1];
-            new_entry->key.skey = key;
+            new_entry->skey = key;
             new_entry->ptr = (char *)ptr;
 
             array_end->ptr = (char *)nullptr;
@@ -415,11 +420,11 @@ class page {
 
             // FAST
             for (i = *num_entries - 1; i >= 0; i--) {
-                if (memcmp(key->key, records[i].key.skey->key,
+                if (memcmp(key->key, records[i].skey->key,
                            std::min(key->key_len,
-                                    records[i].key.skey->key_len)) < 0) {
+                                    records[i].skey->key_len)) < 0) {
                     records[i + 1].ptr = records[i].ptr;
-                    records[i + 1].key.skey = records[i].key.skey;
+                    records[i + 1].skey = records[i].skey;
 
                     uint64_t records_ptr = (uint64_t)(&records[i + 1]);
 
@@ -443,19 +448,20 @@ class page {
                         pmemobj_tx_add_range_direct(&records[i + 1],
                                                     sizeof(entry));
                         PMEMoid p = pmemobj_tx_alloc(
-                            sizeof(key_item), TOID_TYPE_NUM(struct key_item));
+                            sizeof(key_item) + key->key_len, TOID_TYPE_NUM(char));
 
                         key_item *k = (key_item *)pmemobj_direct(p);
+
                         k->key_len = key->key_len;
                         memcpy(k->key, key->key, key->key_len);
                         flush_data((void *)k, sizeof(key_item) + k->key_len);
 
-                        records[i + 1].key.skey = k;
+                        records[i + 1].skey = k;
                         records[i + 1].ptr = ptr;
                     }
                     TX_END
 #else
-                    records[i + 1].key.skey = key;
+                    records[i + 1].skey = key;
                     records[i + 1].ptr = ptr;
                     flush_data((void *)&records[i + 1], sizeof(entry));
 #endif
@@ -471,19 +477,19 @@ class page {
                     // undo log
                     pmemobj_tx_add_range_direct(&records[0], sizeof(entry));
                     PMEMoid p = pmemobj_tx_alloc(
-                        sizeof(key_item), TOID_TYPE_NUM(struct key_item));
+                        sizeof(key_item) + key->key_len, TOID_TYPE_NUM(char));
 
                     key_item *k = (key_item *)pmemobj_direct(p);
                     k->key_len = key->key_len;
                     memcpy(k->key, key->key, key->key_len);
                     flush_data((void *)k, sizeof(key_item) + k->key_len);
 
-                    records[0].key.skey = k;
+                    records[0].skey = k;
                     records[0].ptr = ptr;
                 }
                 TX_END
 #else
-                records[0].key.skey = key;
+                records[0].skey = key;
                 records[0].ptr = ptr;
                 flush_data((void *)&records[0], sizeof(entry));
 #endif
@@ -578,24 +584,24 @@ class page {
                 sibling = new (pmemobj_direct(ptr)) page(hdr.level);
                 // copy half to sibling and init sibling
                 m = (int)ceil(num_entries / 2);
-                split_key = records[m].key.ikey;
+                split_key = records[m].ikey;
 
                 // migrate half of keys into the sibling
                 sibling_cnt = 0;
                 if (hdr.leftmost_ptr == nullptr) { // leaf node
                     for (int i = m; i < num_entries; ++i) {
-                        sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                        sibling->insert_key(records[i].ikey, records[i].ptr,
                                             &sibling_cnt, false);
                     }
                 } else { // internal node
                     for (int i = m + 1; i < num_entries; ++i) {
-                        sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                        sibling->insert_key(records[i].ikey, records[i].ptr,
                                             &sibling_cnt, false);
                     }
                     sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
                 }
 
-                sibling->hdr.highest.ikey = records[m].key.ikey;
+                sibling->hdr.highest.ikey = records[m].ikey;
                 sibling->hdr.sibling_ptr = hdr.sibling_ptr;
                 flush_data((void *)sibling, sizeof(page));
 
@@ -613,24 +619,24 @@ class page {
 #else
             page *sibling = new page(hdr.level); // 重载了new运算符
             register int m = (int)ceil(num_entries / 2);
-            uint64_t split_key = records[m].key.ikey;
+            uint64_t split_key = records[m].ikey;
 
             // migrate half of keys into the sibling
             int sibling_cnt = 0;
             if (hdr.leftmost_ptr == nullptr) { // leaf node
                 for (int i = m; i < num_entries; ++i) {
-                    sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                    sibling->insert_key(records[i].ikey, records[i].ptr,
                                         &sibling_cnt, false);
                 }
             } else { // internal node
                 for (int i = m + 1; i < num_entries; ++i) {
-                    sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                    sibling->insert_key(records[i].ikey, records[i].ptr,
                                         &sibling_cnt, false);
                 }
                 sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
             }
 
-            sibling->hdr.highest.ikey = records[m].key.ikey;
+            sibling->hdr.highest.ikey = records[m].ikey;
             sibling->hdr.sibling_ptr = hdr.sibling_ptr;
             flush_data((void *)sibling, sizeof(page));
 
@@ -807,23 +813,23 @@ class page {
                 sibling = new (pmemobj_direct(ptr)) page(hdr.level);
 
                 m = (int)ceil(num_entries / 2);
-                split_key = records[m].key.skey;
+                split_key = records[m].skey;
                 sibling_cnt = 0;
 
                 if (hdr.leftmost_ptr == nullptr) { // leaf node
                     for (int i = m; i < num_entries; ++i) {
-                        sibling->insert_key(records[i].key.skey, records[i].ptr,
+                        sibling->insert_key(records[i].skey, records[i].ptr,
                                             &sibling_cnt, false);
                     }
                 } else { // internal node
                     for (int i = m + 1; i < num_entries; ++i) {
-                        sibling->insert_key(records[i].key.skey, records[i].ptr,
+                        sibling->insert_key(records[i].skey, records[i].ptr,
                                             &sibling_cnt, false);
                     }
                     sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
                 }
 
-                sibling->hdr.highest.skey = records[m].key.skey;
+                sibling->hdr.highest.skey = records[m].skey;
                 sibling->hdr.sibling_ptr = hdr.sibling_ptr;
                 flush_data((void *)sibling, sizeof(page));
 
@@ -843,24 +849,24 @@ class page {
 
             page *sibling = new page(hdr.level);
             register int m = (int)ceil(num_entries / 2);
-            key_item *split_key = records[m].key.skey;
+            key_item *split_key = records[m].skey;
 
             // migrate half of keys into the sibling
             int sibling_cnt = 0;
             if (hdr.leftmost_ptr == nullptr) { // leaf node
                 for (int i = m; i < num_entries; ++i) {
-                    sibling->insert_key(records[i].key.skey, records[i].ptr,
+                    sibling->insert_key(records[i].skey, records[i].ptr,
                                         &sibling_cnt, false);
                 }
             } else { // internal node
                 for (int i = m + 1; i < num_entries; ++i) {
-                    sibling->insert_key(records[i].key.skey, records[i].ptr,
+                    sibling->insert_key(records[i].skey, records[i].ptr,
                                         &sibling_cnt, false);
                 }
                 sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
             }
 
-            sibling->hdr.highest.skey = records[m].key.skey;
+            sibling->hdr.highest.skey = records[m].skey;
             sibling->hdr.sibling_ptr = hdr.sibling_ptr;
             flush_data((void *)sibling, sizeof(page));
 
@@ -978,11 +984,11 @@ class page {
                 char *tmp_ptr;
 
                 if (IS_FORWARD(previous_switch_counter)) {
-                    if ((tmp_key = current->records[0].key.ikey) > min) {
+                    if ((tmp_key = current->records[0].ikey) > min) {
                         if (tmp_key < max && off < num) {
                             if ((tmp_ptr = current->records[0].ptr) !=
                                 nullptr) {
-                                if (tmp_key == current->records[0].key.ikey) {
+                                if (tmp_key == current->records[0].ikey) {
                                     if (tmp_ptr) {
                                         buf[off++] = (unsigned long)tmp_ptr;
                                     }
@@ -993,12 +999,12 @@ class page {
                     }
 
                     for (i = 1; current->records[i].ptr != nullptr; ++i) {
-                        if ((tmp_key = current->records[i].key.ikey) > min) {
+                        if ((tmp_key = current->records[i].ikey) > min) {
                             if (tmp_key < max && off < num) {
                                 if ((tmp_ptr = current->records[i].ptr) !=
                                     current->records[i - 1].ptr) {
                                     if (tmp_key ==
-                                        current->records[i].key.ikey) {
+                                        current->records[i].ikey) {
                                         if (tmp_ptr) {
                                             buf[off++] = (unsigned long)tmp_ptr;
                                         }
@@ -1010,12 +1016,12 @@ class page {
                     }
                 } else {
                     for (i = count() - 1; i > 0; --i) {
-                        if ((tmp_key = current->records[i].key.ikey) > min) {
+                        if ((tmp_key = current->records[i].ikey) > min) {
                             if (tmp_key < max && off < num) {
                                 if ((tmp_ptr = current->records[i].ptr) !=
                                     current->records[i - 1].ptr) {
                                     if (tmp_key ==
-                                        current->records[i].key.ikey) {
+                                        current->records[i].ikey) {
                                         if (tmp_ptr) {
                                             buf[off++] = (unsigned long)tmp_ptr;
                                         }
@@ -1026,11 +1032,11 @@ class page {
                         }
                     }
 
-                    if ((tmp_key = current->records[0].key.ikey) > min) {
+                    if ((tmp_key = current->records[0].ikey) > min) {
                         if (tmp_key < max && off < num) {
                             if ((tmp_ptr = current->records[0].ptr) !=
                                 nullptr) {
-                                if (tmp_key == current->records[0].key.ikey) {
+                                if (tmp_key == current->records[0].ikey) {
                                     if (tmp_ptr) {
                                         buf[off++] = (unsigned long)tmp_ptr;
                                     }
@@ -1070,7 +1076,7 @@ class page {
                 char *tmp_ptr;
 
                 if (IS_FORWARD(previous_switch_counter)) {
-                    tmp_key = current->records[0].key.skey;
+                    tmp_key = current->records[0].skey;
                     if (memcmp(tmp_key->key, min->key,
                                std::min(tmp_key->key_len, min->key_len)) > 0) {
                         // if(memcmp(tmp_key->key, max->key,
@@ -1080,10 +1086,9 @@ class page {
                             if ((tmp_ptr = current->records[0].ptr) !=
                                 nullptr) {
                                 if (memcmp(tmp_key->key,
-                                           current->records[0].key.skey->key,
+                                           current->records[0].skey->key,
                                            std::min(tmp_key->key_len,
-                                                    current->records[0]
-                                                        .key.skey->key_len)) ==
+                                                    current->records[0].skey->key_len)) ==
                                     0) {
                                     if (tmp_ptr) {
                                         buf[off++] = (unsigned long)tmp_ptr;
@@ -1095,7 +1100,7 @@ class page {
                     }
 
                     for (i = 1; current->records[i].ptr != nullptr; ++i) {
-                        tmp_key = current->records[i].key.skey;
+                        tmp_key = current->records[i].skey;
                         if (memcmp(tmp_key->key, min->key,
                                    std::min(tmp_key->key_len, min->key_len)) >
                             0) {
@@ -1107,10 +1112,9 @@ class page {
                                     current->records[i - 1].ptr) {
                                     if (memcmp(
                                             tmp_key->key,
-                                            current->records[i].key.skey->key,
+                                            current->records[i].skey->key,
                                             std::min(tmp_key->key_len,
-                                                     current->records[i]
-                                                         .key.skey->key_len)) ==
+                                                     current->records[i].skey->key_len)) ==
                                         0) {
                                         if (tmp_ptr) {
                                             buf[off++] = (unsigned long)tmp_ptr;
@@ -1123,7 +1127,7 @@ class page {
                     }
                 } else {
                     for (i = count() - 1; i > 0; --i) {
-                        tmp_key = current->records[i].key.skey;
+                        tmp_key = current->records[i].skey;
                         if (memcmp(tmp_key->key, min->key,
                                    std::min(tmp_key->key_len, min->key_len)) >
                                 0 &&
@@ -1136,10 +1140,9 @@ class page {
                                     current->records[i - 1].ptr) {
                                     if (memcmp(
                                             tmp_key->key,
-                                            current->records[i].key.skey->key,
+                                            current->records[i].skey->key,
                                             std::min(tmp_key->key_len,
-                                                     current->records[i]
-                                                         .key.skey->key_len)) ==
+                                                     current->records[i].skey->key_len)) ==
                                         0) {
                                         if (tmp_ptr) {
                                             buf[off++] = (unsigned long)tmp_ptr;
@@ -1151,7 +1154,7 @@ class page {
                         }
                     }
 
-                    tmp_key = current->records[0].key.skey;
+                    tmp_key = current->records[0].skey;
                     if (memcmp(tmp_key->key, min->key,
                                std::min(tmp_key->key_len, min->key_len)) > 0 &&
                         off < num) {
@@ -1162,10 +1165,9 @@ class page {
                             if ((tmp_ptr = current->records[0].ptr) !=
                                 nullptr) {
                                 if (memcmp(tmp_key->key,
-                                           current->records[0].key.skey->key,
+                                           current->records[0].skey->key,
                                            std::min(tmp_key->key_len,
-                                                    current->records[0]
-                                                        .key.skey->key_len)) ==
+                                                    current->records[0].skey->key_len)) ==
                                     0) {
                                     if (tmp_ptr) {
                                         buf[off++] = (unsigned long)tmp_ptr;
@@ -1199,9 +1201,9 @@ class page {
 
                 // search from left ro right
                 if (IS_FORWARD(previous_switch_counter)) {
-                    if ((k = records[0].key.ikey) == key) {
+                    if ((k = records[0].ikey) == key) {
                         if ((t = records[0].ptr) != nullptr) {
-                            if (k == records[0].key.ikey) {
+                            if (k == records[0].ikey) {
                                 ret = t;
                                 continue;
                             }
@@ -1209,9 +1211,9 @@ class page {
                     }
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
-                        if ((k = records[i].key.ikey) == key) {
+                        if ((k = records[i].ikey) == key) {
                             if (records[i - 1].ptr != (t = records[i].ptr)) {
-                                if (k == records[i].key.ikey) {
+                                if (k == records[i].ikey) {
                                     ret = t;
                                     break;
                                 }
@@ -1220,10 +1222,10 @@ class page {
                     }
                 } else { // search from right to left
                     for (i = count() - 1; i > 0; --i) {
-                        if ((k = records[i].key.ikey) == key) {
+                        if ((k = records[i].ikey) == key) {
                             if (records[i - 1].ptr != (t = records[i].ptr) &&
                                 t) {
-                                if (k == records[i].key.ikey) {
+                                if (k == records[i].ikey) {
                                     ret = t;
                                     break;
                                 }
@@ -1232,9 +1234,9 @@ class page {
                     }
 
                     if (!ret) {
-                        if ((k = records[0].key.ikey) == key) {
+                        if ((k = records[0].ikey) == key) {
                             if (nullptr != (t = records[0].ptr) && t) {
-                                if (k == records[0].key.ikey) {
+                                if (k == records[0].ikey) {
                                     ret = t;
                                     continue;
                                 }
@@ -1268,7 +1270,7 @@ class page {
                 ret = nullptr;
 
                 if (IS_FORWARD(previous_switch_counter)) {
-                    if (key < (k = records[0].key.ikey)) {
+                    if (key < (k = records[0].ikey)) {
                         if ((t = (char *)hdr.leftmost_ptr) != records[0].ptr) {
                             ret = t;
                             continue;
@@ -1276,7 +1278,7 @@ class page {
                     }
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
-                        if (key < (k = records[i].key.ikey)) {
+                        if (key < (k = records[i].ikey)) {
                             if ((t = records[i - 1].ptr) != records[i].ptr) {
                                 ret = t;
                                 break;
@@ -1290,7 +1292,7 @@ class page {
                     }
                 } else { // search from right to left
                     for (i = count() - 1; i >= 0; --i) {
-                        if (key >= (k = records[i].key.ikey)) {
+                        if (key >= (k = records[i].ikey)) {
                             if (i == 0) {
                                 if ((char *)hdr.leftmost_ptr !=
                                     (t = records[i].ptr)) {
@@ -1346,9 +1348,9 @@ class page {
 
                 // search from left ro right
                 if (IS_FORWARD(previous_switch_counter)) {
-                    if ((k = records[0].key.ikey) == key) {
+                    if ((k = records[0].ikey) == key) {
                         if ((t = records[0].ptr) != nullptr) {
-                            if (k == records[0].key.ikey) {
+                            if (k == records[0].ikey) {
                                 ret = t;
                                 continue;
                             }
@@ -1356,9 +1358,9 @@ class page {
                     }
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
-                        if ((k = records[i].key.ikey) == key) {
+                        if ((k = records[i].ikey) == key) {
                             if (records[i - 1].ptr != (t = records[i].ptr)) {
-                                if (k == records[i].key.ikey) {
+                                if (k == records[i].ikey) {
                                     ret = t;
                                     break;
                                 }
@@ -1367,10 +1369,10 @@ class page {
                     }
                 } else { // search from right to left
                     for (i = count() - 1; i > 0; --i) {
-                        if ((k = records[i].key.ikey) == key) {
+                        if ((k = records[i].ikey) == key) {
                             if (records[i - 1].ptr != (t = records[i].ptr) &&
                                 t) {
-                                if (k == records[i].key.ikey) {
+                                if (k == records[i].ikey) {
                                     ret = t;
                                     break;
                                 }
@@ -1379,9 +1381,9 @@ class page {
                     }
 
                     if (!ret) {
-                        if ((k = records[0].key.ikey) == key) {
+                        if ((k = records[0].ikey) == key) {
                             if (nullptr != (t = records[0].ptr) && t) {
-                                if (k == records[0].key.ikey) {
+                                if (k == records[0].ikey) {
                                     ret = t;
                                     continue;
                                 }
@@ -1408,7 +1410,7 @@ class page {
                 ret = nullptr;
 
                 if (IS_FORWARD(previous_switch_counter)) {
-                    if (key < (k = records[0].key.ikey)) {
+                    if (key < (k = records[0].ikey)) {
                         if ((t = (char *)hdr.leftmost_ptr) != records[0].ptr) {
                             ret = t;
                             continue;
@@ -1416,7 +1418,7 @@ class page {
                     }
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
-                        if (key < (k = records[i].key.ikey)) {
+                        if (key < (k = records[i].ikey)) {
                             if ((t = records[i - 1].ptr) != records[i].ptr) {
                                 ret = t;
                                 break;
@@ -1430,7 +1432,7 @@ class page {
                     }
                 } else { // search from right to left
                     for (i = count() - 1; i >= 0; --i) {
-                        if (key >= (k = records[i].key.ikey)) {
+                        if (key >= (k = records[i].ikey)) {
                             if (i == 0) {
                                 if ((char *)hdr.leftmost_ptr !=
                                     (t = records[i].ptr)) {
@@ -1479,14 +1481,14 @@ class page {
 
                 // search from left ro right
                 if (IS_FORWARD(previous_switch_counter)) {
-                    k = records[0].key.skey;
+                    k = records[0].skey;
                     if (memcmp(k->key, key->key,
                                std::min(k->key_len, key->key_len)) == 0) {
                         if ((t = records[0].ptr) != nullptr) {
                             if (memcmp(
-                                    k->key, records[0].key.skey->key,
+                                    k->key, records[0].skey->key,
                                     std::min(k->key_len,
-                                             records[0].key.skey->key_len)) ==
+                                             records[0].skey->key_len)) ==
                                 0) {
                                 ret = t;
                                 continue;
@@ -1495,14 +1497,14 @@ class page {
                     }
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
-                        k = records[i].key.skey;
+                        k = records[i].skey;
                         if (memcmp(k->key, key->key,
                                    std::min(k->key_len, key->key_len)) == 0) {
                             if (records[i - 1].ptr != (t = records[i].ptr)) {
-                                if (memcmp(k->key, records[i].key.skey->key,
+                                if (memcmp(k->key, records[i].skey->key,
                                            std::min(
                                                k->key_len,
-                                               records[i].key.skey->key_len)) ==
+                                               records[i].skey->key_len)) ==
                                     0) {
                                     ret = t;
                                     break;
@@ -1512,15 +1514,15 @@ class page {
                     }
                 } else { // search from right to left
                     for (i = count() - 1; i > 0; --i) {
-                        k = records[i].key.skey;
+                        k = records[i].skey;
                         if (memcmp(k->key, key->key,
                                    std::min(k->key_len, key->key_len)) == 0) {
                             if (records[i - 1].ptr != (t = records[i].ptr) &&
                                 t) {
-                                if (memcmp(k->key, records[i].key.skey->key,
+                                if (memcmp(k->key, records[i].skey->key,
                                            std::min(
                                                k->key_len,
-                                               records[i].key.skey->key_len)) ==
+                                               records[i].skey->key_len)) ==
                                     0) {
                                     ret = t;
                                     break;
@@ -1530,14 +1532,14 @@ class page {
                     }
 
                     if (!ret) {
-                        k = records[0].key.skey;
+                        k = records[0].skey;
                         if (memcmp(k->key, key->key,
                                    std::min(k->key_len, key->key_len)) == 0) {
                             if (nullptr != (t = records[0].ptr) && t) {
-                                if (memcmp(k->key, records[0].key.skey->key,
+                                if (memcmp(k->key, records[0].skey->key,
                                            std::min(
                                                k->key_len,
-                                               records[0].key.skey->key_len)) ==
+                                               records[0].skey->key_len)) ==
                                     0) {
                                     ret = t;
                                     continue;
@@ -1574,7 +1576,7 @@ class page {
                 ret = nullptr;
 
                 if (IS_FORWARD(previous_switch_counter)) {
-                    k = records[0].key.skey;
+                    k = records[0].skey;
                     if (memcmp(key->key, k->key,
                                std::min(key->key_len, k->key_len)) < 0) {
                         if ((t = (char *)hdr.leftmost_ptr) != records[0].ptr) {
@@ -1584,7 +1586,7 @@ class page {
                     }
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
-                        k = records[i].key.skey;
+                        k = records[i].skey;
                         if (memcmp(key->key, k->key,
                                    std::min(key->key_len, k->key_len)) < 0) {
                             if ((t = records[i - 1].ptr) != records[i].ptr) {
@@ -1600,7 +1602,7 @@ class page {
                     }
                 } else { // search from right to left
                     for (i = count() - 1; i >= 0; --i) {
-                        k = records[i].key.skey;
+                        k = records[i].skey;
                         if (memcmp(key->key, k->key,
                                    std::min(key->key_len, k->key_len)) >= 0) {
                             if (i == 0) {
@@ -1661,14 +1663,14 @@ class page {
 
                 // search from left ro right
                 if (IS_FORWARD(previous_switch_counter)) {
-                    k = records[0].key.skey;
+                    k = records[0].skey;
                     if (memcmp(k->key, key->key,
                                std::min(k->key_len, key->key_len)) == 0) {
                         if ((t = records[0].ptr) != nullptr) {
                             if (memcmp(
-                                    k->key, records[0].key.skey->key,
+                                    k->key, records[0].skey->key,
                                     std::min(k->key_len,
-                                             records[0].key.skey->key_len)) ==
+                                             records[0].skey->key_len)) ==
                                 0) {
                                 ret = t;
                                 continue;
@@ -1677,14 +1679,14 @@ class page {
                     }
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
-                        k = records[i].key.skey;
+                        k = records[i].skey;
                         if (memcmp(k->key, key->key,
                                    std::min(k->key_len, key->key_len)) == 0) {
                             if (records[i - 1].ptr != (t = records[i].ptr)) {
-                                if (memcmp(k->key, records[i].key.skey->key,
+                                if (memcmp(k->key, records[i].skey->key,
                                            std::min(
                                                k->key_len,
-                                               records[i].key.skey->key_len)) ==
+                                               records[i].skey->key_len)) ==
                                     0) {
                                     ret = t;
                                     break;
@@ -1694,15 +1696,15 @@ class page {
                     }
                 } else { // search from right to left
                     for (i = count() - 1; i > 0; --i) {
-                        k = records[i].key.skey;
+                        k = records[i].skey;
                         if (memcmp(k->key, key->key,
                                    std::min(k->key_len, key->key_len)) == 0) {
                             if (records[i - 1].ptr != (t = records[i].ptr) &&
                                 t) {
-                                if (memcmp(k->key, records[i].key.skey->key,
+                                if (memcmp(k->key, records[i].skey->key,
                                            std::min(
                                                k->key_len,
-                                               records[i].key.skey->key_len)) ==
+                                               records[i].skey->key_len)) ==
                                     0) {
                                     ret = t;
                                     break;
@@ -1712,14 +1714,14 @@ class page {
                     }
 
                     if (!ret) {
-                        k = records[0].key.skey;
+                        k = records[0].skey;
                         if (memcmp(k->key, key->key,
                                    std::min(k->key_len, key->key_len)) == 0) {
                             if (nullptr != (t = records[0].ptr) && t) {
-                                if (memcmp(k->key, records[0].key.skey->key,
+                                if (memcmp(k->key, records[0].skey->key,
                                            std::min(
                                                k->key_len,
-                                               records[0].key.skey->key_len)) ==
+                                               records[0].skey->key_len)) ==
                                     0) {
                                     ret = t;
                                     continue;
@@ -1749,7 +1751,7 @@ class page {
                 ret = nullptr;
 
                 if (IS_FORWARD(previous_switch_counter)) {
-                    k = records[0].key.skey;
+                    k = records[0].skey;
                     if (memcmp(key->key, k->key,
                                std::min(key->key_len, k->key_len)) < 0) {
                         if ((t = (char *)hdr.leftmost_ptr) != records[0].ptr) {
@@ -1759,7 +1761,7 @@ class page {
                     }
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
-                        k = records[i].key.skey;
+                        k = records[i].skey;
                         if (memcmp(key->key, k->key,
                                    std::min(key->key_len, k->key_len)) < 0) {
                             if ((t = records[i - 1].ptr) != records[i].ptr) {
@@ -1775,7 +1777,7 @@ class page {
                     }
                 } else { // search from right to left
                     for (i = count() - 1; i >= 0; --i) {
-                        k = records[i].key.skey;
+                        k = records[i].skey;
                         if (memcmp(key->key, k->key,
                                    std::min(key->key_len, k->key_len)) >= 0) {
                             if (i == 0) {
@@ -1912,7 +1914,7 @@ char *btree::btree_search(uint64_t key) {
 char *btree::btree_search(char *key) {
     page *p = (page *)root;
 
-    key_item *new_item = make_key_item(key, strlen(key) + 1, false);
+    key_item *new_item = make_key_item(key, strlen(key), false);
 
     while (p->hdr.leftmost_ptr != nullptr) {
         p = (page *)p->linear_search(new_item);
@@ -1947,7 +1949,7 @@ void btree::btree_insert(uint64_t key, char *right) { // need to be string
 void btree::btree_insert(char *key, char *right) { // need to be string
     page *p = (page *)root;
 
-    key_item *new_item = make_key_item(key, strlen(key) + 1, true);
+    key_item *new_item = make_key_item(key, strlen(key), true);
 
     while (p->hdr.leftmost_ptr != nullptr) {
         p = (page *)p->linear_search(new_item);
@@ -2035,8 +2037,8 @@ void btree::btree_search_range(uint64_t min, uint64_t max, unsigned long *buf,
 void btree::btree_search_range(char *min, char *max, unsigned long *buf,
                                int num, int &off) {
     page *p = (page *)root;
-    key_item *min_item = make_key_item(min, strlen(min) + 1, false);
-    key_item *max_item = make_key_item(max, strlen(max) + 1, false);
+    key_item *min_item = make_key_item(min, strlen(min), false);
+    key_item *max_item = make_key_item(max, strlen(max), false);
 
     while (p) {
         if (p->hdr.leftmost_ptr != nullptr) {

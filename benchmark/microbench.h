@@ -235,7 +235,7 @@ class YSCBA : public Benchmark {
     virtual std::pair<OperationType, long long> nextIntOperation(int tid) {
         int k = rdm[tid].randomInt() % 100;
         if (k > read_ratio) {
-            return std::make_pair(UPDATE,
+            return std::make_pair(INSERT,
                                   workload->NextInt(tid) % _conf.init_keys);
         } else {
             return std::make_pair(GET,
@@ -246,7 +246,7 @@ class YSCBA : public Benchmark {
     virtual std::pair<OperationType, std::string> nextStrOperation(int tid) {
         int k = rdm[tid].randomInt() % 100;
         if (k > read_ratio) {
-            return std::make_pair(UPDATE, workload->NextStr(tid));
+            return std::make_pair(INSERT, workload->NextStr(tid));
         } else {
             return std::make_pair(GET, workload->NextStr(tid));
         }
@@ -268,7 +268,7 @@ class YSCBB : public Benchmark {
             return std::make_pair(GET,
                                   workload->NextInt(tid) % _conf.init_keys);
         } else {
-            return std::make_pair(UPDATE,
+            return std::make_pair(INSERT,
                                   workload->NextInt(tid) % _conf.init_keys);
         }
     }
@@ -276,7 +276,7 @@ class YSCBB : public Benchmark {
     virtual std::pair<OperationType, std::string> nextStrOperation(int tid) {
         int k = rdm[tid].randomInt() % 100;
         if (k > read_ratio) {
-            return std::make_pair(UPDATE, workload->NextStr(tid));
+            return std::make_pair(INSERT, workload->NextStr(tid));
         } else {
             return std::make_pair(GET, workload->NextStr(tid));
         }
