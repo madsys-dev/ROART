@@ -9,7 +9,7 @@ else ()
 endif ()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O0 -g -march=native -mavx -mavx2")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O0 -g -mavx -mavx2")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O0 -g -march=native -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -mavx -mavx2")
 
 ## Instruction options for Cache line flush
 #add_definitions(-DCLFLUSH)

@@ -3,3 +3,5 @@ build/
 cmake-build-debug-teaker-18/
 cmake-build-debug-teaker-22/
 .idea/
+result/
+script/

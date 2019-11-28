@@ -18,6 +18,11 @@
 
 using namespace NVMMgr_ns;
 
+const int thread_to_core[36]={
+        1,5,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,69, // numa node 1
+        0,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68 // numa node 0
+};
+
 template <typename K, typename V, int size> class Coordinator {
     class Result {
       public:
@@ -59,7 +64,7 @@ template <typename K, typename V, int size> class Coordinator {
 
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
-        CPU_SET(core_id, &cpuset);
+        CPU_SET(thread_to_core[core_id], &cpuset);
 
         pthread_t current_thread = pthread_self();
         return pthread_setaffinity_np(current_thread, sizeof(cpu_set_t),

@@ -1714,6 +1714,10 @@ class page {
                 // search from left ro right
                 if (IS_FORWARD(previous_switch_counter)) {
                     k = records[0].key.skey;
+                    if((uint64_t)k == static_cast<uint64_t >(-1)){
+                        std::cout<<"boom!!!\n";
+                        return nullptr;
+                    }
                     if (memcmp(k->key, key->key,
                                std::min(k->key_len, key->key_len)) == 0) {
                         if ((t = records[0].ptr) != nullptr) {
@@ -1730,6 +1734,11 @@ class page {
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
                         k = records[i].key.skey;
+                        if((uint64_t)k == static_cast<uint64_t >(-1)){
+                            std::cout<<"boom!!!\n";
+                            return nullptr;
+                        }
+
                         if (memcmp(k->key, key->key,
                                    std::min(k->key_len, key->key_len)) == 0) {
                             if (records[i - 1].ptr != (t = records[i].ptr)) {
@@ -1747,6 +1756,12 @@ class page {
                 } else { // search from right to left
                     for (i = count() - 1; i > 0; --i) {
                         k = records[i].key.skey;
+
+                        if((uint64_t)k == static_cast<uint64_t >(-1)){
+                            std::cout<<"boom!!!\n";
+                            return nullptr;
+                        }
+
                         if (memcmp(k->key, key->key,
                                    std::min(k->key_len, key->key_len)) == 0) {
                             if (records[i - 1].ptr != (t = records[i].ptr) &&
@@ -1765,6 +1780,11 @@ class page {
 
                     if (!ret) {
                         k = records[0].key.skey;
+                        if((uint64_t)k == static_cast<uint64_t >(-1)){
+                            std::cout<<"boom!!!\n";
+                            return nullptr;
+                        }
+
                         if (memcmp(k->key, key->key,
                                    std::min(k->key_len, key->key_len)) == 0) {
                             if (nullptr != (t = records[0].ptr) && t) {
@@ -1802,6 +1822,10 @@ class page {
 
                 if (IS_FORWARD(previous_switch_counter)) {
                     k = records[0].key.skey;
+                    if((uint64_t)k == static_cast<uint64_t >(-1)){
+                        std::cout<<"boom!!!\n";
+                        return nullptr;
+                    }
                     if (memcmp(key->key, k->key,
                                std::min(key->key_len, k->key_len)) < 0) {
                         if ((t = (char *)hdr.leftmost_ptr) != records[0].ptr) {
@@ -1834,6 +1858,10 @@ class page {
                 } else { // search from right to left
                     for (i = count() - 1; i >= 0; --i) {
                         k = records[i].key.skey;
+                        if((uint64_t)k == static_cast<uint64_t >(-1)){
+                            std::cout<<"boom!!!\n";
+                            return nullptr;
+                        }
                         if (memcmp(key->key, k->key,
                                    std::min(key->key_len, k->key_len)) >= 0) {
                             if (i == 0) {

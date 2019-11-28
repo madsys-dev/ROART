@@ -1,14 +1,14 @@
 #!/bin/bash
 
-for((type=0;type<2;type++))
+for((type=1;type<2;type++))
 do
     for((kt=0;kt<2;kt++))
     do
-        for((bench=0;bench<2;bench++))
+        for bench in 0 1 3
         do
-            for tnum in 1 2 4 8 16 18 20 22 24
+            for tnum in 1 2 4 8 16
             do
-                ../build/benchmark -t ${type} -K ${kt} -b ${bench} -n ${tnum}
+                LD_PRELOAD="/usr/local/lib/libvmmalloc.so.1" ../build/benchmark -t ${type} -K ${kt} -b ${bench} -n ${tnum}
             done
         done
     done
