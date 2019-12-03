@@ -52,6 +52,7 @@ ZipfianFunc::ZipfianFunc(double s, int inital) : size(inital) {
 
 ZipfGenerator::ZipfGenerator(double s, int initial) {
     ZipfianFunc zipf(s, initial);
+    std::cout << "zipfian generator\n";
     for (int i = 0; i < data_size; i++) {
         zipfindex[i] = zipf.randomInt() % data_size;
     }

@@ -19,6 +19,11 @@ add_definitions(-DVARIABLE_LENGTH)
 add_definitions(-DUSE_PMDK)
 add_definitions(-DFF_GC) # ff_gc
 
+#malloc
+#add_definitions(-DPMALLOC)
+#add_definitions(-DTXPMALLOC)
+#add_definitions(-DTRANSACTIONAL)
+
 link_libraries(pthread atomic boost_system boost_thread gtest)
 link_libraries(pmemobj)
 find_library(TbbLib tbb)
@@ -47,6 +52,10 @@ target_link_libraries(Indexes ${TbbLib})
 set(BENCHMARK perf/main.cpp)
 add_executable(benchmark ${BENCHMARK})
 target_link_libraries(benchmark Indexes)
+
+set(MALLOC_DIFF perf/malloc_diff.cpp)
+add_executable(malloc_diff ${MALLOC_DIFF})
+target_link_libraries(malloc_diff Indexes)
 
 add_executable(unittest ${DIR_TEST_SRC})
 target_link_libraries(unittest Indexes gtest)

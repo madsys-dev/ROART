@@ -303,12 +303,6 @@ class page {
                                           records[i].key.skey->key_len)) == 0) {
                 records[i].ptr =
                     (i == 0) ? (char *)hdr.leftmost_ptr : records[i - 1].ptr;
-#ifdef USE_PMDK
-#ifdef FF_GC // ff_gc
-                ti->AddGarbageNode((void *)records[i].key.skey);
-//                printf("add garbage node, key is %s, len is %d\n", records[i].key.skey->key, records[i].key.skey->key_len);
-#endif
-#endif
                 shift = true;
             }
 
@@ -484,16 +478,32 @@ class page {
                 } else {
                     records[i + 1].ptr = records[i].ptr;
 #ifdef USE_PMDK
+#ifdef PMALLOC
+                    PMEMoid p;
+                    pmemobj_zalloc(pmem_pool, &p,
+                                   sizeof(key_item) + key->key_len,
+                                   TOID_TYPE_NUM(struct key_item));
+
+                    key_item *k = (key_item *)pmemobj_direct(p);
+                    if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                        std::cout << "alloc failed\n";
+                    }
+                    k->key_len = key->key_len;
+                    memcpy(k->key, key->key, key->key_len);
+                    flush_data((void *)k, sizeof(key_item) + k->key_len);
+
+                    records[i + 1].key.skey = k;
+                    records[i + 1].ptr = ptr;
+#elif TXPMALLOC
                     TX_BEGIN(pmem_pool) {
-                        // undo log
-                        pmemobj_tx_add_range_direct(&records[i + 1],
-                                                    sizeof(entry));
-                        PMEMoid p = pmemobj_tx_zalloc(
-                            sizeof(key_item) + key->key_len, TOID_TYPE_NUM(struct key_item));
+                        PMEMoid p;
+                        pmemobj_zalloc(pmem_pool, &p,
+                                       sizeof(key_item) + key->key_len,
+                                       TOID_TYPE_NUM(struct key_item));
 
                         key_item *k = (key_item *)pmemobj_direct(p);
-                        if((uint64_t)k == static_cast<uint64_t >(-1)){
-                            std::cout<<"alloc failed\n";
+                        if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                            std::cout << "alloc failed\n";
                         }
                         k->key_len = key->key_len;
                         memcpy(k->key, key->key, key->key_len);
@@ -503,6 +513,28 @@ class page {
                         records[i + 1].ptr = ptr;
                     }
                     TX_END
+#elif TRANSACTIONAL
+                    TX_BEGIN(pmem_pool) {
+                        // undo log
+                        pmemobj_tx_add_range_direct(&records[i + 1],
+                                                    sizeof(entry));
+                        PMEMoid p =
+                            pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
+                                              TOID_TYPE_NUM(struct key_item));
+
+                        key_item *k = (key_item *)pmemobj_direct(p);
+                        if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                            std::cout << "alloc failed\n";
+                        }
+                        k->key_len = key->key_len;
+                        memcpy(k->key, key->key, key->key_len);
+                        flush_data((void *)k, sizeof(key_item) + k->key_len);
+
+                        records[i + 1].key.skey = k;
+                        records[i + 1].ptr = ptr;
+                    }
+                    TX_END
+#endif
 #else
                     records[i + 1].key.skey = key;
                     records[i + 1].ptr = ptr;
@@ -516,16 +548,33 @@ class page {
                 records[0].ptr = (char *)hdr.leftmost_ptr;
 
 #ifdef USE_PMDK
+
+#ifdef PMALLOC
+                PMEMoid p;
+                pmemobj_zalloc(pmem_pool, &p, sizeof(key_item) + key->key_len,
+                               TOID_TYPE_NUM(struct key_item));
+
+                key_item *k = (key_item *)pmemobj_direct(p);
+                if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                    std::cout << "alloc failed\n";
+                }
+                k->key_len = key->key_len;
+                memcpy(k->key, key->key, key->key_len);
+                flush_data((void *)k, sizeof(key_item) + k->key_len);
+
+                records[0].key.skey = k;
+                records[0].ptr = ptr;
+#elif TXPMALLOC
                 TX_BEGIN(pmem_pool) {
-                    // undo log
-                    pmemobj_tx_add_range_direct(&records[0], sizeof(entry));
-                    PMEMoid p = pmemobj_tx_zalloc(
-                        sizeof(key_item) + key->key_len, TOID_TYPE_NUM(struct key_item));
+                    PMEMoid p;
+                    pmemobj_zalloc(pmem_pool, &p,
+                                   sizeof(key_item) + key->key_len,
+                                   TOID_TYPE_NUM(struct key_item));
 
                     key_item *k = (key_item *)pmemobj_direct(p);
-                                if((uint64_t)k == static_cast<uint64_t >(-1)){
-                                    std::cout<<"alloc failed\n";
-                                }
+                    if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                        std::cout << "alloc failed\n";
+                    }
                     k->key_len = key->key_len;
                     memcpy(k->key, key->key, key->key_len);
                     flush_data((void *)k, sizeof(key_item) + k->key_len);
@@ -534,6 +583,27 @@ class page {
                     records[0].ptr = ptr;
                 }
                 TX_END
+#elif TRANSACTIONAL
+                TX_BEGIN(pmem_pool) {
+                    // undo log
+                    pmemobj_tx_add_range_direct(&records[0], sizeof(entry));
+                    PMEMoid p =
+                        pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
+                                          TOID_TYPE_NUM(struct key_item));
+
+                    key_item *k = (key_item *)pmemobj_direct(p);
+                    if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                        std::cout << "alloc failed\n";
+                    }
+                    k->key_len = key->key_len;
+                    memcpy(k->key, key->key, key->key_len);
+                    flush_data((void *)k, sizeof(key_item) + k->key_len);
+
+                    records[0].key.skey = k;
+                    records[0].ptr = ptr;
+                }
+                TX_END
+#endif
 #else
                 records[0].key.skey = key;
                 records[0].ptr = ptr;
@@ -616,17 +686,58 @@ class page {
                  // overflow
                  // create a new node
 #ifdef USE_PMDK
-            //            printf("num %d %d, start pmdk allocate\n",
-            //            num_entries, cardinality);
+
+#ifdef PMALLOC
+            register int m;
+            uint64_t split_key;
+            page *sibling;
+            int sibling_cnt;
+            PMEMoid ptr;
+            pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
+                           TOID_TYPE_NUM(char));
+            sibling = new (pmemobj_direct(ptr)) page(hdr.level);
+            // copy half to sibling and init sibling
+            m = (int)ceil(num_entries / 2);
+            split_key = records[m].key.ikey;
+
+            // migrate half of keys into the sibling
+            sibling_cnt = 0;
+            if (hdr.leftmost_ptr == nullptr) { // leaf node
+                for (int i = m; i < num_entries; ++i) {
+                    sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                                        &sibling_cnt, false);
+                }
+            } else { // internal node
+                for (int i = m + 1; i < num_entries; ++i) {
+                    sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                                        &sibling_cnt, false);
+                }
+                sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
+            }
+
+            sibling->hdr.highest.ikey = records[m].key.ikey;
+            sibling->hdr.sibling_ptr = hdr.sibling_ptr;
+            flush_data((void *)sibling, sizeof(page));
+
+            if (hdr.leftmost_ptr == nullptr)
+                sibling->hdr.mtx->lock();
+
+            if (IS_FORWARD(hdr.switch_counter))
+                hdr.switch_counter++;
+            else
+                hdr.switch_counter += 2;
+            mfence();
+            hdr.sibling_ptr = sibling;
+
+#elif TXPMALLOC
             register int m;
             uint64_t split_key;
             page *sibling;
             int sibling_cnt;
             TX_BEGIN(pmem_pool) {
-                pmemobj_tx_add_range_direct(&hdr.sibling_ptr,
-                                            sizeof(uint64_t)); // undo log
-                PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
-                                               TOID_TYPE_NUM(char));
+                PMEMoid ptr;
+                pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
+                               TOID_TYPE_NUM(char));
                 sibling = new (pmemobj_direct(ptr)) page(hdr.level);
                 // copy half to sibling and init sibling
                 m = (int)ceil(num_entries / 2);
@@ -662,6 +773,56 @@ class page {
                 hdr.sibling_ptr = sibling;
             }
             TX_END
+
+#elif TRANSACTIONAL
+            //            printf("num %d %d, start pmdk allocate\n",
+            //            num_entries, cardinality);
+            register int m;
+            uint64_t split_key;
+            page *sibling;
+            int sibling_cnt;
+            TX_BEGIN(pmem_pool) {
+                pmemobj_tx_add_range_direct(&hdr.sibling_ptr,
+                                            sizeof(uint64_t)); // undo log
+                PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
+                                                TOID_TYPE_NUM(char));
+                sibling = new (pmemobj_direct(ptr)) page(hdr.level);
+                // copy half to sibling and init sibling
+                m = (int)ceil(num_entries / 2);
+                split_key = records[m].key.ikey;
+
+                // migrate half of keys into the sibling
+                sibling_cnt = 0;
+                if (hdr.leftmost_ptr == nullptr) { // leaf node
+                    for (int i = m; i < num_entries; ++i) {
+                        sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                                            &sibling_cnt, false);
+                    }
+                } else { // internal node
+                    for (int i = m + 1; i < num_entries; ++i) {
+                        sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                                            &sibling_cnt, false);
+                    }
+                    sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
+                }
+
+                sibling->hdr.highest.ikey = records[m].key.ikey;
+                sibling->hdr.sibling_ptr = hdr.sibling_ptr;
+                flush_data((void *)sibling, sizeof(page));
+
+                if (hdr.leftmost_ptr == nullptr)
+                    sibling->hdr.mtx->lock();
+
+                if (IS_FORWARD(hdr.switch_counter))
+                    hdr.switch_counter++;
+                else
+                    hdr.switch_counter += 2;
+                mfence();
+                hdr.sibling_ptr = sibling;
+            }
+            TX_END
+
+#endif
 #else
             page *sibling = new page(hdr.level); // 重载了new运算符
             register int m = (int)ceil(num_entries / 2);
@@ -723,6 +884,27 @@ class page {
             if (bt->root ==
                 (char *)this) { // only one node can update the root ptr
 #ifdef USE_PMDK
+
+#ifdef PMALLOC
+                page *new_root;
+                PMEMoid ptr;
+                pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
+                               TOID_TYPE_NUM(char));
+                new_root = new (pmemobj_direct(ptr))
+                    page((page *)this, split_key, sibling, hdr.level + 1);
+                bt->setNewRoot((char *)new_root);
+#elif TXPMALLOC
+                page *new_root;
+                TX_BEGIN(pmem_pool) {
+                    PMEMoid ptr;
+                    pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
+                                   TOID_TYPE_NUM(char));
+                    new_root = new (pmemobj_direct(ptr))
+                        page((page *)this, split_key, sibling, hdr.level + 1);
+                    bt->setNewRoot((char *)new_root);
+                }
+                TX_END
+#elif TRANSACTIONAL
                 //                printf("split root\n");
                 page *new_root;
                 TX_BEGIN(pmem_pool) {
@@ -731,13 +913,15 @@ class page {
                     pmemobj_tx_add_range_direct(&(bt->height),
                                                 sizeof(uint64_t));
                     PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
-                                                   TOID_TYPE_NUM(char));
+                                                    TOID_TYPE_NUM(char));
                     new_root = new (pmemobj_direct(ptr))
                         page((page *)this, split_key, sibling, hdr.level + 1);
                     bt->root = (char *)new_root;
                     bt->height++;
                 }
                 TX_END
+#endif
+
 #else
 
                 page *new_root =
@@ -848,14 +1032,58 @@ class page {
                  // overflow
                  // create a new node
 #ifdef USE_PMDK
+
+#ifdef PMALLOC
+            page *sibling;
+            register int m;
+            key_item *split_key;
+            int sibling_cnt;
+            PMEMoid ptr;
+            pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
+                           TOID_TYPE_NUM(char));
+            sibling = new (pmemobj_direct(ptr)) page(hdr.level);
+
+            m = (int)ceil(num_entries / 2);
+            split_key = records[m].key.skey;
+            sibling_cnt = 0;
+
+            if (hdr.leftmost_ptr == nullptr) { // leaf node
+                for (int i = m; i < num_entries; ++i) {
+                    sibling->insert_key(records[i].key.skey, records[i].ptr,
+                                        &sibling_cnt, false);
+                }
+            } else { // internal node
+                for (int i = m + 1; i < num_entries; ++i) {
+                    sibling->insert_key(records[i].key.skey, records[i].ptr,
+                                        &sibling_cnt, false);
+                }
+                sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
+            }
+
+            sibling->hdr.highest.skey = records[m].key.skey;
+            sibling->hdr.sibling_ptr = hdr.sibling_ptr;
+            flush_data((void *)sibling, sizeof(page));
+
+            if (hdr.leftmost_ptr == nullptr)
+                sibling->hdr.mtx->lock();
+
+            // set to nullptr
+            if (IS_FORWARD(hdr.switch_counter))
+                hdr.switch_counter++;
+            else
+                hdr.switch_counter += 2;
+            mfence();
+            hdr.sibling_ptr = sibling;
+
+#elif TXPMALLOC
             page *sibling;
             register int m;
             key_item *split_key;
             int sibling_cnt;
             TX_BEGIN(pmem_pool) {
-                pmemobj_tx_add_range_direct(&hdr.sibling_ptr, sizeof(uint64_t));
-                PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
-                                               TOID_TYPE_NUM(char));
+                PMEMoid ptr;
+                pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
+                               TOID_TYPE_NUM(char));
                 sibling = new (pmemobj_direct(ptr)) page(hdr.level);
 
                 m = (int)ceil(num_entries / 2);
@@ -891,6 +1119,52 @@ class page {
                 hdr.sibling_ptr = sibling;
             }
             TX_END
+#elif TRANSACTIONAL
+            page *sibling;
+            register int m;
+            key_item *split_key;
+            int sibling_cnt;
+            TX_BEGIN(pmem_pool) {
+                pmemobj_tx_add_range_direct(&hdr.sibling_ptr, sizeof(uint64_t));
+                PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
+                                                TOID_TYPE_NUM(char));
+                sibling = new (pmemobj_direct(ptr)) page(hdr.level);
+
+                m = (int)ceil(num_entries / 2);
+                split_key = records[m].key.skey;
+                sibling_cnt = 0;
+
+                if (hdr.leftmost_ptr == nullptr) { // leaf node
+                    for (int i = m; i < num_entries; ++i) {
+                        sibling->insert_key(records[i].key.skey, records[i].ptr,
+                                            &sibling_cnt, false);
+                    }
+                } else { // internal node
+                    for (int i = m + 1; i < num_entries; ++i) {
+                        sibling->insert_key(records[i].key.skey, records[i].ptr,
+                                            &sibling_cnt, false);
+                    }
+                    sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
+                }
+
+                sibling->hdr.highest.skey = records[m].key.skey;
+                sibling->hdr.sibling_ptr = hdr.sibling_ptr;
+                flush_data((void *)sibling, sizeof(page));
+
+                if (hdr.leftmost_ptr == nullptr)
+                    sibling->hdr.mtx->lock();
+
+                // set to nullptr
+                if (IS_FORWARD(hdr.switch_counter))
+                    hdr.switch_counter++;
+                else
+                    hdr.switch_counter += 2;
+                mfence();
+                hdr.sibling_ptr = sibling;
+            }
+            TX_END
+#endif
+
 #else
 
             page *sibling = new page(hdr.level);
@@ -956,6 +1230,28 @@ class page {
                 (char *)this) { // only one node can update the root ptr
 
 #ifdef USE_PMDK
+
+#ifdef PMALLOC
+                page *new_root;
+                PMEMoid ptr;
+                pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
+                               TOID_TYPE_NUM(char));
+                new_root = new (pmemobj_direct(ptr))
+                    page((page *)this, split_key, sibling, hdr.level + 1);
+                bt->setNewRoot((char *)new_root);
+
+#elif TXPMALLOC
+                page *new_root;
+                TX_BEGIN(pmem_pool) {
+                    PMEMoid ptr;
+                    pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
+                                   TOID_TYPE_NUM(char));
+                    new_root = new (pmemobj_direct(ptr))
+                        page((page *)this, split_key, sibling, hdr.level + 1);
+                    bt->setNewRoot((char *)new_root);
+                }
+                TX_END
+#elif TRANSACTIONAL
                 page *new_root;
                 TX_BEGIN(pmem_pool) {
                     pmemobj_tx_add_range_direct(
@@ -963,13 +1259,14 @@ class page {
                     pmemobj_tx_add_range_direct(&(bt->height),
                                                 sizeof(uint64_t));
                     PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
-                                                   TOID_TYPE_NUM(char));
+                                                    TOID_TYPE_NUM(char));
                     new_root = new (pmemobj_direct(ptr))
                         page((page *)this, split_key, sibling, hdr.level + 1);
                     bt->root = (char *)new_root;
                     bt->height++;
                 }
                 TX_END
+#endif
 #else
                 page *new_root =
                     new page((page *)this, split_key, sibling, hdr.level + 1);
@@ -1714,8 +2011,8 @@ class page {
                 // search from left ro right
                 if (IS_FORWARD(previous_switch_counter)) {
                     k = records[0].key.skey;
-                    if((uint64_t)k == static_cast<uint64_t >(-1)){
-                        std::cout<<"boom!!!\n";
+                    if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                        std::cout << "boom!!!\n";
                         return nullptr;
                     }
                     if (memcmp(k->key, key->key,
@@ -1734,8 +2031,8 @@ class page {
 
                     for (i = 1; records[i].ptr != nullptr; ++i) {
                         k = records[i].key.skey;
-                        if((uint64_t)k == static_cast<uint64_t >(-1)){
-                            std::cout<<"boom!!!\n";
+                        if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                            std::cout << "boom!!!\n";
                             return nullptr;
                         }
 
@@ -1757,8 +2054,8 @@ class page {
                     for (i = count() - 1; i > 0; --i) {
                         k = records[i].key.skey;
 
-                        if((uint64_t)k == static_cast<uint64_t >(-1)){
-                            std::cout<<"boom!!!\n";
+                        if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                            std::cout << "boom!!!\n";
                             return nullptr;
                         }
 
@@ -1780,8 +2077,8 @@ class page {
 
                     if (!ret) {
                         k = records[0].key.skey;
-                        if((uint64_t)k == static_cast<uint64_t >(-1)){
-                            std::cout<<"boom!!!\n";
+                        if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                            std::cout << "boom!!!\n";
                             return nullptr;
                         }
 
@@ -1822,8 +2119,8 @@ class page {
 
                 if (IS_FORWARD(previous_switch_counter)) {
                     k = records[0].key.skey;
-                    if((uint64_t)k == static_cast<uint64_t >(-1)){
-                        std::cout<<"boom!!!\n";
+                    if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                        std::cout << "boom!!!\n";
                         return nullptr;
                     }
                     if (memcmp(key->key, k->key,
@@ -1838,8 +2135,8 @@ class page {
                         k = records[i].key.skey;
 
                         // a patch to bypass a bug of origin fast_fair
-                        if((uint64_t)k == static_cast<uint64_t >(-1)){
-                            std::cout<<"boom!!!\n";
+                        if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                            std::cout << "boom!!!\n";
                             return nullptr;
                         }
                         if (memcmp(key->key, k->key,
@@ -1858,8 +2155,8 @@ class page {
                 } else { // search from right to left
                     for (i = count() - 1; i >= 0; --i) {
                         k = records[i].key.skey;
-                        if((uint64_t)k == static_cast<uint64_t >(-1)){
-                            std::cout<<"boom!!!\n";
+                        if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                            std::cout << "boom!!!\n";
                             return nullptr;
                         }
                         if (memcmp(key->key, k->key,
@@ -1942,7 +2239,7 @@ void register_thread() {
         e_mgr->StartThread();
     }
     if (ti_list == nullptr) {
-#ifdef  USE_PMDK
+#ifdef USE_PMDK
         PMEMoid ptr;
         int ret = pmemobj_zalloc(pmem_pool, &ptr, sizeof(threadinfo),
                                  TOID_TYPE_NUM(char));
@@ -2083,11 +2380,11 @@ void btree::btree_insert(uint64_t key, char *right) { // need to be string
     ti->JoinEpoch();
     page *p = (page *)root;
 
-    while (p&& p->hdr.leftmost_ptr != nullptr) {
+    while (p && p->hdr.leftmost_ptr != nullptr) {
         p = (page *)p->linear_search(this, key);
     }
 
-    if (p&&!p->store(this, nullptr, key, right, true, true)) { // store
+    if (p && !p->store(this, nullptr, key, right, true, true)) { // store
         btree_insert(key, right);
     }
     ti->LeaveEpoch();
@@ -2159,7 +2456,7 @@ void btree::btree_delete(uint64_t key) {
 
     if (p && t) {
         if (!p->remove(this, key)) {
-//            btree_delete(key);
+            //            btree_delete(key);
         }
     } else {
         printf("not found the key to delete %lu\n", key);
@@ -2168,7 +2465,7 @@ void btree::btree_delete(uint64_t key) {
 }
 
 void btree::btree_delete(char *key) {
-//    std::cout<<key<<" "<<strlen(key)<<"\n";
+    //    std::cout<<key<<" "<<strlen(key)<<"\n";
     ti->JoinEpoch();
     page *p = (page *)root;
 
@@ -2184,11 +2481,11 @@ void btree::btree_delete(char *key) {
         if (!p)
             break;
     }
-//    std::cout<<"t is "<<(uint64_t)t<<"\n";
+    //    std::cout<<"t is "<<(uint64_t)t<<"\n";
 
     if (p && t) {
         if (!p->remove(this, new_item)) {
-//            btree_delete(key);
+            //            btree_delete(key);
         }
     } else {
         printf("not found the key to delete %lu\n", key);

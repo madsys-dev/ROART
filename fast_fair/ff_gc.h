@@ -151,8 +151,9 @@ class threadinfo {
         while (first_p != nullptr && first_p->delete_epoch < min_epoch) {
             // First unlink the current node from the linked list
             // This could set it to nullptr
-            TX_BEGIN(pool){
-                pmemobj_tx_add_range_direct(&header_p->next_p, sizeof(uint64_t));
+            TX_BEGIN(pool) {
+                pmemobj_tx_add_range_direct(&header_p->next_p,
+                                            sizeof(uint64_t));
                 pmemobj_tx_add_range_direct(&md->node_count, sizeof(int));
                 header_p->next_p = first_p->next_p;
 
@@ -164,9 +165,9 @@ class threadinfo {
             TX_END
 
             // Then free memory
-//            FreeEpochNode(first_p->node_p);
+            //            FreeEpochNode(first_p->node_p);
 
-//            delete first_p;
+            //            delete first_p;
             first_p = header_p->next_p;
         }
 
@@ -177,7 +178,6 @@ class threadinfo {
         }
         return;
     }
-
 };
 
 } // namespace fastfair

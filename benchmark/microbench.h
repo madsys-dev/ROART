@@ -44,7 +44,7 @@ class Benchmark {
     Benchmark(Config &conf) : init_key(0), _conf(conf) {
         if (conf.workload == RANDOM) {
             workload = new RandomGenerator();
-        } else {
+        } else if (conf.workload == ZIPFIAN) {
             workload = new ZipfGenerator(conf.skewness, conf.init_keys);
         }
 

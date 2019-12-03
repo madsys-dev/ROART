@@ -6,7 +6,7 @@
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
-#include "fast_fair_3.h"
+#include "fast_fair.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "timer.h"
@@ -18,9 +18,11 @@
 
 using namespace NVMMgr_ns;
 
-const int thread_to_core[36]={
-        1,5,9,13,17,21,25,29,33,37,41,45,49,53,57,61,65,69, // numa node 1
-        0,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68 // numa node 0
+const int thread_to_core[36] = {
+    1,  5,  9,  13, 17, 21, 25, 29, 33,
+    37, 41, 45, 49, 53, 57, 61, 65, 69, // numa node 1
+    0,  4,  8,  12, 16, 20, 24, 28, 32,
+    36, 40, 44, 48, 52, 56, 60, 64, 68 // numa node 0
 };
 
 template <typename K, typename V, int size> class Coordinator {
@@ -157,12 +159,9 @@ template <typename K, typename V, int size> class Coordinator {
             case INSERT:
                 // printf("[%d] start insert %lld\n", workerid, d);
                 res = art->insert(k);
-                if (res == PART_ns::Tree::OperationResults::Success) {
-                    count++;
-                }
                 break;
             case REMOVE:
-
+                art->insert(k);
                 art->remove(k);
                 break;
             case GET:
@@ -295,7 +294,7 @@ template <typename K, typename V, int size> class Coordinator {
                 // printf("[%d] start insert %lld\n", workerid, d);
 
                 if (conf.key_type == Integer) {
-//                    std::cout<<"insert key "<<d<<"\n";
+                    //                    std::cout<<"insert key "<<d<<"\n";
                     bt->btree_insert(d, (char *)d);
                 } else if (conf.key_type == String) {
                     bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
@@ -305,17 +304,17 @@ template <typename K, typename V, int size> class Coordinator {
             case REMOVE:
                 // first insert then remove
                 if (conf.key_type == Integer) {
-//                    std::cout<<"insert key "<<d<<"\n";
+                    //                    std::cout<<"insert key "<<d<<"\n";
                     bt->btree_insert(d, (char *)d);
                 } else if (conf.key_type == String) {
                     bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
                 }
 
                 if (conf.key_type == Integer) {
-//                    std::cout<<"delete key "<<d<<"\n";
+                    //                    std::cout<<"delete key "<<d<<"\n";
                     bt->btree_delete(d);
                 } else if (conf.key_type == String) {
-//                    std::cout<<"delete key "<<s<<"\n";
+                    //                    std::cout<<"delete key "<<s<<"\n";
                     bt->btree_delete((char *)s.c_str());
                 }
 

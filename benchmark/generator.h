@@ -177,7 +177,7 @@ class RandomGenerator : public WorkloadGenerator {
     RandomFunc rdm[max_thread_num];
 
   public:
-    RandomGenerator() {}
+    RandomGenerator() { std::cout << "random generator\n"; }
 
     long long NextInt(int tid) {
         int index = rdm[tid].Next() % data_size;
