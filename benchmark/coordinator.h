@@ -3,6 +3,7 @@
 
 #include "Key.h"
 #include "N.h"
+#include "RNTree.h"
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
@@ -19,10 +20,10 @@
 using namespace NVMMgr_ns;
 
 const int thread_to_core[36] = {
-    1,  5,  9,  13, 17, 21, 25, 29, 33,
-    37, 41, 45, 49, 53, 57, 61, 65, 69, // numa node 1
     0,  4,  8,  12, 16, 20, 24, 28, 32,
-    36, 40, 44, 48, 52, 56, 60, 64, 68 // numa node 0
+    36, 40, 44, 48, 52, 56, 60, 64, 68, // numa node 0
+    1,  5,  9,  13, 17, 21, 25, 29, 33,
+    37, 41, 45, 49, 53, 57, 61, 65, 69 // numa node 1
 };
 
 template <typename K, typename V, int size> class Coordinator {
@@ -122,6 +123,12 @@ template <typename K, typename V, int size> class Coordinator {
         int submit_time = 1000000000.0 / frequency;
         int count = 0;
         PART_ns::Key *k = new PART_ns::Key();
+
+        // variable value
+        const int val_len = 100;
+        char value[val_len + 5];
+        memset(value, 'a', val_len);
+
         while (done == 0) {
 
             V result = 1;
@@ -139,7 +146,7 @@ template <typename K, typename V, int size> class Coordinator {
                 auto next_operation = benchmark->nextStrOperation(workerid);
                 op = next_operation.first;
                 s = next_operation.second;
-                k->Init((char *)s.c_str(), sizeof(uint64_t), (char *)s.c_str());
+                k->Init((char *)s.c_str(), sizeof(uint64_t), value, val_len);
             }
 
             cpuCycleTimer t;
@@ -150,12 +157,9 @@ template <typename K, typename V, int size> class Coordinator {
             PART_ns::Tree::OperationResults res;
             switch (op) {
             case UPDATE:
-                // result = bt->update(d, d, update_latency_breaks);
-                // if (tx % 100 == 0) {
-                //     sync_latency(total_update_latency_breaks,
-                //                  update_latency_breaks, update_count);
-                // }
-                // break;
+                //                std::cout<<"update key "<<s<<"\n";
+                art->update(k);
+                break;
             case INSERT:
                 // printf("[%d] start insert %lld\n", workerid, d);
                 res = art->insert(k);
@@ -165,6 +169,7 @@ template <typename K, typename V, int size> class Coordinator {
                 art->remove(k);
                 break;
             case GET:
+                //                std::cout<<"lookup key "<<s<<"\n";
                 art->lookup(k);
 
                 // if (tx % 100 == 0) {
@@ -258,6 +263,11 @@ template <typename K, typename V, int size> class Coordinator {
         int frequency = conf.throughput / conf.num_threads;
         int submit_time = 1000000000.0 / frequency;
         int count = 0;
+
+        const int val_len = 100;
+        char value[val_len + 5];
+        memset(value, 'a', val_len);
+        value[val_len] = 0;
         while (done == 0) {
 
             V result = 1;
@@ -284,20 +294,22 @@ template <typename K, typename V, int size> class Coordinator {
 
             switch (op) {
             case UPDATE:
-                // result = bt->update(d, d, update_latency_breaks);
-                // if (tx % 100 == 0) {
-                //     sync_latency(total_update_latency_breaks,
-                //                  update_latency_breaks, update_count);
-                // }
-                // break;
+                if (conf.key_type == Integer) {
+                    //                    std::cout<<"insert key "<<d<<"\n";
+                    bt->btree_update(d, value);
+                } else if (conf.key_type == String) {
+                    bt->btree_update((char *)s.c_str(), value);
+                }
+
+                break;
             case INSERT:
                 // printf("[%d] start insert %lld\n", workerid, d);
 
                 if (conf.key_type == Integer) {
                     //                    std::cout<<"insert key "<<d<<"\n";
-                    bt->btree_insert(d, (char *)d);
+                    bt->btree_insert(d, value);
                 } else if (conf.key_type == String) {
-                    bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
+                    bt->btree_insert((char *)s.c_str(), value);
                 }
 
                 break;
@@ -305,9 +317,9 @@ template <typename K, typename V, int size> class Coordinator {
                 // first insert then remove
                 if (conf.key_type == Integer) {
                     //                    std::cout<<"insert key "<<d<<"\n";
-                    bt->btree_insert(d, (char *)d);
+                    bt->btree_insert(d, value);
                 } else if (conf.key_type == String) {
-                    bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
+                    bt->btree_insert((char *)s.c_str(), value);
                 }
 
                 if (conf.key_type == Integer) {
@@ -382,8 +394,14 @@ template <typename K, typename V, int size> class Coordinator {
             std::thread **pid = new std::thread *[conf.num_threads];
             bar = new boost::barrier(conf.num_threads + 1);
 
+            std::cout << "start\n";
             PART_ns::Key *k = new PART_ns::Key();
             printf("init keys: %d\n", (int)conf.init_keys);
+            // variable value
+            const int val_len = 100;
+            char value[val_len + 5];
+            memset(value, 'a', val_len);
+
             for (unsigned long i = 0; i < conf.init_keys; i++) {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
@@ -391,8 +409,8 @@ template <typename K, typename V, int size> class Coordinator {
                     art->insert(k);
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
-                    k->Init((char *)s.c_str(), sizeof(uint64_t),
-                            (char *)s.c_str());
+                    k->Init((char *)s.c_str(), sizeof(uint64_t), value,
+                            val_len);
                     art->insert(k);
                 }
             }
@@ -417,10 +435,10 @@ template <typename K, typename V, int size> class Coordinator {
 
             printf("[COORDINATOR]\tFinish benchmark..\n");
             printf("[RESULT]\ttotal throughput: %.3lf Mtps, %d threads, %s, "
-                   "%s, benchmark %d\n",
+                   "%s, benchmark %d, zipfian %.2lf\n",
                    (double)final_result.throughput / 1000000.0 / conf.duration,
                    conf.num_threads, (conf.type == PART) ? "ART" : "FF",
-                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark);
+                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,(conf.workload == RANDOM) ? 0:conf.skewness);
 
             delete art;
             delete[] pid;
@@ -446,15 +464,19 @@ template <typename K, typename V, int size> class Coordinator {
             std::thread **pid = new std::thread *[conf.num_threads];
             bar = new boost::barrier(conf.num_threads + 1);
             printf("init keys: %d\n", (int)conf.init_keys);
+
+            const int val_len = 100;
+            char value[val_len + 5];
+            memset(value, 'a', val_len);
+            value[val_len] = 0;
             for (unsigned long i = 0; i < conf.init_keys; i++) {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
-                    bt->btree_insert(kk, (char *)kk);
-                    //                    std::cout << "insert key " << kk << "
-                    //                    id: " << i << "\n";
+                    bt->btree_insert(kk, value);
+                                        std::cout << "insert key " << kk << "id: " << i << "\n";
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
-                    bt->btree_insert((char *)s.c_str(), (char *)s.c_str());
+                    bt->btree_insert((char *)s.c_str(), value);
                 }
             }
             printf("init insert finished\n");
@@ -478,10 +500,10 @@ template <typename K, typename V, int size> class Coordinator {
 
             printf("[COORDINATOR]\tFinish benchmark..\n");
             printf("[RESULT]\ttotal throughput: %.3lf Mtps, %d threads, %s, "
-                   "%s, benchmark %d\n",
+                   "%s, benchmark %d, zipfian %.2lf\n",
                    (double)final_result.throughput / 1000000.0 / conf.duration,
                    conf.num_threads, (conf.type == PART) ? "ART" : "FF",
-                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark);
+                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark, (conf.workload == RANDOM) ? 0:conf.skewness);
 
             delete[] pid;
             delete[] results;
@@ -510,8 +532,6 @@ template <typename K, typename V, int size> class Coordinator {
     Config conf __attribute__((aligned(64)));
     volatile int done __attribute__((aligned(64))) = 0;
     boost::barrier *bar __attribute__((aligned(64))) = 0;
-    static const size_t val_len = sizeof(uint64_t);
-    static const size_t key_len = sizeof(uint64_t);
 };
 
 #endif

@@ -18,7 +18,7 @@ void N256::deleteChildren() {
 bool N256::insert(uint8_t key, N *val, bool flush) {
     children[key].store(N::setDirty(val), std::memory_order_seq_cst);
     if (flush)
-        flush_data((void *)&children[key], sizeof(N *));
+        flush_data((void *)&children[key], sizeof(std::atomic<N *>));
     //        clflush((char *)&children[key], sizeof(N *), false, true);
     children[key].store(val, std::memory_order_seq_cst);
     count++;
@@ -27,7 +27,7 @@ bool N256::insert(uint8_t key, N *val, bool flush) {
 
 void N256::change(uint8_t key, N *n) {
     children[key].store(N::setDirty(n), std::memory_order_seq_cst);
-    flush_data((void *)&children[key], sizeof(N *));
+    flush_data((void *)&children[key], sizeof(std::atomic<N *>));
     //    clflush((char *)&children[key], sizeof(N *), false, true);
     children[key].store(n, std::memory_order_seq_cst);
 }
@@ -39,7 +39,7 @@ bool N256::remove(uint8_t k, bool force, bool flush) {
         return false;
     }
     children[k].store(N::setDirty(nullptr), std::memory_order_seq_cst);
-    flush_data((void *)&children[k], sizeof(N *));
+    flush_data((void *)&children[k], sizeof(std::atomic<N *>));
     //    clflush((char *)&children[k], sizeof(N *), false, true);
     children[k].store(nullptr, std::memory_order_seq_cst);
     count--;

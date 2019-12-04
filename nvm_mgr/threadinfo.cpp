@@ -246,6 +246,7 @@ void thread_info::FreeEpochNode(void *node_p) {
         // reclaim leaf key
         PART_ns::Leaf *leaf = (PART_ns::Leaf *)n;
         free_node_from_size((uint64_t)(leaf->fkey), leaf->key_len);
+        free_node_from_size((uint64_t)(leaf->value), leaf->val_len);
     }
 
     // reclaim the node

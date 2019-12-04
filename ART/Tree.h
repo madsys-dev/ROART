@@ -65,6 +65,8 @@ class Tree {
 
     void *lookup(const Key *k) const;
 
+    OperationResults update(const Key *k) const;
+
     bool lookupRange(const Key *start, const Key *end, const Key *continueKey,
                      Leaf *result[], std::size_t resultLen,
                      std::size_t &resultCount) const;

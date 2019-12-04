@@ -21,12 +21,12 @@ bool N4::insert(uint8_t key, N *n, bool flush) {
     }
     keys[compactCount].store(key, std::memory_order_seq_cst);
     if (flush)
-        flush_data((void *)&keys[compactCount], sizeof(uint8_t));
+        flush_data((void *)&keys[compactCount], sizeof(std::atomic<uint8_t>));
     //        clflush((char *)&keys[compactCount], sizeof(uint8_t), true, true);
 
     children[compactCount].store(N::setDirty(n), std::memory_order_seq_cst);
     if (flush)
-        flush_data((void *)&children[compactCount], sizeof(N *));
+        flush_data((void *)&children[compactCount], sizeof(std::atomic<N *>));
     //        clflush((char *)&children[compactCount], sizeof(N *), true, true);
     children[compactCount].store(n, std::memory_order_seq_cst);
     compactCount++;
@@ -42,15 +42,14 @@ void N4::change(uint8_t key, N *val) {
         N *child = children[i].load();
         if (child != nullptr && keys[i].load() == key) {
             children[i].store(N::setDirty(val), std::memory_order_seq_cst);
-            flush_data((void *)&children[i], sizeof(N *));
+            flush_data((void *)&children[i], sizeof(std::atomic<N *>));
             //            clflush((char *)&children[i], sizeof(N *), false,
             //            true);
             children[i].store(val, std::memory_order_seq_cst);
             return;
         }
     }
-    assert(false);
-    __builtin_unreachable();
+    return;
 }
 
 std::atomic<N *> *N4::getChild(const uint8_t k) {
@@ -67,7 +66,7 @@ bool N4::remove(uint8_t k, bool force, bool flush) {
     for (uint32_t i = 0; i < compactCount; ++i) {
         if (children[i] != nullptr && keys[i].load() == k) {
             children[i].store(N::setDirty(nullptr), std::memory_order_seq_cst);
-            flush_data((void *)&children[i], sizeof(N *));
+            flush_data((void *)&children[i], sizeof(std::atomic<N *>));
             //            clflush((char *)&children[i], sizeof(N *), false,
             //            true);
             children[i].store(nullptr, std::memory_order_seq_cst);

@@ -33,25 +33,27 @@ class BaseNode {
 class Leaf : public BaseNode {
   public:
     size_t key_len;
+    size_t val_len;
     uint64_t key;
     // variable key
     uint8_t *fkey;
-    uint64_t value;
+    char *value;
 
   public:
     Leaf(const Key *k);
+    Leaf(uint8_t *key_, size_t key_len_, char *value_,
+         size_t val_len_); // used for update
     // use for test
     Leaf() : BaseNode(NTypes::Leaf) {}
 
     virtual ~Leaf() {}
 
-    inline uint64_t getValue() { return value; }
-    inline bool checkKey(const Key *k) const {
+    bool checkKey(const Key *k) const {
         if (key_len == k->getKeyLen() && memcmp(fkey, k->fkey, key_len) == 0)
             return true;
         return false;
     }
-    inline size_t getKeyLen() const { return key_len; }
+    size_t getKeyLen() const { return key_len; }
 } __attribute__((aligned(64)));
 
 static constexpr uint32_t maxStoredPrefixLength = 4;
@@ -65,12 +67,16 @@ class N : public BaseNode {
   protected:
     N(NTypes type, uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : BaseNode(type), level(level) {
+        typeVersionLockObsolete = new std::atomic<uint64_t>;
+        typeVersionLockObsolete->store(0b100);
         setType(type);
         setPrefix(prefix, prefixLength, false);
     }
 
     N(NTypes type, uint32_t level, const Prefix &prefi)
         : BaseNode(type), prefix(prefi), level(level) {
+        typeVersionLockObsolete = new std::atomic<uint64_t>;
+        typeVersionLockObsolete->store(0b100);
         setType(type);
     }
 
@@ -81,7 +87,8 @@ class N : public BaseNode {
     virtual ~N() {}
 
     // 3b type 60b version 1b lock 1b obsolete
-    std::atomic<uint64_t> typeVersionLockObsolete{0b100};
+//    std::atomic<uint64_t> typeVersionLockObsolete{0b100};
+    std::atomic<uint64_t> *typeVersionLockObsolete;
     // version 1, unlocked, not obsolete
     alignas(64) std::atomic<Prefix> prefix;
     const uint32_t level;
@@ -134,7 +141,7 @@ class N : public BaseNode {
     /**
      * can only be called when node is locked
      */
-    void writeUnlockObsolete() { typeVersionLockObsolete.fetch_add(0b11); }
+    void writeUnlockObsolete() { typeVersionLockObsolete->fetch_add(0b11); }
 
     static std::atomic<N *> *getChild(const uint8_t k, N *node);
 

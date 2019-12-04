@@ -2,8 +2,6 @@
 
 #include <libpmemobj.h>
 
-namespace fastfair {
-
 static const int GC_NODE_COUNT_THREADHOLD = 1024;
 
 static const int GC_INTERVAL = 50;
@@ -179,5 +177,3 @@ class threadinfo {
         return;
     }
 };
-
-} // namespace fastfair

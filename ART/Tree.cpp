@@ -95,17 +95,96 @@ void *Tree::lookup(const Key *k) const {
                 N::helpFlush(curref);
                 if (level < k->getKeyLen() - 1 || optimisticPrefixMatch) {
                     if (ret->checkKey(k)) {
-                        return &ret->value;
+                        return ret->value;
                     } else {
                         return NULL;
                     }
                 } else {
-                    return &ret->value;
+                    return ret->value;
                 }
             }
         }
         }
         level++;
+    }
+}
+
+typename Tree::OperationResults Tree::update(const Key *k) const {
+    EpochGuard NewEpoch;
+    restart:
+    bool needRestart = false;
+
+    N *node = nullptr;
+    N *nextNode = root;
+    N *parentNode = nullptr;
+    uint8_t parentKey, nodeKey = 0;
+    uint32_t level = 0;
+    std::atomic<N *> *parentref = nullptr;
+    std::atomic<N *> *curref = nullptr;
+    // bool optimisticPrefixMatch = false;
+
+    while (true) {
+        parentNode = node;
+        parentKey = nodeKey;
+        node = nextNode;
+
+        auto v = node->getVersion(); // check version
+
+        switch (checkPrefix(node, k, level)) { // increases level
+            case CheckPrefixResult::NoMatch:
+                if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
+                    goto restart;
+                }
+                return OperationResults::NotFound;
+            case CheckPrefixResult::OptimisticMatch:
+                // fallthrough
+            case CheckPrefixResult::Match: {
+                // if (level >= k->getKeyLen()) {
+                //     // key is too short
+                //     // but it next fkey is 0
+                //     return OperationResults::NotFound;
+                // }
+                nodeKey = k->fkey[level];
+
+                parentref = curref;
+                curref = N::getChild(nodeKey, node);
+                if (curref == nullptr)
+                    nextNode = nullptr;
+                else
+                    nextNode = N::clearDirty(curref->load());
+
+                if (nextNode == nullptr) {
+                    if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
+//                        std::cout<<"retry\n";
+                        goto restart;
+                    }
+                    return OperationResults::NotFound;
+                }
+                if (N::isLeaf(nextNode)) {
+                    node->lockVersionOrRestart(v, needRestart);
+                    if (needRestart){
+//                        std::cout<<"retry\n";
+                        goto restart;
+                    }
+
+                    Leaf *leaf = N::getLeaf(nextNode);
+                    if (!leaf->checkKey(k)) {
+                        node->writeUnlock();
+                        return OperationResults::NotFound;
+                    }
+                    // find key, update it
+                    Leaf *newleaf = new (alloc_new_node_from_type(NTypes::Leaf))
+                            Leaf(leaf->fkey, k->key_len, (char *)k->value, k->val_len);
+//                    std::cout<<(int)(((BaseNode *)newleaf)->type)<<"\n";
+                    flush_data((void *)newleaf, sizeof(Leaf));
+
+                    N::change(node, nodeKey, N::setLeaf(newleaf));
+                    node->writeUnlock();
+                    return OperationResults::Success;
+                }
+                level++;
+            }
+        }
     }
 }
 
@@ -307,8 +386,9 @@ restart:
     }
 
     if (toContinue != NULL) {
-        Key *newkey =
-            new Key(toContinue->key, toContinue->key_len, toContinue->value);
+        Key *newkey = new Key();
+        newkey->Init((char *)toContinue->fkey, toContinue->key_len,
+                     toContinue->value, toContinue->val_len);
         continueKey = newkey;
         return true;
     } else {

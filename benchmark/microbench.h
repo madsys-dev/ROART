@@ -41,6 +41,7 @@ class Benchmark {
     long long *x;
     Config _conf;
 
+
     Benchmark(Config &conf) : init_key(0), _conf(conf) {
         if (conf.workload == RANDOM) {
             workload = new RandomGenerator();
@@ -235,7 +236,7 @@ class YSCBA : public Benchmark {
     virtual std::pair<OperationType, long long> nextIntOperation(int tid) {
         int k = rdm[tid].randomInt() % 100;
         if (k > read_ratio) {
-            return std::make_pair(INSERT,
+            return std::make_pair(UPDATE,
                                   workload->NextInt(tid) % _conf.init_keys);
         } else {
             return std::make_pair(GET,
@@ -246,7 +247,7 @@ class YSCBA : public Benchmark {
     virtual std::pair<OperationType, std::string> nextStrOperation(int tid) {
         int k = rdm[tid].randomInt() % 100;
         if (k > read_ratio) {
-            return std::make_pair(INSERT, workload->NextStr(tid));
+            return std::make_pair(UPDATE, workload->NextStr(tid));
         } else {
             return std::make_pair(GET, workload->NextStr(tid));
         }
@@ -257,7 +258,7 @@ class YSCBB : public Benchmark {
   public:
     //	readRate = 0.95;
     //	writeRate = 0.05;
-    int read_ratio = 95;
+    int read_ratio = 90;
     RandomFunc rdm[max_thread_num];
 
     YSCBB(Config &conf) : Benchmark(conf) {}
@@ -268,7 +269,7 @@ class YSCBB : public Benchmark {
             return std::make_pair(GET,
                                   workload->NextInt(tid) % _conf.init_keys);
         } else {
-            return std::make_pair(INSERT,
+            return std::make_pair(UPDATE,
                                   workload->NextInt(tid) % _conf.init_keys);
         }
     }
@@ -276,7 +277,7 @@ class YSCBB : public Benchmark {
     virtual std::pair<OperationType, std::string> nextStrOperation(int tid) {
         int k = rdm[tid].randomInt() % 100;
         if (k > read_ratio) {
-            return std::make_pair(INSERT, workload->NextStr(tid));
+            return std::make_pair(UPDATE, workload->NextStr(tid));
         } else {
             return std::make_pair(GET, workload->NextStr(tid));
         }

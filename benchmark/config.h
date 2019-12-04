@@ -7,7 +7,7 @@
 
 const int max_thread_num = 36;
 
-enum IndexType { PART, FAST_FAIR, _IndexTypeNumber };
+enum IndexType { PART, FAST_FAIR, RNTREE, _IndexTypeNumber };
 
 enum KeyType { Integer, String, _KeyTypeNumber };
 
@@ -80,7 +80,8 @@ static void usage_exit(FILE *out) {
         out,
         "Command line options : nstore <options> \n"
         "   -h --help              : Print help message \n"
-        "   -t --type              : Index type : 0 (PART) 1 (FAST_FAIR) \n"
+        "   -t --type              : Index type : 0 (PART) 1 (FAST_FAIR) 2 "
+        "(RNTREE) \n"
         "   -K --key_type          : Key type : 0 (Integer) 1 (String) \n"
         "   -n --num_threads       : Number of workers \n"
         "   -k --keys              : Number of key-value pairs at begin\n"
@@ -171,5 +172,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
             usage_exit(stderr);
         }
     }
+    if (state.workload == ZIPFIAN)
+        std::cout << "zipfian skewness " << state.skewness << "\n";
     // state.report();
 }

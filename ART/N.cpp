@@ -30,7 +30,7 @@ static inline unsigned long read_tsc(void) {
 
 Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
     key_len = k->key_len;
-    value = k->value; // value is 8byte, offen store a pointer to row in a table
+    val_len = k->val_len;
 #ifdef KEY_INLINE
     key = k->key; // compare to store the key, new an array will decrease
                   // 30% performance
@@ -38,12 +38,27 @@ Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
 #else
     // allocate from NVM for variable key
     fkey = new (alloc_new_node_from_size(key_len)) uint8_t[key_len];
+    value = new (alloc_new_node_from_size(val_len)) char[val_len];
     memcpy(fkey, k->fkey, key_len);
+    memcpy(value, (void *)k->value, val_len);
     flush_data((void *)fkey, key_len);
+    flush_data((void *)value, val_len);
+
     // persist the key, without persist the link to leaf
     // no one can see the key
     // if crash without link the leaf, key can be reclaimed safely
 #endif
+}
+
+// update value, so no need to alloc key
+Leaf::Leaf(uint8_t *key_, size_t key_len_, char *value_, size_t val_len_)
+    : BaseNode(NTypes::Leaf) {
+    key_len = key_len_;
+    val_len = val_len_;
+    fkey = key_; // no need to alloc a new key, key_ is persistent
+    value = new (alloc_new_node_from_size(val_len)) char[val_len];
+    memcpy(value, (void *)value_, val_len);
+    flush_data((void *)value, val_len);
 }
 
 void N::mfence() { asm volatile("mfence" ::: "memory"); }
@@ -74,7 +89,7 @@ void N::helpFlush(std::atomic<N *> *n) {
     N *now_node = n->load();
     // printf("help\n");
     if (N::isDirty(now_node)) {
-        printf("help\n");
+        printf("help, point to type is %d\n", ((BaseNode *)N::clearDirty(now_node))->type);
         flush_data((void *)n, sizeof(N *));
         //        clflush((char *)n, sizeof(N *), true, true);
         n->compare_exchange_strong(now_node, N::clearDirty(now_node));
@@ -82,7 +97,7 @@ void N::helpFlush(std::atomic<N *> *n) {
 }
 
 void N::setType(NTypes type) {
-    typeVersionLockObsolete.fetch_add(convertTypeToVersion(type));
+    typeVersionLockObsolete->fetch_add(convertTypeToVersion(type));
 }
 
 uint64_t N::convertTypeToVersion(NTypes type) {
@@ -91,7 +106,7 @@ uint64_t N::convertTypeToVersion(NTypes type) {
 
 NTypes N::getType() const {
     return static_cast<NTypes>(
-        typeVersionLockObsolete.load(std::memory_order_relaxed) >> 60);
+        typeVersionLockObsolete->load(std::memory_order_relaxed) >> 60);
 }
 
 uint32_t N::getLevel() const { return level; }
@@ -99,16 +114,16 @@ uint32_t N::getLevel() const { return level; }
 void N::writeLockOrRestart(bool &needRestart) {
     uint64_t version;
     do {
-        version = typeVersionLockObsolete.load();
+        version = typeVersionLockObsolete->load();
         while (isLocked(version)) {
             _mm_pause();
-            version = typeVersionLockObsolete.load();
+            version = typeVersionLockObsolete->load();
         }
         if (isObsolete(version)) {
             needRestart = true;
             return;
         }
-    } while (!typeVersionLockObsolete.compare_exchange_weak(version,
+    } while (!typeVersionLockObsolete->compare_exchange_weak(version,
                                                             version + 0b10));
 }
 
@@ -117,7 +132,7 @@ void N::lockVersionOrRestart(uint64_t &version, bool &needRestart) {
         needRestart = true;
         return;
     }
-    if (typeVersionLockObsolete.compare_exchange_strong(version,
+    if (typeVersionLockObsolete->compare_exchange_strong(version,
                                                         version + 0b10)) {
         version = version + 0b10;
     } else {
@@ -125,7 +140,7 @@ void N::lockVersionOrRestart(uint64_t &version, bool &needRestart) {
     }
 }
 
-void N::writeUnlock() { typeVersionLockObsolete.fetch_add(0b10); }
+void N::writeUnlock() { typeVersionLockObsolete->fetch_add(0b10); }
 
 N *N::getAnyChild(const N *node) {
     switch (node->getType()) {
@@ -301,8 +316,7 @@ std::atomic<N *> *N::getChild(const uint8_t k, N *node) {
         return n->getChild(k);
     }
     }
-    assert(false);
-    __builtin_unreachable();
+    return nullptr;
 }
 
 void N::deleteChildren(N *node) {
@@ -331,8 +345,7 @@ void N::deleteChildren(N *node) {
         return;
     }
     }
-    assert(false);
-    __builtin_unreachable();
+    return;
 }
 
 template <typename curN, typename smallerN>
@@ -400,7 +413,7 @@ void N::removeAndUnlock(N *node, uint8_t key, N *parentNode, uint8_t keyParent,
 
 bool N::isLocked(uint64_t version) const { return ((version & 0b10) == 0b10); }
 
-uint64_t N::getVersion() const { return typeVersionLockObsolete.load(); }
+uint64_t N::getVersion() const { return typeVersionLockObsolete->load(); }
 
 bool N::isObsolete(uint64_t version) { return (version & 1) == 1; }
 
@@ -409,7 +422,7 @@ bool N::checkOrRestart(uint64_t startRead) const {
 }
 
 bool N::readUnlockOrRestart(uint64_t startRead) const {
-    return startRead == typeVersionLockObsolete.load();
+    return startRead == typeVersionLockObsolete->load();
 }
 
 void N::setCount(uint16_t count_, uint16_t compactCount_) {
@@ -589,6 +602,10 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
         // leaf key also need to insert into rs set
         size = convert_power_two(leaf->key_len);
         rs.insert(std::make_pair((uint64_t)(leaf->fkey), size));
+
+        // value
+        size = convert_power_two(leaf->val_len);
+        rs.insert(std::make_pair((uint64_t)(leaf->value), size));
         return;
     }
     // insert internal node into set
@@ -657,7 +674,8 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     }
     // reset count and version and lock
     node->setCount(xcount, xcompactCount);
-    node->typeVersionLockObsolete.store(convertTypeToVersion(type));
-    node->typeVersionLockObsolete.fetch_add(0b100);
+    node->typeVersionLockObsolete = new std::atomic<uint64_t>;
+    node->typeVersionLockObsolete->store(convertTypeToVersion(type));
+    node->typeVersionLockObsolete->fetch_add(0b100);
 }
 } // namespace PART_ns

@@ -11,12 +11,16 @@ namespace PART_ns {
 struct Key {
     uint64_t value;
     size_t key_len;
+    size_t val_len;
     uint64_t key;
     uint8_t *fkey;
 
-    Key(uint64_t key_ = 0, size_t key_len_ = 0, uint64_t value_ = 0) {
+    Key() {}
+
+    Key(uint64_t key_, size_t key_len_, uint64_t value_) {
         value = value_;
         key_len = key_len_;
+        val_len = sizeof(uint64_t);
         key = key_;
         fkey = (uint8_t *)&key;
     }
@@ -24,11 +28,13 @@ struct Key {
     void Init(uint64_t key_, size_t key_len_, uint64_t value_) {
         value = value_;
         key_len = key_len_;
+        val_len = sizeof(uint64_t);
         key = key_;
         fkey = (uint8_t *)&key;
     }
 
-    void Init(char *key_, size_t key_len_, char *value_) {
+    void Init(char *key_, size_t key_len_, char *value_, size_t val_len_) {
+        val_len = val_len_;
         value = (uint64_t)value_;
         key_len = key_len_;
         fkey = (uint8_t *)key_;

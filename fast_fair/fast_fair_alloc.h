@@ -1,7 +1,7 @@
 #ifndef BTREE_H_
 #define BTREE_H_
 
-#include "ff_gc.h"
+#include "pmdk_gc.h"
 #include "util.h"
 #include <cassert>
 #include <climits>
@@ -112,6 +112,8 @@ class btree {
     //    (entry_key_t, char *, uint32_t, entry_key_t *, bool *, page **);
     char *btree_search(uint64_t);
     char *btree_search(char *);
+    void btree_update(uint64_t key, char *right);
+    void btree_update(char * key, char *right);
     void btree_search_range(uint64_t, uint64_t, unsigned long *, int, int &);
     void btree_search_range(char *, char *, unsigned long *, int, int &);
     key_item *make_key_item(char *, size_t, bool);
@@ -436,7 +438,49 @@ class page {
         if (*num_entries == 0) { // this page is empty
             entry *new_entry = (entry *)&records[0];
             entry *array_end = (entry *)&records[1];
+#ifdef USE_PMDK
+#ifdef PMALLOC
+            PMEMoid p1;
+            pmemobj_zalloc(pmem_pool, &p1, sizeof(key_item) + key->key_len,
+                           TOID_TYPE_NUM(struct key_item));
+            key_item *k = (key_item *)pmemobj_direct(p1);
+
+            k->key_len = key->key_len;
+            memcpy(k->key, key->key, key->key_len);
+            flush_data(k, sizeof(key_item) + key->key_len);
+            new_entry->key.skey = k;
+#elif TXPMALLOC
+            TX_BEGIN(pmem_pool) {
+
+                PMEMoid p1;
+                pmemobj_zalloc(pmem_pool, &p1, sizeof(key_item) + key->key_len,
+                               TOID_TYPE_NUM(struct key_item));
+                key_item *k = (key_item *)pmemobj_direct(p1);
+
+                k->key_len = key->key_len;
+                memcpy(k->key, key->key, key->key_len);
+                flush_data(k, sizeof(key_item) + key->key_len);
+                new_entry->key.skey = k;
+            }
+            TX_END
+#elif TRANSACTIONAL
+            TX_BEGIN(pmem_pool) {
+                pmemobj_tx_add_range_direct(new_entry, sizeof(entry));
+                PMEMoid p1 = pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
+                                               TOID_TYPE_NUM(struct key_item));
+                key_item *k = (key_item *)pmemobj_direct(p1);
+
+                k->key_len = key->key_len;
+                memcpy(k->key, key->key, key->key_len);
+                flush_data(k, sizeof(key_item) + key->key_len);
+                new_entry->key.skey = k;
+            }
+            TX_END
+#endif
+
+#else
             new_entry->key.skey = key;
+#endif
             new_entry->ptr = (char *)ptr;
 
             array_end->ptr = (char *)nullptr;
@@ -2374,6 +2418,73 @@ char *btree::btree_search(char *key) {
     ti->LeaveEpoch();
     return (char *)t;
 }
+
+    void btree::btree_update(uint64_t key, char *right) {
+        ti->JoinEpoch();
+        page *p = (page *)root;
+
+        char *value = right;
+#ifdef USE_PMDK
+        TX_BEGIN(pmem_pool) {
+                        pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
+                        PMEMoid p = pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
+                        value = (char *)pmemobj_direct(p);
+                        memcpy(value, right, strlen(right) + 1);
+                        flush_data(value, strlen(right) + 1);
+                    }
+        TX_END
+#endif
+
+        while (p->hdr.leftmost_ptr != nullptr) {
+            p = (page *)p->linear_search(key);
+        }
+
+        page *t;
+        while ((t = (page *)p->linear_search(key)) == p->hdr.sibling_ptr) {
+            p = t;
+            if (!p) {
+                break;
+            }
+        }
+
+        if (t != nullptr) {
+        }
+        ti->LeaveEpoch();
+    }
+
+    void btree::btree_update(char *key, char *right) {
+        ti->JoinEpoch();
+        page *p = (page *)root;
+
+        key_item *new_item = make_key_item(key, strlen(key) + 1, false);
+
+        char *value = right;
+#ifdef USE_PMDK
+        TX_BEGIN(pmem_pool) {
+                        pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
+                        PMEMoid p = pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
+                        value = (char *)pmemobj_direct(p);
+                        memcpy(value, right, strlen(right) + 1);
+                        flush_data(value, strlen(right) + 1);
+                    }
+        TX_END
+#endif
+
+        while (p->hdr.leftmost_ptr != nullptr) {
+            p = (page *)p->linear_search(new_item);
+        }
+
+        page *t;
+        while ((t = (page *)p->linear_search(new_item)) == p->hdr.sibling_ptr) {
+            p = t;
+            if (!p) {
+                break;
+            }
+        }
+
+        ti->LeaveEpoch();
+    }
+
 
 // insert the key in the leaf node
 void btree::btree_insert(uint64_t key, char *right) { // need to be string

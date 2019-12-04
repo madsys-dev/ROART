@@ -1,7 +1,7 @@
 #ifndef BTREE_H_
 #define BTREE_H_
 
-#include "ff_gc.h"
+#include "pmdk_gc.h"
 #include "util.h"
 #include <cassert>
 #include <climits>
@@ -11,6 +11,7 @@
 #include <libpmemobj.h>
 #include <math.h>
 #include <mutex>
+#include <boost/thread/shared_mutex.hpp>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,17 +30,6 @@ static uint64_t CACHE_LINE_SIZE = 64;
 #define IS_FORWARD(c) (c % 2 == 0)
 
 pthread_mutex_t print_mtx;
-
-/**
- *  epoch-based GC
- */
-std::mutex ti_mtx;
-__thread threadinfo *ti = nullptr;
-threadinfo *ti_list = nullptr;
-Epoch_Mgr *e_mgr = nullptr;
-int tid = 0;
-
-PMEMobjpool *pmem_pool;
 
 static inline void cpu_pause() { __asm__ volatile("pause" ::: "memory"); }
 static inline unsigned long read_tsc(void) {
@@ -84,6 +74,17 @@ static inline void clflush(char *data, int len) {
 
 // using entry_key_t = uint64_t;
 
+/**
+ *  epoch-based GC
+ */
+std::mutex ti_mtx;
+__thread threadinfo *ti = nullptr;
+threadinfo *ti_list = nullptr;
+Epoch_Mgr *e_mgr = nullptr;
+int tid = 0;
+
+PMEMobjpool *pmem_pool;
+
 union Key {
     uint64_t ikey;
     key_item *skey;
@@ -102,8 +103,8 @@ class btree {
     void setNewRoot(char *);
     char *getRoot() { return root; }
     void getNumberOfNodes();
-    void btree_insert(uint64_t, char *);
-    void btree_insert(char *, char *);
+    void btree_insert(uint64_t, char *, bool);
+    void btree_insert(char *, char *, bool);
     void btree_insert_internal(char *, uint64_t, char *, uint32_t);
     void btree_insert_internal(char *, key_item *, char *, uint32_t);
     void btree_delete(uint64_t);
@@ -112,6 +113,8 @@ class btree {
     //    (entry_key_t, char *, uint32_t, entry_key_t *, bool *, page **);
     char *btree_search(uint64_t);
     char *btree_search(char *);
+    void btree_update(uint64_t, char *);
+    void btree_update(char *, char *);
     void btree_search_range(uint64_t, uint64_t, unsigned long *, int, int &);
     void btree_search_range(char *, char *, unsigned long *, int, int &);
     key_item *make_key_item(char *, size_t, bool);
@@ -125,7 +128,8 @@ class header {
     page *sibling_ptr;       // 8 bytes
     uint32_t level;          // 4 bytes
     uint32_t switch_counter; // 4 bytes
-    std::mutex *mtx;         // 8 bytes
+//    std::mutex *mtx;         // 8 bytes
+    boost::shared_mutex *mtx;
     union Key highest;       // 8 bytes
     uint8_t is_deleted;      // 1 bytes
     int16_t last_index;      // 2 bytes
@@ -136,7 +140,8 @@ class header {
 
   public:
     header() {
-        mtx = new std::mutex();
+//        mtx = new std::mutex();
+        mtx = new boost::shared_mutex();
 
         leftmost_ptr = nullptr;
         sibling_ptr = nullptr;
@@ -409,9 +414,10 @@ class page {
                 } else {
                     records[i + 1].ptr = records[i].ptr;
                     records[i + 1].key.ikey = key;
-                    records[i + 1].ptr = ptr;
 
+                    records[i + 1].ptr = ptr;
                     flush_data((void *)&records[i + 1], sizeof(entry));
+
                     inserted = 1;
                     break;
                 }
@@ -430,6 +436,18 @@ class page {
         ++(*num_entries);
     }
 
+    key_item *make_new_key_item(key_item *key){
+        void *aligned_alloc;
+        posix_memalign(&aligned_alloc, 64, sizeof(key_item) + key->key_len);
+        key_item *new_key = (key_item *)aligned_alloc;
+        new_key->key_len = key->key_len;
+        //    new_key->key = key;
+        memcpy(new_key->key, key, key->key_len); // copy including nullptr character
+
+        flush_data((void *)new_key, sizeof(key_item) + key->key_len);
+        return new_key;
+    }
+
     // variable string
     inline void insert_key(key_item *key, char *ptr, int *num_entries,
                            bool flush = true, bool update_last_index = true) {
@@ -443,14 +461,29 @@ class page {
         if (*num_entries == 0) { // this page is empty
             entry *new_entry = (entry *)&records[0];
             entry *array_end = (entry *)&records[1];
-            new_entry->key.skey = key;
-            new_entry->ptr = (char *)ptr;
+#ifdef USE_PMDK
+            TX_BEGIN(pmem_pool) {
+                pmemobj_tx_add_range_direct(new_entry, sizeof(entry));
+                PMEMoid p1 = pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
+                                               TOID_TYPE_NUM(struct key_item));
+                key_item *k = (key_item *)pmemobj_direct(p1);
 
+                k->key_len = key->key_len;
+                memcpy(k->key, key->key, key->key_len);
+                flush_data(k, sizeof(key_item) + key->key_len);
+                new_entry->key.skey = k;
+            }
+            TX_END
+
+#else
+//            new_entry->key.skey = make_new_key_item(key);
+            new_entry->key.skey = key;
+#endif
+            new_entry->ptr = (char *)ptr;
             array_end->ptr = (char *)nullptr;
 
-            if (flush) {
-                flush_data((void *)this, CACHE_LINE_SIZE);
-            }
+            flush_data((void *)this, CACHE_LINE_SIZE);
+
         } else {
             int i = *num_entries - 1, inserted = 0, to_flush_cnt = 0;
             records[*num_entries + 1].ptr = records[*num_entries].ptr;
@@ -487,29 +520,33 @@ class page {
 #ifdef USE_PMDK
                     TX_BEGIN(pmem_pool) {
                         // undo log
-                        pmemobj_tx_add_range_direct(&records[i + 1],
+                        pmemobj_tx_add_range_direct(&(records[i + 1]),
                                                     sizeof(entry));
-                        PMEMoid p =
+
+                        // allocate
+                        PMEMoid p1 =
                             pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
                                               TOID_TYPE_NUM(struct key_item));
 
-                        key_item *k = (key_item *)pmemobj_direct(p);
+                        // copy key and persist
+                        key_item *k = (key_item *)pmemobj_direct(p1);
                         if ((uint64_t)k == static_cast<uint64_t>(-1)) {
                             std::cout << "alloc failed\n";
                         }
                         k->key_len = key->key_len;
                         memcpy(k->key, key->key, key->key_len);
                         flush_data((void *)k, sizeof(key_item) + k->key_len);
-
                         records[i + 1].key.skey = k;
-                        records[i + 1].ptr = ptr;
                     }
                     TX_END
+
 #else
+
+//                    records[i + 1].key.skey = make_new_key_item(key);
                     records[i + 1].key.skey = key;
+#endif
                     records[i + 1].ptr = ptr;
                     flush_data((void *)&records[i + 1], sizeof(entry));
-#endif
                     inserted = 1;
                     break;
                 }
@@ -521,27 +558,27 @@ class page {
                 TX_BEGIN(pmem_pool) {
                     // undo log
                     pmemobj_tx_add_range_direct(&records[0], sizeof(entry));
-                    PMEMoid p =
+                    PMEMoid p1 =
                         pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
                                           TOID_TYPE_NUM(struct key_item));
 
-                    key_item *k = (key_item *)pmemobj_direct(p);
+                    // copy key
+                    key_item *k = (key_item *)pmemobj_direct(p1);
                     if ((uint64_t)k == static_cast<uint64_t>(-1)) {
                         std::cout << "alloc failed\n";
                     }
                     k->key_len = key->key_len;
                     memcpy(k->key, key->key, key->key_len);
                     flush_data((void *)k, sizeof(key_item) + k->key_len);
-
                     records[0].key.skey = k;
-                    records[0].ptr = ptr;
                 }
                 TX_END
 #else
-                records[0].key.skey = key;
+//                records[0].key.skey = make_new_key_item(key);
+                records[0].key.skey=key;
+#endif
                 records[0].ptr = ptr;
                 flush_data((void *)&records[0], sizeof(entry));
-#endif
             }
         }
 
@@ -1387,7 +1424,7 @@ class page {
         return nullptr;
     }
 
-    char *linear_search(uint64_t key) {
+    char *linear_search(uint64_t key, char *value = nullptr) {
         int i = 1;
         uint32_t previous_switch_counter;
         char *ret = nullptr;
@@ -1396,6 +1433,13 @@ class page {
 
         if (hdr.leftmost_ptr == nullptr) { // Search a leaf node
             do {
+                if(value == nullptr){
+                    // read
+                    boost::shared_lock<boost::shared_mutex> sharedlock(*hdr.mtx);
+                }else{
+                    // update
+                    boost::unique_lock<boost::shared_mutex> uniquelock(*hdr.mtx);
+                }
                 previous_switch_counter = hdr.switch_counter;
                 ret = nullptr;
 
@@ -1702,7 +1746,7 @@ class page {
         return nullptr;
     }
 
-    char *linear_search(key_item *key) {
+    char *linear_search(key_item *key, char *value = nullptr) {
         int i = 1;
         uint32_t previous_switch_counter;
         char *ret = nullptr;
@@ -1711,6 +1755,14 @@ class page {
 
         if (hdr.leftmost_ptr == nullptr) { // Search a leaf node
             do {
+                if(value == nullptr){
+                    // read
+                    boost::shared_lock<boost::shared_mutex> sharedlock(*hdr.mtx);
+                }else{
+                    // update
+                    boost::unique_lock<boost::shared_mutex> uniquelock(*hdr.mtx);
+                }
+
                 previous_switch_counter = hdr.switch_counter;
                 ret = nullptr;
 
@@ -1730,6 +1782,10 @@ class page {
                                              records[0].key.skey->key_len)) ==
                                 0) {
                                 ret = t;
+                                if(value){
+                                    records[0].ptr = value;
+                                    flush_data(&records[0].ptr, sizeof(uint64_t));
+                                }
                                 continue;
                             }
                         }
@@ -1751,6 +1807,10 @@ class page {
                                                records[i].key.skey->key_len)) ==
                                     0) {
                                     ret = t;
+                                    if(value){
+                                        records[i].ptr = value;
+                                        flush_data(&records[i].ptr, sizeof(uint64_t));
+                                    }
                                     break;
                                 }
                             }
@@ -1775,6 +1835,10 @@ class page {
                                                records[i].key.skey->key_len)) ==
                                     0) {
                                     ret = t;
+                                    if(value){
+                                        records[i].ptr = value;
+                                        flush_data(&records[i].ptr, sizeof(uint64_t));
+                                    }
                                     break;
                                 }
                             }
@@ -1797,6 +1861,10 @@ class page {
                                                records[0].key.skey->key_len)) ==
                                     0) {
                                     ret = t;
+                                    if(value){
+                                        records[0].ptr = value;
+                                        flush_data(&records[0].ptr, sizeof(uint64_t));
+                                    }
                                     continue;
                                 }
                             }
@@ -2044,11 +2112,11 @@ char *btree::btree_search(uint64_t key) {
     page *p = (page *)root;
 
     while (p->hdr.leftmost_ptr != nullptr) {
-        p = (page *)p->linear_search(key);
+        p = (page *)p->linear_search(key, nullptr);
     }
 
     page *t;
-    while ((t = (page *)p->linear_search(key)) == p->hdr.sibling_ptr) {
+    while ((t = (page *)p->linear_search(key, nullptr)) == p->hdr.sibling_ptr) {
         p = t;
         if (!p) {
             break;
@@ -2066,11 +2134,11 @@ char *btree::btree_search(char *key) {
     key_item *new_item = make_key_item(key, strlen(key) + 1, false);
 
     while (p->hdr.leftmost_ptr != nullptr) {
-        p = (page *)p->linear_search(new_item);
+        p = (page *)p->linear_search(new_item, nullptr);
     }
 
     page *t;
-    while ((t = (page *)p->linear_search(new_item)) == p->hdr.sibling_ptr) {
+    while ((t = (page *)p->linear_search(new_item, nullptr)) == p->hdr.sibling_ptr) {
         p = t;
         if (!p) {
             break;
@@ -2081,34 +2149,147 @@ char *btree::btree_search(char *key) {
     return (char *)t;
 }
 
-// insert the key in the leaf node
-void btree::btree_insert(uint64_t key, char *right) { // need to be string
+void btree::btree_update(uint64_t key, char *right) {
     ti->JoinEpoch();
     page *p = (page *)root;
+
+    char *value = right;
+#ifdef USE_PMDK
+    TX_BEGIN(pmem_pool) {
+        pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
+        PMEMoid p = pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
+        value = (char *)pmemobj_direct(p);
+        memcpy(value, right, strlen(right) + 1);
+        flush_data(value, strlen(right) + 1);
+    }
+    TX_END
+#else
+    value = new char[strlen(right) + 1];
+        memcpy(value, right, strlen(right) + 1);
+            flush_data(value, strlen(right) + 1);
+#endif
+
+    while (p->hdr.leftmost_ptr != nullptr) {
+        p = (page *)p->linear_search(key, value);
+    }
+
+    page *t;
+    while ((t = (page *)p->linear_search(key, value)) == p->hdr.sibling_ptr) {
+        p = t;
+        if (!p) {
+            break;
+        }
+    }
+
+    if (t != nullptr) {
+    }
+    ti->LeaveEpoch();
+}
+
+void btree::btree_update(char *key, char *right) {
+    ti->JoinEpoch();
+    page *p = (page *)root;
+
+    key_item *new_item = make_key_item(key, strlen(key) + 1, false);
+
+    char *value = right;
+#ifdef USE_PMDK
+    TX_BEGIN(pmem_pool) {
+        pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
+        PMEMoid p = pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
+        value = (char *)pmemobj_direct(p);
+        memcpy(value, right, strlen(right) + 1);
+        flush_data(value, strlen(right) + 1);
+    }
+    TX_END
+#else
+     value = new char[strlen(right) + 1];
+        memcpy(value, right, strlen(right) + 1);
+            flush_data(value, strlen(right) + 1);
+#endif
+
+    while (p->hdr.leftmost_ptr != nullptr) {
+        p = (page *)p->linear_search(new_item, value);
+    }
+
+    page *t;
+    while ((t = (page *)p->linear_search(new_item, value)) == p->hdr.sibling_ptr) {
+        p = t;
+        if (!p) {
+            break;
+        }
+    }
+
+    ti->LeaveEpoch();
+}
+
+// insert the key in the leaf node
+void btree::btree_insert(uint64_t key, char *right,
+                         bool persist = false) { // need to be string
+    ti->JoinEpoch();
+    page *p = (page *)root;
+    char *value = right;
+    if (persist == false) {
+#ifdef USE_PMDK
+        TX_BEGIN(pmem_pool) {
+            pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
+            PMEMoid p =
+                pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
+            value = (char *)pmemobj_direct(p);
+            memcpy(value, right, strlen(right) + 1);
+            flush_data(value, strlen(right) + 1);
+        }
+        TX_END
+#else
+        char *value = new char[strlen(right) + 1];
+        memcpy(value, right, strlen(right) + 1);
+            flush_data(value, strlen(right) + 1);
+#endif
+    }
 
     while (p && p->hdr.leftmost_ptr != nullptr) {
         p = (page *)p->linear_search(this, key);
     }
 
-    if (p && !p->store(this, nullptr, key, right, true, true)) { // store
-        btree_insert(key, right);
+    if (p && !p->store(this, nullptr, key, value, true, true)) { // store
+        btree_insert(key, value, true);
     }
     ti->LeaveEpoch();
 }
 
 // insert the key in the leaf node
-void btree::btree_insert(char *key, char *right) { // need to be string
+void btree::btree_insert(char *key, char *right,
+                         bool persist = false) { // need to be string
+                                                 //    std::cout<<strlen(right);
     ti->JoinEpoch();
     page *p = (page *)root;
 
     key_item *new_item = make_key_item(key, strlen(key) + 1, true);
+    char *value = right;
+    if (persist == false) {
+#ifdef USE_PMDK
+        TX_BEGIN(pmem_pool) {
+            pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
+            PMEMoid p =
+                pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
+            value = (char *)pmemobj_direct(p);
+            memcpy(value, right, strlen(right) + 1);
+            flush_data(value, strlen(right) + 1);
+        }
+        TX_END
+#else
+    char *value = new char[strlen(right) + 1];
+        memcpy(value, right, strlen(right) + 1);
+            flush_data(value, strlen(right) + 1);
+#endif
+    }
 
     while (p && p->hdr.leftmost_ptr != nullptr) {
         p = (page *)p->linear_search(new_item);
     }
 
-    if (p && !p->store(this, nullptr, new_item, right, true, true)) { // store
-        btree_insert(key, right);
+    if (p && !p->store(this, nullptr, new_item, value, true, true)) { // store
+        btree_insert(key, value, true);
     }
     ti->LeaveEpoch();
 }
