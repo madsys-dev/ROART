@@ -5,3 +5,4 @@ cmake-build-debug-teaker-22/
 .idea/
 result/
 script/
+.DS_Store

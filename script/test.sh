@@ -9,17 +9,21 @@ do
         do
             for tnum in 1 2 4 8 16 32
             do
-                ../build/benchmark -t ${type} -K ${kt} -b ${bench} -n ${tnum} -w 1 -S 0.8 >> ../result/art_update_0.8.res
+                # scalability uniform and zipfian
+                ../build/benchmark -t 0 -K 1 -b ${bench} -n ${tnum} >> ../result/art_workload_uni.res
+                ../build/benchmark -t 0 -K 1 -b ${bench} -n ${tnum} -w 1 -S 0.8 >> ../result/art_workload_zip.res
+
+                ../build/benchmark -t 1 -K 1 -b ${bench} -n ${tnum} >> ../result/ff_workload_uni.res
+                ../build/benchmark -t 1 -K 1 -b ${bench} -n ${tnum} -w 1 -S 0.8 >> ../result/ff_workload_zip.res
 
             done
         done
 
-        for tnum in 12
+        for skewness in 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 0.99
         do
-                for skewness in 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 0.99
-                do
-                    ../build/benchmark -t 1 -K ${kt} -b 5 -n ${tnum} -w 1 -S ${skewness} >> ../result/ff_skewness.res
-                done
+            # skewness
+            ../build/benchmark -t 0 -K 1 -b 5 -n 12 -w 1 -S ${skewness} >> ../result/12_5_skewness.res
+            ../build/benchmark -t 1 -K 1 -b 5 -n 12 -w 1 -S ${skewness} >> ../result/12_5_skewness.res
         done
     done
 done

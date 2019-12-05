@@ -102,7 +102,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     state.type = PART;
     state.num_threads = 4;
     state.key_type = Integer;
-    state.init_keys = 1000000;
+    state.init_keys = 3000000;
     state.time = 5;
     state.share_memory = true;
     state.duration = 1;

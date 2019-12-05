@@ -77,7 +77,7 @@ template <typename K, typename V, int size> class Coordinator {
     void art_worker(PART_ns::Tree *art, int workerid, Result *result,
                     Benchmark *b) {
         //            Benchmark *benchmark = getBenchmark(conf);
-        Benchmark *benchmark = b;
+        Benchmark *benchmark = getBenchmark(conf);
         printf("[WORKER]\thello, I am worker %d\n", workerid);
         NVMMgr_ns::register_threadinfo();
         stick_this_thread_to_core(workerid);
@@ -138,12 +138,12 @@ template <typename K, typename V, int size> class Coordinator {
             std::string s;
 
             if (conf.key_type == Integer) {
-                auto next_operation = benchmark->nextIntOperation(workerid);
+                auto next_operation = benchmark->nextIntOperation();
                 op = next_operation.first;
                 d = next_operation.second;
                 k->Init(d, sizeof(uint64_t), d);
             } else if (conf.key_type == String) {
-                auto next_operation = benchmark->nextStrOperation(workerid);
+                auto next_operation = benchmark->nextStrOperation();
                 op = next_operation.first;
                 s = next_operation.second;
                 k->Init((char *)s.c_str(), sizeof(uint64_t), value, val_len);
@@ -165,7 +165,7 @@ template <typename K, typename V, int size> class Coordinator {
                 res = art->insert(k);
                 break;
             case REMOVE:
-                art->insert(k);
+//                art->insert(k);
                 art->remove(k);
                 break;
             case GET:
@@ -218,7 +218,7 @@ template <typename K, typename V, int size> class Coordinator {
     void ff_worker(fastfair::btree *bt, int workerid, Result *result,
                    Benchmark *b) {
         //            Benchmark *benchmark = getBenchmark(conf);
-        Benchmark *benchmark = b;
+        Benchmark *benchmark = getBenchmark(conf);
         printf("[WORKER]\thello, I am worker %d\n", workerid);
         stick_this_thread_to_core(workerid);
         fastfair::register_thread();
@@ -276,12 +276,12 @@ template <typename K, typename V, int size> class Coordinator {
             std::string s;
 
             if (conf.key_type == Integer) {
-                auto next_operation = benchmark->nextIntOperation(workerid);
+                auto next_operation = benchmark->nextIntOperation();
 
                 op = next_operation.first;
                 d = next_operation.second;
             } else if (conf.key_type == String) {
-                auto next_operation = benchmark->nextStrOperation(workerid);
+                auto next_operation = benchmark->nextStrOperation();
 
                 op = next_operation.first;
                 s = next_operation.second;
@@ -315,12 +315,12 @@ template <typename K, typename V, int size> class Coordinator {
                 break;
             case REMOVE:
                 // first insert then remove
-                if (conf.key_type == Integer) {
-                    //                    std::cout<<"insert key "<<d<<"\n";
-                    bt->btree_insert(d, value);
-                } else if (conf.key_type == String) {
-                    bt->btree_insert((char *)s.c_str(), value);
-                }
+//                if (conf.key_type == Integer) {
+//                    //                    std::cout<<"insert key "<<d<<"\n";
+//                    bt->btree_insert(d, value);
+//                } else if (conf.key_type == String) {
+//                    bt->btree_insert((char *)s.c_str(), value);
+//                }
 
                 if (conf.key_type == Integer) {
                     //                    std::cout<<"delete key "<<d<<"\n";

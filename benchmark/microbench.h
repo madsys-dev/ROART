@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "util.h"
+#include "generator.h"
 #include <assert.h>
 #include <utility>
 
@@ -40,13 +41,15 @@ class Benchmark {
     long long init_key;
     long long *x;
     Config _conf;
+    DataSet *dataset;
 
 
     Benchmark(Config &conf) : init_key(0), _conf(conf) {
+        dataset = new DataSet(conf.init_keys);
         if (conf.workload == RANDOM) {
             workload = new RandomGenerator();
         } else if (conf.workload == ZIPFIAN) {
-            workload = new ZipfGenerator(conf.skewness, conf.init_keys);
+            workload = new ZipfWrapper(conf.skewness, conf.init_keys);
         }
 
         x = NULL;
@@ -57,12 +60,13 @@ class Benchmark {
             delete[] x;
     }
 
-    virtual std::pair<OperationType, long long> nextIntOperation(int tid) {
-        return std::make_pair(INSERT, workload->NextInt(tid));
+    virtual std::pair<OperationType, long long> nextIntOperation() {
+        return std::make_pair(INSERT, workload->Next());
     }
 
-    virtual std::pair<OperationType, std::string> nextStrOperation(int tid) {
-        return std::make_pair(INSERT, workload->NextStr(tid));
+    virtual std::pair<OperationType, std::string> nextStrOperation() {
+        long long next = workload->Next();
+        return std::make_pair(INSERT, dataset->wl_str[next % _conf.init_keys]);
     }
 
     virtual long long nextInitIntKey() {
@@ -72,43 +76,47 @@ class Benchmark {
         // return init_key++ % _conf.init_keys;
     }
 
-    virtual std::string nextInitStrKey() { return workload->NextStr(0); }
+    virtual std::string nextInitStrKey() { return dataset->wl_str[(init_key++) % _conf.init_keys]; }
 } __attribute__((aligned(64)));
 
 class ReadOnlyBench : public Benchmark {
   public:
     ReadOnlyBench(Config &conf) : Benchmark(conf) {}
 
-    std::pair<OperationType, long long> nextIntOperation(int tid) {
-        long long d = workload->NextInt(tid);
-        return std::make_pair(GET, d % _conf.init_keys);
+    std::pair<OperationType, long long> nextIntOperation() {
+        long long d = workload->Next() % _conf.init_keys;
+        return std::make_pair(GET, d);
     }
 
-    std::pair<OperationType, std::string> nextStrOperation(int tid) {
-        std::string s = workload->NextStr(tid);
-        return std::make_pair(GET, s);
+    std::pair<OperationType, std::string> nextStrOperation() {
+        long long next = workload->Next() % _conf.init_keys;
+        return std::make_pair(GET, dataset->wl_str[next]);
     }
 } __attribute__((aligned(64)));
 
 class InsertOnlyBench : public Benchmark {
-    RandomFunc rdm[max_thread_num];
+    RandomGenerator rdm;
 
   public:
     InsertOnlyBench(Config &conf) : Benchmark(conf) {}
 
-    std::pair<OperationType, long long> nextIntOperation(int tid) {
-        long long d = workload->NextInt(tid) % _conf.init_keys;
+    std::pair<OperationType, long long> nextIntOperation() {
+        long long d = workload->Next() % _conf.init_keys;
 #ifdef INSERT_DUP
         long long x = 1;
 #else
-        long long x = rdm[tid].randomInt() % 128;
+        long long x = rdm.randomInt() % 128;
 #endif
 
         return std::make_pair(INSERT, d * x);
     }
 
-    std::pair<OperationType, std::string> nextStrOperation(int tid) {
-        std::string s = workload->NextStr(tid);
+    std::pair<OperationType, std::string> nextStrOperation() {
+        long long next = workload->Next()% _conf.init_keys;
+        std::string s = dataset->wl_str[next];
+        char p1 = rdm.randomInt() % 94 + 33;
+        char p2 = rdm.randomInt() % 94 + 33;
+        s = p1 + s + p2;
         return std::make_pair(INSERT, s);
     }
 
@@ -125,14 +133,14 @@ class UpdateOnlyBench : public Benchmark {
 
     OperationType nextOp() { return UPDATE; }
 
-    std::pair<OperationType, long long> nextIntOperation(int tid) {
-        long long d = workload->NextInt(tid) % _conf.init_keys;
+    std::pair<OperationType, long long> nextIntOperation() {
+        long long d = workload->Next() % _conf.init_keys;
         return std::make_pair(UPDATE, d);
     }
 
-    std::pair<OperationType, std::string> nextStrOperation(int tid) {
-        std::string s = workload->NextStr(tid);
-        return std::make_pair(UPDATE, s);
+    std::pair<OperationType, std::string> nextStrOperation() {
+        long long next = workload->Next()% _conf.init_keys;
+        return std::make_pair(UPDATE, dataset->wl_str[next]);
     }
 } __attribute__((aligned(64)));
 
@@ -140,30 +148,31 @@ class DeleteOnlyBench : public Benchmark {
   public:
     DeleteOnlyBench(Config &conf) : Benchmark(conf) {}
 
-    std::pair<OperationType, long long> nextIntOperation(int tid) {
-        long long d = workload->NextInt(tid) % _conf.init_keys;
+    std::pair<OperationType, long long> nextIntOperation() {
+        long long d = workload->Next() % _conf.init_keys;
         return std::make_pair(REMOVE, d);
     }
 
-    std::pair<OperationType, std::string> nextStrOperation(int tid) {
-        std::string s = workload->NextStr(tid);
-        return std::make_pair(REMOVE, s);
+    std::pair<OperationType, std::string> nextStrOperation() {
+        long long next = workload->Next()% _conf.init_keys;
+        return std::make_pair(REMOVE, dataset->wl_str[next]);
     }
 } __attribute__((aligned(64)));
 
 class MixedBench : public Benchmark {
     int round;
     long long key;
+    std::string skey;
 
   public:
     MixedBench(Config &conf) : Benchmark(conf) {}
 
-    std::pair<OperationType, long long> nextIntOperation(int tid) {
+    std::pair<OperationType, long long> nextIntOperation() {
         std::pair<OperationType, long long> result;
-        long long _key = workload->NextInt(tid) % _conf.init_keys;
+        long long _key = workload->Next() % _conf.init_keys;
         switch (round) {
         case 0:
-            key = workload->NextInt(tid) % _conf.init_keys;
+            key = workload->Next() % _conf.init_keys;
             result = std::make_pair(REMOVE, key);
             break;
         case 1:
@@ -183,15 +192,18 @@ class MixedBench : public Benchmark {
         return result;
     }
 
-    std::pair<OperationType, std::string> nextStrOperation(int tid) {
+    std::pair<OperationType, std::string> nextStrOperation() {
         std::pair<OperationType, std::string> result;
-        std::string _key = workload->NextStr(tid);
+        long long next = workload->Next()% _conf.init_keys;
+        std::string _key = dataset->wl_str[next];
         switch (round) {
         case 0:
-            result = std::make_pair(REMOVE, _key);
+            next = workload->Next()% _conf.init_keys;
+            skey = dataset->wl_str[next];
+            result = std::make_pair(REMOVE, skey);
             break;
         case 1:
-            result = std::make_pair(INSERT, _key);
+            result = std::make_pair(INSERT, skey);
             break;
         case 2:
             result = std::make_pair(UPDATE, _key);
@@ -212,13 +224,14 @@ class ScanBench : public Benchmark {
   public:
     ScanBench(Config &conf) : Benchmark(conf) {}
 
-    std::pair<OperationType, long long> nextIntOperation(int tid) {
-        long long d = workload->NextInt(tid) % _conf.init_keys;
+    std::pair<OperationType, long long> nextIntOperation() {
+        long long d = workload->Next() % _conf.init_keys;
         return std::make_pair(SCAN, d);
     }
 
-    std::pair<OperationType, std::string> nextStrOperation(int tid) {
-        std::string s = workload->NextStr(tid);
+    std::pair<OperationType, std::string> nextStrOperation() {
+        long long next = workload->Next()% _conf.init_keys;
+        std::string s = dataset->wl_str[next];
         return std::make_pair(SCAN, s);
     }
 } __attribute__((aligned(64)));
@@ -229,27 +242,29 @@ class YSCBA : public Benchmark {
     //	writeRate = 0.5;
     int read_ratio = 50;
 
-    RandomFunc rdm[max_thread_num];
+    RandomGenerator rdm;
 
     YSCBA(Config &conf) : Benchmark(conf) {}
 
-    virtual std::pair<OperationType, long long> nextIntOperation(int tid) {
-        int k = rdm[tid].randomInt() % 100;
+    virtual std::pair<OperationType, long long> nextIntOperation() {
+        int k = rdm.randomInt() % 100;
         if (k > read_ratio) {
             return std::make_pair(UPDATE,
-                                  workload->NextInt(tid) % _conf.init_keys);
+                                  workload->Next() % _conf.init_keys);
         } else {
             return std::make_pair(GET,
-                                  workload->NextInt(tid) % _conf.init_keys);
+                                  workload->Next() % _conf.init_keys);
         }
     }
 
-    virtual std::pair<OperationType, std::string> nextStrOperation(int tid) {
-        int k = rdm[tid].randomInt() % 100;
+    virtual std::pair<OperationType, std::string> nextStrOperation() {
+        int k = rdm.randomInt() % 100;
+        long long next = workload->Next()% _conf.init_keys;
+        std::string s = dataset->wl_str[next];
         if (k > read_ratio) {
-            return std::make_pair(UPDATE, workload->NextStr(tid));
+            return std::make_pair(UPDATE, s);
         } else {
-            return std::make_pair(GET, workload->NextStr(tid));
+            return std::make_pair(GET, s);
         }
     }
 } __attribute__((aligned(64)));
@@ -259,27 +274,29 @@ class YSCBB : public Benchmark {
     //	readRate = 0.95;
     //	writeRate = 0.05;
     int read_ratio = 90;
-    RandomFunc rdm[max_thread_num];
+    RandomGenerator rdm;
 
     YSCBB(Config &conf) : Benchmark(conf) {}
 
-    virtual std::pair<OperationType, long long> nextIntOperation(int tid) {
-        int k = rdm[tid].randomInt() % 100;
+    virtual std::pair<OperationType, long long> nextIntOperation() {
+        int k = rdm.randomInt() % 100;
         if (k < read_ratio) {
             return std::make_pair(GET,
-                                  workload->NextInt(tid) % _conf.init_keys);
+                                  workload->Next() % _conf.init_keys);
         } else {
             return std::make_pair(UPDATE,
-                                  workload->NextInt(tid) % _conf.init_keys);
+                                  workload->Next() % _conf.init_keys);
         }
     }
 
-    virtual std::pair<OperationType, std::string> nextStrOperation(int tid) {
-        int k = rdm[tid].randomInt() % 100;
+    virtual std::pair<OperationType, std::string> nextStrOperation() {
+        int k = rdm.randomInt() % 100;
+        long long next = workload->Next()% _conf.init_keys;
+        std::string s = dataset->wl_str[next];
         if (k > read_ratio) {
-            return std::make_pair(UPDATE, workload->NextStr(tid));
+            return std::make_pair(UPDATE, s);
         } else {
-            return std::make_pair(GET, workload->NextStr(tid));
+            return std::make_pair(GET, s);
         }
     }
 } __attribute__((aligned(64)));
@@ -288,12 +305,14 @@ class YSCBC : public Benchmark {
   public:
     YSCBC(Config &conf) : Benchmark(conf) {}
 
-    virtual std::pair<OperationType, long long> nextIntOperation(int tid) {
-        return std::make_pair(GET, workload->NextInt(tid) % _conf.init_keys);
+    virtual std::pair<OperationType, long long> nextIntOperation() {
+        return std::make_pair(GET, workload->Next() % _conf.init_keys);
     }
 
-    virtual std::pair<OperationType, std::string> nextStrOperation(int tid) {
-        return std::make_pair(GET, workload->NextStr(tid));
+    virtual std::pair<OperationType, std::string> nextStrOperation() {
+        long long next = workload->Next()% _conf.init_keys;
+        std::string s = dataset->wl_str[next];
+        return std::make_pair(GET, s);
     }
 } __attribute__((aligned(64)));
 
