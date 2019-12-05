@@ -89,7 +89,8 @@ void N::helpFlush(std::atomic<N *> *n) {
     N *now_node = n->load();
     // printf("help\n");
     if (N::isDirty(now_node)) {
-        printf("help, point to type is %d\n", ((BaseNode *)N::clearDirty(now_node))->type);
+        printf("help, point to type is %d\n",
+               ((BaseNode *)N::clearDirty(now_node))->type);
         flush_data((void *)n, sizeof(N *));
         //        clflush((char *)n, sizeof(N *), true, true);
         n->compare_exchange_strong(now_node, N::clearDirty(now_node));
@@ -124,7 +125,7 @@ void N::writeLockOrRestart(bool &needRestart) {
             return;
         }
     } while (!typeVersionLockObsolete->compare_exchange_weak(version,
-                                                            version + 0b10));
+                                                             version + 0b10));
 }
 
 void N::lockVersionOrRestart(uint64_t &version, bool &needRestart) {
@@ -133,7 +134,7 @@ void N::lockVersionOrRestart(uint64_t &version, bool &needRestart) {
         return;
     }
     if (typeVersionLockObsolete->compare_exchange_strong(version,
-                                                        version + 0b10)) {
+                                                         version + 0b10)) {
         version = version + 0b10;
     } else {
         needRestart = true;

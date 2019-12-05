@@ -39,6 +39,7 @@ struct Config {
     int num_threads;
     unsigned long long init_keys;
     int time;
+    int key_length;
     bool share_memory;
     float duration;
 
@@ -85,6 +86,7 @@ static void usage_exit(FILE *out) {
         "   -K --key_type          : Key type : 0 (Integer) 1 (String) \n"
         "   -n --num_threads       : Number of workers \n"
         "   -k --keys              : Number of key-value pairs at begin\n"
+        "   -L --key_length        : Length of string key\n"
         "   -s --non_share_memory  : Use different index instances among "
         "different workers\n"
         "   -d --duration          : Execution time\n"
@@ -104,6 +106,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     state.key_type = Integer;
     state.init_keys = 3000000;
     state.time = 5;
+    state.key_length = 15;
     state.share_memory = true;
     state.duration = 1;
     state.benchmark = READ_ONLY;
@@ -118,7 +121,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     while (1) {
         int idx = 0;
         int c =
-            getopt_long(argc, argv, "f:t:K:n:k:sd:b:w:S:l:r:T:", opts, &idx);
+            getopt_long(argc, argv, "f:t:K:n:k:L:sd:b:w:S:l:r:T:", opts, &idx);
 
         if (c == -1)
             break;
@@ -141,6 +144,9 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
             break;
         case 'k':
             state.init_keys = (1llu << atoi(optarg));
+            break;
+            case 'L':
+            state.key_length = atoi(optarg);
             break;
         case 's':
             state.share_memory = false;
@@ -172,7 +178,11 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
             usage_exit(stderr);
         }
     }
+    if(state.key_type == String){
+        std::cout<<"key length: "<<state.key_length<<"\n";
+    }
     if (state.workload == ZIPFIAN)
         std::cout << "zipfian skewness " << state.skewness << "\n";
+    std::cout<<"read ratio: "<<state.read_ratio<<"\n";
     // state.report();
 }

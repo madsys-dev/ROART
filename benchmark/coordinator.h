@@ -165,7 +165,7 @@ template <typename K, typename V, int size> class Coordinator {
                 res = art->insert(k);
                 break;
             case REMOVE:
-//                art->insert(k);
+                //                art->insert(k);
                 art->remove(k);
                 break;
             case GET:
@@ -315,12 +315,14 @@ template <typename K, typename V, int size> class Coordinator {
                 break;
             case REMOVE:
                 // first insert then remove
-//                if (conf.key_type == Integer) {
-//                    //                    std::cout<<"insert key "<<d<<"\n";
-//                    bt->btree_insert(d, value);
-//                } else if (conf.key_type == String) {
-//                    bt->btree_insert((char *)s.c_str(), value);
-//                }
+                //                if (conf.key_type == Integer) {
+                //                    //                    std::cout<<"insert
+                //                    key "<<d<<"\n"; bt->btree_insert(d,
+                //                    value);
+                //                } else if (conf.key_type == String) {
+                //                    bt->btree_insert((char *)s.c_str(),
+                //                    value);
+                //                }
 
                 if (conf.key_type == Integer) {
                     //                    std::cout<<"delete key "<<d<<"\n";
@@ -438,7 +440,8 @@ template <typename K, typename V, int size> class Coordinator {
                    "%s, benchmark %d, zipfian %.2lf\n",
                    (double)final_result.throughput / 1000000.0 / conf.duration,
                    conf.num_threads, (conf.type == PART) ? "ART" : "FF",
-                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,(conf.workload == RANDOM) ? 0:conf.skewness);
+                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,
+                   (conf.workload == RANDOM) ? 0 : conf.skewness);
 
             delete art;
             delete[] pid;
@@ -473,7 +476,7 @@ template <typename K, typename V, int size> class Coordinator {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
                     bt->btree_insert(kk, value);
-                                        std::cout << "insert key " << kk << "id: " << i << "\n";
+                    std::cout << "insert key " << kk << "id: " << i << "\n";
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
                     bt->btree_insert((char *)s.c_str(), value);
@@ -503,7 +506,8 @@ template <typename K, typename V, int size> class Coordinator {
                    "%s, benchmark %d, zipfian %.2lf\n",
                    (double)final_result.throughput / 1000000.0 / conf.duration,
                    conf.num_threads, (conf.type == PART) ? "ART" : "FF",
-                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark, (conf.workload == RANDOM) ? 0:conf.skewness);
+                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,
+                   (conf.workload == RANDOM) ? 0 : conf.skewness);
 
             delete[] pid;
             delete[] results;

@@ -3,6 +3,7 @@
 
 #include "pmdk_gc.h"
 #include "util.h"
+#include <boost/thread/shared_mutex.hpp>
 #include <cassert>
 #include <climits>
 #include <fstream>
@@ -11,7 +12,6 @@
 #include <libpmemobj.h>
 #include <math.h>
 #include <mutex>
-#include <boost/thread/shared_mutex.hpp>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -128,19 +128,19 @@ class header {
     page *sibling_ptr;       // 8 bytes
     uint32_t level;          // 4 bytes
     uint32_t switch_counter; // 4 bytes
-//    std::mutex *mtx;         // 8 bytes
+                             //    std::mutex *mtx;         // 8 bytes
     boost::shared_mutex *mtx;
-    union Key highest;       // 8 bytes
-    uint8_t is_deleted;      // 1 bytes
-    int16_t last_index;      // 2 bytes
-    uint8_t dummy[5];        // 5 bytes
+    union Key highest;  // 8 bytes
+    uint8_t is_deleted; // 1 bytes
+    int16_t last_index; // 2 bytes
+    uint8_t dummy[5];   // 5 bytes
 
     friend class page;
     friend class btree;
 
   public:
     header() {
-//        mtx = new std::mutex();
+        //        mtx = new std::mutex();
         mtx = new boost::shared_mutex();
 
         leftmost_ptr = nullptr;
@@ -436,13 +436,14 @@ class page {
         ++(*num_entries);
     }
 
-    key_item *make_new_key_item(key_item *key){
+    key_item *make_new_key_item(key_item *key) {
         void *aligned_alloc;
         posix_memalign(&aligned_alloc, 64, sizeof(key_item) + key->key_len);
         key_item *new_key = (key_item *)aligned_alloc;
         new_key->key_len = key->key_len;
         //    new_key->key = key;
-        memcpy(new_key->key, key, key->key_len); // copy including nullptr character
+        memcpy(new_key->key, key,
+               key->key_len); // copy including nullptr character
 
         flush_data((void *)new_key, sizeof(key_item) + key->key_len);
         return new_key;
@@ -476,7 +477,7 @@ class page {
             TX_END
 
 #else
-//            new_entry->key.skey = make_new_key_item(key);
+            //            new_entry->key.skey = make_new_key_item(key);
             new_entry->key.skey = key;
 #endif
             new_entry->ptr = (char *)ptr;
@@ -542,7 +543,8 @@ class page {
 
 #else
 
-//                    records[i + 1].key.skey = make_new_key_item(key);
+                    //                    records[i + 1].key.skey =
+                    //                    make_new_key_item(key);
                     records[i + 1].key.skey = key;
 #endif
                     records[i + 1].ptr = ptr;
@@ -574,8 +576,8 @@ class page {
                 }
                 TX_END
 #else
-//                records[0].key.skey = make_new_key_item(key);
-                records[0].key.skey=key;
+                //                records[0].key.skey = make_new_key_item(key);
+                records[0].key.skey = key;
 #endif
                 records[0].ptr = ptr;
                 flush_data((void *)&records[0], sizeof(entry));
@@ -1433,12 +1435,14 @@ class page {
 
         if (hdr.leftmost_ptr == nullptr) { // Search a leaf node
             do {
-                if(value == nullptr){
+                if (value == nullptr) {
                     // read
-                    boost::shared_lock<boost::shared_mutex> sharedlock(*hdr.mtx);
-                }else{
+                    boost::shared_lock<boost::shared_mutex> sharedlock(
+                        *hdr.mtx);
+                } else {
                     // update
-                    boost::unique_lock<boost::shared_mutex> uniquelock(*hdr.mtx);
+                    boost::unique_lock<boost::shared_mutex> uniquelock(
+                        *hdr.mtx);
                 }
                 previous_switch_counter = hdr.switch_counter;
                 ret = nullptr;
@@ -1564,188 +1568,6 @@ class page {
         return nullptr;
     }
 
-    char *linear_search(btree *bt, key_item *key) {
-        int i = 1;
-        uint32_t previous_switch_counter;
-        char *ret = nullptr;
-        char *t;
-        key_item *k;
-
-        if (hdr.leftmost_ptr == nullptr) { // Search a leaf node
-            do {
-                previous_switch_counter = hdr.switch_counter;
-                ret = nullptr;
-
-                // search from left ro right
-                if (IS_FORWARD(previous_switch_counter)) {
-                    k = records[0].key.skey;
-                    if (memcmp(k->key, key->key,
-                               std::min(k->key_len, key->key_len)) == 0) {
-                        if ((t = records[0].ptr) != nullptr) {
-                            if (memcmp(
-                                    k->key, records[0].key.skey->key,
-                                    std::min(k->key_len,
-                                             records[0].key.skey->key_len)) ==
-                                0) {
-                                ret = t;
-                                continue;
-                            }
-                        }
-                    }
-
-                    for (i = 1; records[i].ptr != nullptr; ++i) {
-                        k = records[i].key.skey;
-                        if (memcmp(k->key, key->key,
-                                   std::min(k->key_len, key->key_len)) == 0) {
-                            if (records[i - 1].ptr != (t = records[i].ptr)) {
-                                if (memcmp(k->key, records[i].key.skey->key,
-                                           std::min(
-                                               k->key_len,
-                                               records[i].key.skey->key_len)) ==
-                                    0) {
-                                    ret = t;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                } else { // search from right to left
-                    for (i = count() - 1; i > 0; --i) {
-                        k = records[i].key.skey;
-                        if (memcmp(k->key, key->key,
-                                   std::min(k->key_len, key->key_len)) == 0) {
-                            if (records[i - 1].ptr != (t = records[i].ptr) &&
-                                t) {
-                                if (memcmp(k->key, records[i].key.skey->key,
-                                           std::min(
-                                               k->key_len,
-                                               records[i].key.skey->key_len)) ==
-                                    0) {
-                                    ret = t;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (!ret) {
-                        k = records[0].key.skey;
-                        if (memcmp(k->key, key->key,
-                                   std::min(k->key_len, key->key_len)) == 0) {
-                            if (nullptr != (t = records[0].ptr) && t) {
-                                if (memcmp(k->key, records[0].key.skey->key,
-                                           std::min(
-                                               k->key_len,
-                                               records[0].key.skey->key_len)) ==
-                                    0) {
-                                    ret = t;
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                }
-            } while (IS_FORWARD(hdr.switch_counter) !=
-                     IS_FORWARD(previous_switch_counter));
-
-            if (ret) {
-                return ret;
-            }
-
-            if ((t = (char *)hdr.sibling_ptr) &&
-                memcmp(key->key, ((page *)t)->hdr.highest.skey->key,
-                       std::min(key->key_len,
-                                ((page *)t)->hdr.highest.skey->key_len)) >= 0) {
-                hdr.mtx->lock();
-                hdr.sibling_ptr->hdr.mtx->lock();
-                bt->btree_insert_internal(
-                    (char *)this, hdr.sibling_ptr->hdr.highest.skey,
-                    (char *)hdr.sibling_ptr, hdr.level + 1);
-                hdr.sibling_ptr->hdr.mtx->unlock();
-                hdr.mtx->unlock();
-                return t;
-            }
-
-            return nullptr;
-        } else { // internal node
-            do {
-                previous_switch_counter = hdr.switch_counter;
-                ret = nullptr;
-
-                if (IS_FORWARD(previous_switch_counter)) {
-                    k = records[0].key.skey;
-                    if (memcmp(key->key, k->key,
-                               std::min(key->key_len, k->key_len)) < 0) {
-                        if ((t = (char *)hdr.leftmost_ptr) != records[0].ptr) {
-                            ret = t;
-                            continue;
-                        }
-                    }
-
-                    for (i = 1; records[i].ptr != nullptr; ++i) {
-                        k = records[i].key.skey;
-                        if (memcmp(key->key, k->key,
-                                   std::min(key->key_len, k->key_len)) < 0) {
-                            if ((t = records[i - 1].ptr) != records[i].ptr) {
-                                ret = t;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!ret) {
-                        ret = records[i - 1].ptr;
-                        continue;
-                    }
-                } else { // search from right to left
-                    for (i = count() - 1; i >= 0; --i) {
-                        k = records[i].key.skey;
-                        if (memcmp(key->key, k->key,
-                                   std::min(key->key_len, k->key_len)) >= 0) {
-                            if (i == 0) {
-                                if ((char *)hdr.leftmost_ptr !=
-                                    (t = records[i].ptr)) {
-                                    ret = t;
-                                    break;
-                                }
-                            } else {
-                                if (records[i - 1].ptr !=
-                                    (t = records[i].ptr)) {
-                                    ret = t;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            } while (IS_FORWARD(hdr.switch_counter) !=
-                     IS_FORWARD(previous_switch_counter));
-
-            if ((t = (char *)hdr.sibling_ptr) != nullptr) {
-                if (memcmp(key->key, ((page *)t)->hdr.highest.skey->key,
-                           std::min(key->key_len,
-                                    ((page *)t)->hdr.highest.skey->key_len)) >=
-                    0) {
-                    hdr.mtx->lock();
-                    hdr.sibling_ptr->hdr.mtx->lock();
-                    bt->btree_insert_internal(
-                        (char *)this, hdr.sibling_ptr->hdr.highest.skey,
-                        (char *)hdr.sibling_ptr, hdr.level + 1);
-                    hdr.sibling_ptr->hdr.mtx->unlock();
-                    hdr.mtx->unlock();
-                    return t;
-                }
-            }
-
-            if (ret) {
-                return ret;
-            } else
-                return (char *)hdr.leftmost_ptr;
-        }
-
-        return nullptr;
-    }
-
     char *linear_search(key_item *key, char *value = nullptr) {
         int i = 1;
         uint32_t previous_switch_counter;
@@ -1755,12 +1577,14 @@ class page {
 
         if (hdr.leftmost_ptr == nullptr) { // Search a leaf node
             do {
-                if(value == nullptr){
+                if (value == nullptr) {
                     // read
-                    boost::shared_lock<boost::shared_mutex> sharedlock(*hdr.mtx);
-                }else{
+                    boost::shared_lock<boost::shared_mutex> sharedlock(
+                        *hdr.mtx);
+                } else {
                     // update
-                    boost::unique_lock<boost::shared_mutex> uniquelock(*hdr.mtx);
+                    boost::unique_lock<boost::shared_mutex> uniquelock(
+                        *hdr.mtx);
                 }
 
                 previous_switch_counter = hdr.switch_counter;
@@ -1773,18 +1597,21 @@ class page {
                         std::cout << "boom!!!\n";
                         return nullptr;
                     }
-                    if (memcmp(k->key, key->key,
-                               std::min(k->key_len, key->key_len)) == 0) {
+                    if (memcmp(k->key, key->key, std::min(k->key_len, key->key_len)) == 0) {
                         if ((t = records[0].ptr) != nullptr) {
-                            if (memcmp(
-                                    k->key, records[0].key.skey->key,
-                                    std::min(k->key_len,
-                                             records[0].key.skey->key_len)) ==
-                                0) {
+                            if (memcmp(k->key, records[0].key.skey->key, std::min(k->key_len,
+                                             records[0].key.skey->key_len)) == 0) {
                                 ret = t;
-                                if(value){
+                                if (value) {
+                                    char *garbage = records[0].ptr;
                                     records[0].ptr = value;
-                                    flush_data(&records[0].ptr, sizeof(uint64_t));
+                                    flush_data(&records[0].ptr,
+                                               sizeof(uint64_t));
+#ifdef USE_PMDK
+#ifdef FF_GC
+                                    ti->AddGarbageNode((void *)garbage);
+#endif
+#endif
                                 }
                                 continue;
                             }
@@ -1807,9 +1634,16 @@ class page {
                                                records[i].key.skey->key_len)) ==
                                     0) {
                                     ret = t;
-                                    if(value){
+                                    if (value) {
+                                        char *garbage = records[i].ptr;
                                         records[i].ptr = value;
-                                        flush_data(&records[i].ptr, sizeof(uint64_t));
+                                        flush_data(&records[i].ptr,
+                                                   sizeof(uint64_t));
+#ifdef USE_PMDK
+#ifdef FF_GC
+                                        ti->AddGarbageNode((void *)garbage);
+#endif
+#endif
                                     }
                                     break;
                                 }
@@ -1835,9 +1669,16 @@ class page {
                                                records[i].key.skey->key_len)) ==
                                     0) {
                                     ret = t;
-                                    if(value){
+                                    if (value) {
+                                        char *garbage = records[i].ptr;
                                         records[i].ptr = value;
-                                        flush_data(&records[i].ptr, sizeof(uint64_t));
+                                        flush_data(&records[i].ptr,
+                                                   sizeof(uint64_t));
+#ifdef USE_PMDK
+#ifdef FF_GC
+                                        ti->AddGarbageNode((void *)garbage);
+#endif
+#endif
                                     }
                                     break;
                                 }
@@ -1861,9 +1702,16 @@ class page {
                                                records[0].key.skey->key_len)) ==
                                     0) {
                                     ret = t;
-                                    if(value){
+                                    if (value) {
+                                        char *garbage = records[0].ptr;
                                         records[0].ptr = value;
-                                        flush_data(&records[0].ptr, sizeof(uint64_t));
+                                        flush_data(&records[0].ptr,
+                                                   sizeof(uint64_t));
+#ifdef USE_PMDK
+#ifdef FF_GC
+                                        ti->AddGarbageNode((void *)garbage);
+#endif
+#endif
                                     }
                                     continue;
                                 }
@@ -2138,7 +1986,8 @@ char *btree::btree_search(char *key) {
     }
 
     page *t;
-    while ((t = (page *)p->linear_search(new_item, nullptr)) == p->hdr.sibling_ptr) {
+    while ((t = (page *)p->linear_search(new_item, nullptr)) ==
+           p->hdr.sibling_ptr) {
         p = t;
         if (!p) {
             break;
@@ -2165,8 +2014,8 @@ void btree::btree_update(uint64_t key, char *right) {
     TX_END
 #else
     value = new char[strlen(right) + 1];
-        memcpy(value, right, strlen(right) + 1);
-            flush_data(value, strlen(right) + 1);
+    memcpy(value, right, strlen(right) + 1);
+    flush_data(value, strlen(right) + 1);
 #endif
 
     while (p->hdr.leftmost_ptr != nullptr) {
@@ -2203,9 +2052,9 @@ void btree::btree_update(char *key, char *right) {
     }
     TX_END
 #else
-     value = new char[strlen(right) + 1];
-        memcpy(value, right, strlen(right) + 1);
-            flush_data(value, strlen(right) + 1);
+    value = new char[strlen(right) + 1];
+    memcpy(value, right, strlen(right) + 1);
+    flush_data(value, strlen(right) + 1);
 #endif
 
     while (p->hdr.leftmost_ptr != nullptr) {
@@ -2213,7 +2062,8 @@ void btree::btree_update(char *key, char *right) {
     }
 
     page *t;
-    while ((t = (page *)p->linear_search(new_item, value)) == p->hdr.sibling_ptr) {
+    while ((t = (page *)p->linear_search(new_item, value)) ==
+           p->hdr.sibling_ptr) {
         p = t;
         if (!p) {
             break;
@@ -2243,7 +2093,7 @@ void btree::btree_insert(uint64_t key, char *right,
 #else
         char *value = new char[strlen(right) + 1];
         memcpy(value, right, strlen(right) + 1);
-            flush_data(value, strlen(right) + 1);
+        flush_data(value, strlen(right) + 1);
 #endif
     }
 
@@ -2278,9 +2128,9 @@ void btree::btree_insert(char *key, char *right,
         }
         TX_END
 #else
-    char *value = new char[strlen(right) + 1];
+        char *value = new char[strlen(right) + 1];
         memcpy(value, right, strlen(right) + 1);
-            flush_data(value, strlen(right) + 1);
+        flush_data(value, strlen(right) + 1);
 #endif
     }
 

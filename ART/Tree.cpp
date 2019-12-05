@@ -111,7 +111,7 @@ void *Tree::lookup(const Key *k) const {
 
 typename Tree::OperationResults Tree::update(const Key *k) const {
     EpochGuard NewEpoch;
-    restart:
+restart:
     bool needRestart = false;
 
     N *node = nullptr;
@@ -131,59 +131,60 @@ typename Tree::OperationResults Tree::update(const Key *k) const {
         auto v = node->getVersion(); // check version
 
         switch (checkPrefix(node, k, level)) { // increases level
-            case CheckPrefixResult::NoMatch:
+        case CheckPrefixResult::NoMatch:
+            if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
+                goto restart;
+            }
+            return OperationResults::NotFound;
+        case CheckPrefixResult::OptimisticMatch:
+            // fallthrough
+        case CheckPrefixResult::Match: {
+            // if (level >= k->getKeyLen()) {
+            //     // key is too short
+            //     // but it next fkey is 0
+            //     return OperationResults::NotFound;
+            // }
+            nodeKey = k->fkey[level];
+
+            parentref = curref;
+            curref = N::getChild(nodeKey, node);
+            if (curref == nullptr)
+                nextNode = nullptr;
+            else
+                nextNode = N::clearDirty(curref->load());
+
+            if (nextNode == nullptr) {
                 if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
+                    //                        std::cout<<"retry\n";
                     goto restart;
                 }
                 return OperationResults::NotFound;
-            case CheckPrefixResult::OptimisticMatch:
-                // fallthrough
-            case CheckPrefixResult::Match: {
-                // if (level >= k->getKeyLen()) {
-                //     // key is too short
-                //     // but it next fkey is 0
-                //     return OperationResults::NotFound;
-                // }
-                nodeKey = k->fkey[level];
+            }
+            if (N::isLeaf(nextNode)) {
+                node->lockVersionOrRestart(v, needRestart);
+                if (needRestart) {
+                    //                        std::cout<<"retry\n";
+                    goto restart;
+                }
 
-                parentref = curref;
-                curref = N::getChild(nodeKey, node);
-                if (curref == nullptr)
-                    nextNode = nullptr;
-                else
-                    nextNode = N::clearDirty(curref->load());
-
-                if (nextNode == nullptr) {
-                    if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
-//                        std::cout<<"retry\n";
-                        goto restart;
-                    }
+                Leaf *leaf = N::getLeaf(nextNode);
+                if (!leaf->checkKey(k)) {
+                    node->writeUnlock();
                     return OperationResults::NotFound;
                 }
-                if (N::isLeaf(nextNode)) {
-                    node->lockVersionOrRestart(v, needRestart);
-                    if (needRestart){
-//                        std::cout<<"retry\n";
-                        goto restart;
-                    }
+                // find key, update it
+                Leaf *newleaf = new (alloc_new_node_from_type(NTypes::Leaf))
+                    Leaf(leaf->fkey, k->key_len, (char *)k->value, k->val_len);
+                //                    std::cout<<(int)(((BaseNode
+                //                    *)newleaf)->type)<<"\n";
+                flush_data((void *)newleaf, sizeof(Leaf));
 
-                    Leaf *leaf = N::getLeaf(nextNode);
-                    if (!leaf->checkKey(k)) {
-                        node->writeUnlock();
-                        return OperationResults::NotFound;
-                    }
-                    // find key, update it
-                    Leaf *newleaf = new (alloc_new_node_from_type(NTypes::Leaf))
-                            Leaf(leaf->fkey, k->key_len, (char *)k->value, k->val_len);
-//                    std::cout<<(int)(((BaseNode *)newleaf)->type)<<"\n";
-                    flush_data((void *)newleaf, sizeof(Leaf));
-
-                    N::change(node, nodeKey, N::setLeaf(newleaf));
-                    node->writeUnlock();
-                    return OperationResults::Success;
-                }
-                level++;
+                N::change(node, nodeKey, N::setLeaf(newleaf));
+                node->writeUnlock();
+                return OperationResults::Success;
             }
+            level++;
+        }
         }
     }
 }

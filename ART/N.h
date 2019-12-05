@@ -87,7 +87,7 @@ class N : public BaseNode {
     virtual ~N() {}
 
     // 3b type 60b version 1b lock 1b obsolete
-//    std::atomic<uint64_t> typeVersionLockObsolete{0b100};
+    //    std::atomic<uint64_t> typeVersionLockObsolete{0b100};
     std::atomic<uint64_t> *typeVersionLockObsolete;
     // version 1, unlocked, not obsolete
     alignas(64) std::atomic<Prefix> prefix;

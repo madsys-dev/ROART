@@ -60,3 +60,4 @@ target_link_libraries(malloc_diff Indexes)
 add_executable(unittest ${DIR_TEST_SRC})
 target_link_libraries(unittest Indexes gtest)
 
+add_executable(gen_mail script/gen_mail.cpp)
