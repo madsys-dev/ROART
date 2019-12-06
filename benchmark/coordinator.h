@@ -3,8 +3,8 @@
 
 #include "Key.h"
 #include "N.h"
-#include "RNTree.h"
 #include "Tree.h"
+//#include "lf-skiplist.h"
 #include "benchmarks.h"
 #include "config.h"
 #include "fast_fair.h"
@@ -437,11 +437,11 @@ template <typename K, typename V, int size> class Coordinator {
 
             printf("[COORDINATOR]\tFinish benchmark..\n");
             printf("[RESULT]\ttotal throughput: %.3lf Mtps, %d threads, %s, "
-                   "%s, benchmark %d, zipfian %.2lf\n",
+                   "%s, benchmark %d, zipfian %.2lf, rr is %d\n",
                    (double)final_result.throughput / 1000000.0 / conf.duration,
                    conf.num_threads, (conf.type == PART) ? "ART" : "FF",
                    (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,
-                   (conf.workload == RANDOM) ? 0 : conf.skewness);
+                   (conf.workload == RANDOM) ? 0 : conf.skewness, conf.read_ratio);
 
             delete art;
             delete[] pid;
@@ -503,11 +503,11 @@ template <typename K, typename V, int size> class Coordinator {
 
             printf("[COORDINATOR]\tFinish benchmark..\n");
             printf("[RESULT]\ttotal throughput: %.3lf Mtps, %d threads, %s, "
-                   "%s, benchmark %d, zipfian %.2lf\n",
+                   "%s, benchmark %d, zipfian %.2lf, rr is %d\n",
                    (double)final_result.throughput / 1000000.0 / conf.duration,
                    conf.num_threads, (conf.type == PART) ? "ART" : "FF",
                    (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,
-                   (conf.workload == RANDOM) ? 0 : conf.skewness);
+                   (conf.workload == RANDOM) ? 0 : conf.skewness, conf.read_ratio);
 
             delete[] pid;
             delete[] results;

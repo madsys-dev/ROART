@@ -272,7 +272,7 @@ class YSCBB : public Benchmark {
   public:
     //	readRate = 0.95;
     //	writeRate = 0.05;
-    int read_ratio = 90;
+    int read_ratio = 95;
     RandomGenerator rdm;
 
     YSCBB(Config &conf) : Benchmark(conf) {}
@@ -313,12 +313,15 @@ class YSCBC : public Benchmark {
     }
 } __attribute__((aligned(64)));
 
-class YSCBD : public Benchmark {// read + insert
+class YSCBD : public Benchmark {
   public:
     int read_ratio;
+    int update_ratio;
     RandomGenerator rdm;
 
-    YSCBD(Config &conf) : Benchmark(conf), read_ratio(conf.read_ratio) {}
+    YSCBD(Config &conf) : Benchmark(conf), read_ratio(conf.read_ratio) {
+        update_ratio = (100 - read_ratio)/2 + read_ratio;
+    }
 
     virtual std::pair<OperationType, long long> nextIntOperation() {
         int k = rdm.randomInt() % 100;
@@ -336,7 +339,9 @@ class YSCBD : public Benchmark {// read + insert
         std::string s = dataset->wl_str[next];
         if (k < read_ratio) {
             return std::make_pair(GET, s);
-        } else {
+        } else if(k < update_ratio){
+            return std::make_pair(UPDATE, s);
+        } else{
             char p1 = rdm.randomInt() % 94 + 33;
             char p2 = rdm.randomInt() % 94 + 33;
             s = p1 + s + p2;
