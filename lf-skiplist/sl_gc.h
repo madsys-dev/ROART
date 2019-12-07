@@ -2,17 +2,17 @@
 
 #include <libpmemobj.h>
 
-namespace fastfair {
+namespace skiplist {
 
 
     static const int GC_NODE_COUNT_THREADHOLD = 1024;
 
     static const int GC_INTERVAL = 50;
 
-    POBJ_LAYOUT_BEGIN(fast_fair);
-    POBJ_LAYOUT_TOID(fast_fair, struct key_item);
-    POBJ_LAYOUT_TOID(fast_fair, char);
-    POBJ_LAYOUT_END(fast_fair);
+    POBJ_LAYOUT_BEGIN(skiplist);
+    POBJ_LAYOUT_TOID(skiplist, struct key_item);
+    POBJ_LAYOUT_TOID(skiplist, char);
+    POBJ_LAYOUT_END(skiplist);
 
     typedef struct key_item {
         size_t key_len;

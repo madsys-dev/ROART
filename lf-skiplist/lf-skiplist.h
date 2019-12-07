@@ -10,24 +10,13 @@
 #include "atomic_ops_if.h"
 #include <stdio.h>
 #include <libpmemobj.h>
-#include "pmdk_gc.h"
+#include "sl_gc.h"
 
 namespace skiplist {
 
-    /**
- *  epoch-based GC
- */
-    std::mutex ti_mtx;
-    __thread threadinfo *ti = nullptr;
-    threadinfo *ti_list = nullptr;
-    Epoch_Mgr *e_mgr = nullptr;
-    int tid = 0;
-
-    PMEMobjpool *pmem_pool;
-
 #define CACHE_LINES_PER_NV_NODE 3 //TODO does nv-jemalloc need to be aware of this?
 
-#define max_level ((CACHE_LINES_PER_NV_NODE * 8) - 3) //one cache-line node; use 13 for two cache-line nodes
+const int max_level = 20; //one cache-line node; use 13 for two cache-line nodes
 
 	typedef uintptr_t UINT_PTR;
 	typedef uint32_t UINT32;
@@ -80,8 +69,8 @@ namespace skiplist {
 		return res;
 	}
 
-	typedef char *skey_t;
-	typedef char *svalue_t;
+	typedef char * skey_t;
+	typedef char * svalue_t;
 
 	struct node_t {
 		skey_t key;
@@ -91,13 +80,13 @@ namespace skiplist {
 
 		uint8_t max_min_flag;
 
-		volatile node_t *next[max_level]; //in our allocator, we will be working with chunks of the same size, so every node should have the same size
+		node_t *next[max_level + 2]; //in our allocator, we will be working with chunks of the same size, so every node should have the same size
 		uint32_t toplevel;
 		uint8_t node_flags;
-	}__attribute__((aligned(64)));
+	};
 
 
-	typedef volatile node_t *skiplist_t;
+	typedef node_t *skiplist_t;
 
 	const int skiplist_node_size = sizeof(node_t);
 

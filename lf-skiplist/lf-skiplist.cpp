@@ -1,6 +1,19 @@
 #include "lf-skiplist.h"
+#include <string.h>
 
 namespace skiplist {
+
+    /**
+ *  epoch-based GC
+ */
+    std::mutex ti_mtx;
+    __thread threadinfo *ti = nullptr;
+    threadinfo *ti_list = nullptr;
+    Epoch_Mgr *e_mgr = nullptr;
+    int tid = 0;
+
+    PMEMobjpool *pmem_pool;
+
     static inline UINT_PTR unmarked_ptr(UINT_PTR p) {
         return (p & ~(UINT_PTR) 0x01);
     }
@@ -31,8 +44,9 @@ namespace skiplist {
  */
     void init_pmem() {
         // create pool
+
         const char *pool_name = "/mnt/pmem0/matianmao/skiplist.data";
-        const char *layout_name = "fast_fair";
+        const char *layout_name = "skiplist";
         size_t pool_size = 64LL * 1024 * 1024 * 1024; // 16GB
 
         if (access(pool_name, 0)) {
@@ -47,19 +61,6 @@ namespace skiplist {
             std::cout << "[SL]\topen\n";
         }
         std::cout << "[SL]\topen pmem pool successfully\n";
-    }
-
-    void *allocate(size_t size) {
-        void *addr;
-        PMEMoid ptr;
-        int ret = pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * size,
-                                 TOID_TYPE_NUM(char));
-        if (ret) {
-            std::cout << "[SL]\tallocate btree successfully\n";
-            assert(0);
-        }
-        addr = (char *)pmemobj_direct(ptr);
-        return addr;
     }
 
     void register_thread() {
@@ -107,15 +108,27 @@ namespace skiplist {
         flush_data((void *)ti->md, sizeof(GCMetaData));
         flush_data((void *)ti, sizeof(threadinfo));
         flush_data((void *)ti_list, sizeof(threadinfo));
+        std::cout<<"register thread\n";
     }
 
-
-    bool is_max(node_t *n) {
-        return n->max_min_flag & MAX_KEY;
-    }
-
-    bool is_min(node_t *n) {
-        return n->max_min_flag & MIN_KEY;
+    int comparekey(node_t *n, skey_t k2, int len2){
+        if(n->max_min_flag == MIN_KEY) return -1;
+        if(n->max_min_flag == MAX_KEY) return 1;
+        skey_t k1 = n->key;
+        int len1 = n->key_len;
+        if(len1 == len2){
+            return memcmp(k1, k2, len1);
+        }else{
+            if(len1 < len2){
+                int ret = memcmp(k1, k2, len1);
+                if(ret != 0) return ret;
+                else return -1;
+            }else{
+                int ret = memcmp(k1, k2, len2);
+                if(ret != 0) return ret;
+                else return 1;
+            }
+        }
     }
 
     int get_random_level() {
@@ -132,36 +145,44 @@ namespace skiplist {
         return level;
     }
 
-    void init_new_node_and_set_next(node_t *the_node, skey_t key, svalue_t value, int height, volatile node_t *next){
+    void init_new_node_and_set_next(node_t *the_node, skey_t key, svalue_t value, int height){
             the_node->key = key;
-            the_node->key_len = strlen(key);
+            the_node->key_len = (key == nullptr)? 0:strlen(key);
             the_node->value = value;
-            the_node->val_len = strlen(value);
+            the_node->val_len = (value == nullptr) ? 0:strlen(value);
             the_node->max_min_flag = 0;
             the_node->toplevel = height;
-            int i;
-
-            for (i = 0; i < max_level; i++) {
-                the_node->next[i] = next;
-            }
-            flush_data((void *)the_node, sizeof(node_t));
     }
 
     skiplist_t *new_skiplist() {
         register_thread();
 
-        node_t *min, *max;
+        node_t *min = nullptr;
+        node_t *max = nullptr;
 
         TX_BEGIN(pmem_pool){
-            PMEMoid p1,p2;
+            PMEMoid p1;
             p1 = pmemobj_tx_zalloc(sizeof(node_t), TOID_TYPE_NUM(char));
-            p2 = pmemobj_tx_zalloc(sizeof(node_t), TOID_TYPE_NUM(char));
             min = (node_t *)pmemobj_direct(p1);
-            max = (node_t *)pmemobj_direct(p2);
-            init_new_node_and_set_next(max, 0,0,max_level, NULL);
-            init_new_node_and_set_next(min,0,0,max_level, max);
         }
         TX_END
+
+        TX_BEGIN(pmem_pool){
+            PMEMoid p2;
+            p2 = pmemobj_tx_zalloc(sizeof(node_t), TOID_TYPE_NUM(char));
+            max = (node_t *)pmemobj_direct(p2);
+        }
+        TX_END
+        init_new_node_and_set_next(max, nullptr,nullptr,max_level);
+        init_new_node_and_set_next(min,nullptr, nullptr,max_level);
+        for(int i = 0; i < max_level; i++){
+            min->next[i] = max;
+        }
+
+        min->max_min_flag = MIN_KEY;
+        max->max_min_flag = MAX_KEY;
+        flush_data(min, sizeof(node_t));
+        flush_data(max, sizeof(node_t));
 
         skiplist_t* sl = (skiplist_t*)malloc(sizeof(skiplist_t));
         (*sl) = min;
@@ -176,12 +197,12 @@ namespace skiplist {
 
 //search operation; retrieves predecessors and successors of the searched node; does cleanup if necessary - if the searched node is marked for removal, it is unlinked
 //for the pourposes of non-volatile memory, it is the level 0 unlink that is critical
-    int sl_search(skiplist_t *sl, skey_t key, volatile node_t **left_nodes, volatile node_t **right_nodes) {
+    int sl_search(skiplist_t *sl, skey_t key, node_t **left_nodes, node_t **right_nodes) {
         int i;
-        volatile node_t *left;
-        volatile node_t *right = NULL;
-        volatile node_t *left_next;
-        volatile node_t *right_next;
+        node_t *left;
+        node_t *right = NULL;
+        node_t *left_next;
+        node_t *right_next;
 
         retry:
         left = (*sl);
@@ -199,8 +220,7 @@ namespace skiplist {
                     right = UNMARKED_PTR_ALL(right_next);
                     right_next = (node_t *) unmark_ptr_cache((UINT_PTR) right->next[i]);
                 }
-
-                if (right->key >= key) {
+                if(comparekey((node_t *)right, key, strlen(key)) >= 0){
                     break;
                 }
                 left = right;
@@ -209,7 +229,7 @@ namespace skiplist {
 
 
                 if ((left_next != right) &&
-                        (CAS_PTR((volatile PVOID*) &(left->next[i]), (PVOID)left_next, (PVOID)right)
+                        (CAS_PTR((PVOID*) &(left->next[i]), (PVOID)left_next, (PVOID)right)
                          != left_next)) {
                     goto retry;
                 }
@@ -224,7 +244,7 @@ namespace skiplist {
                 flush_data(&(left_next), sizeof(uint64_t));
 
                 if ((left_next != right) &&
-                    (CAS_PTR((volatile PVOID *) &(left->next[i]), (PVOID) left_next, (PVOID) right)
+                    (CAS_PTR((PVOID *) &(left->next[i]), (PVOID) left_next, (PVOID) right)
                      != left_next)) {
                     goto retry;
                 }
@@ -255,16 +275,16 @@ namespace skiplist {
 
 
         flush_and_try_unflag((PVOID *) &(left->next[0]));
-        return (right->key == key);
+        return (comparekey((node_t *)right, key, strlen(key)) == 0);
     }
 
 //search with no cleanup, retrieves both the predecessors and the successors of the searched node
-    int sl_search_no_cleanup(skiplist_t *sl, skey_t key, volatile node_t **left_nodes, volatile node_t **right_nodes) {
+    int sl_search_no_cleanup(skiplist_t *sl, skey_t key, node_t **left_nodes, node_t **right_nodes) {
         int i;
-        volatile node_t *left;
-        volatile node_t *right = NULL;
-        volatile node_t *left_next;
-        volatile node_t *lpred;
+        node_t *left;
+        node_t *right = NULL;
+        node_t *left_next;
+        node_t *lpred;
 
         left = (*sl);
         lpred = (*sl);
@@ -274,7 +294,7 @@ namespace skiplist {
             right = left_next;
             while (1) {
                 if (!PTR_IS_MARKED(right->next[i])) {
-                    if (right->key >= key) {
+                    if (comparekey((node_t *)right, key, strlen(key)) >= 0) {
                         break;
                     }
                     lpred = left;
@@ -289,16 +309,16 @@ namespace skiplist {
         flush_and_try_unflag((PVOID *) &(left->next[0]));
         flush_and_try_unflag((PVOID *) &(lpred->next[0]));
 
-        return (right->key == key);
+        return (comparekey((node_t *)right, key, strlen(key)) == 0);
     }
 
 //simple search, does not do any cleanup, only sets the successors of the retrieved node
-    int sl_search_no_cleanup_succs(skiplist_t *sl, skey_t key, volatile node_t **right_nodes) {
+    int sl_search_no_cleanup_succs(skiplist_t *sl, skey_t key, node_t **right_nodes) {
         int i;
-        volatile node_t *left;
-        volatile node_t *right = NULL;
-        volatile node_t *left_next;
-        volatile node_t *lpred;
+        node_t *left;
+        node_t *right = NULL;
+        node_t *left_next;
+        node_t *lpred;
 
         left = (*sl);
         lpred = (*sl);
@@ -307,7 +327,7 @@ namespace skiplist {
             right = left_next;
             while (1) {
                 if (!PTR_IS_MARKED(right->next[i])) {
-                    if (right->key >= key) {
+                    if (comparekey((node_t *)right, key, strlen(key)) >= 0) {
                         break;
                     }
                     lpred = left;
@@ -324,15 +344,15 @@ namespace skiplist {
         //}
 
 
-        return (right->key == key);
+        return (comparekey((node_t *)right, key, strlen(key)) == 0);
     }
 
-    inline int mark_node_pointers(volatile node_t *node) {
+    inline int mark_node_pointers(node_t *node) {
         int i;
         int success = 0;
         //fprintf(stderr, "in mark node ptrs\n");
 
-        volatile node_t *next_node;
+        node_t *next_node;
 
         for (i = node->toplevel - 1; i >= 1; i--) {
             do {
@@ -362,7 +382,7 @@ namespace skiplist {
     }
 
     svalue_t skiplist_remove(skiplist_t *sl, skey_t key) {
-        volatile node_t *successors[max_level];
+        node_t *successors[max_level];
         svalue_t result = 0;
 
         //fprintf(stderr, "in rmove\n");
@@ -375,7 +395,7 @@ namespace skiplist {
             return 0;
         }
 
-        volatile node_t *node_to_delete = successors[0];
+        node_t *node_to_delete = successors[0];
         int delete_successful = mark_node_pointers(node_to_delete);
 
         if (delete_successful) {
@@ -397,11 +417,11 @@ namespace skiplist {
 
     int skiplist_insert(skiplist_t *sl, skey_t key, svalue_t val) {
         node_t *to_insert;
-        volatile node_t *pred;
-        volatile node_t *succ;
+        node_t *pred;
+        node_t *succ;
 
-        volatile node_t *succs[max_level];
-        volatile node_t *preds[max_level];
+        node_t *succs[max_level];
+        node_t *preds[max_level];
 
         UINT32 i;
         UINT32 j;
@@ -429,7 +449,7 @@ namespace skiplist {
             memcpy(vv, val, strlen(val) + 1);
             flush_data(kk, strlen(key) + 1);
             flush_data(vv, strlen(val) + 1);
-            init_new_node_and_set_next(to_insert, (skey_t)kk, (svalue_t)vv, get_random_level(), NULL);
+            init_new_node_and_set_next(to_insert, (skey_t)kk, (svalue_t)vv, get_random_level());
         }
         TX_END
         for (i = 0; i < to_insert->toplevel; i++) {
@@ -451,7 +471,7 @@ namespace skiplist {
         }
         //write_data_wait((void*)&(preds[0]->next[0]), 1);
 
-        volatile node_t *new_next;
+        node_t *new_next;
 
         for (i = 1; i < to_insert->toplevel; i++) {
             while (1) {
@@ -503,7 +523,7 @@ namespace skiplist {
     }
 
     void skiplist_update(skiplist_t *sl, skey_t key, svalue_t val) {
-        volatile node_t *successors[max_level];
+        node_t *successors[max_level];
         svalue_t result = 0;
 
         //fprintf(stderr, "in rmove\n");
@@ -517,7 +537,7 @@ namespace skiplist {
             return;
         }
 
-        volatile node_t *node_to_update = successors[0];
+        node_t *node_to_update = successors[0];
 
         if(!PTR_IS_MARKED(node_to_update)){
             char * new_val;
@@ -528,6 +548,7 @@ namespace skiplist {
                 memcpy(new_val, val, strlen(val)+1);
                 flush_data(new_val, strlen(val) + 1);
             }
+            TX_END
             CAS_PTR((PVOID *)&(node_to_update->value), (PVOID)old_val, (PVOID)new_val);
             flush_data((void *)&(node_to_update->value), sizeof(uint64_t));
         }
@@ -539,20 +560,20 @@ namespace skiplist {
     //simple search, no cleanup;
     static node_t *sl_left_search(skiplist_t *sl, skey_t key) {
         node_t *left = NULL;
-        volatile node_t *left_prev;
+        node_t *left_prev;
 
         left_prev = UNMARKED_PTR_ALL(*sl);
 
         int level;
         for (level = max_level - 1; level >= 0; level--) {
             left = UNMARKED_PTR_ALL(left_prev->next[level]);
-            while (left->key < key || PTR_IS_MARKED(left->next[level])) {
+            while (comparekey((node_t *)left, key, strlen(key)) < 0 || PTR_IS_MARKED(left->next[level])) {
                 if (!PTR_IS_MARKED(left->next[level])) {
                     left_prev = left;
                 }
                 left = UNMARKED_PTR_ALL(left->next[level]);
             }
-            if (left->key == key) {
+            if (comparekey((node_t *)left, key, strlen(key)) == 0) {
                 break;
             }
         }
@@ -562,13 +583,13 @@ namespace skiplist {
 
     svalue_t skiplist_find(skiplist_t *sl, skey_t key) {
 
-        svalue_t result = 0;
+        svalue_t result = nullptr;
 
         ti->JoinEpoch();
 
         node_t *left = sl_left_search(sl, key);
 
-        if (left->key == key) {
+        if (comparekey((node_t *)left, key, strlen(key)) == 0) {
             result = left->value;
         }
 
