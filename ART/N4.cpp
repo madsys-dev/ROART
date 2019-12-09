@@ -74,8 +74,7 @@ bool N4::remove(uint8_t k, bool force, bool flush) {
             return true;
         }
     }
-    assert(false);
-    __builtin_unreachable();
+    return false;
 }
 
 N *N4::getAnyChild() const {

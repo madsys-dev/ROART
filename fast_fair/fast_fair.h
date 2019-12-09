@@ -1597,10 +1597,14 @@ class page {
                         std::cout << "boom!!!\n";
                         return nullptr;
                     }
-                    if (memcmp(k->key, key->key, std::min(k->key_len, key->key_len)) == 0) {
+                    if (memcmp(k->key, key->key,
+                               std::min(k->key_len, key->key_len)) == 0) {
                         if ((t = records[0].ptr) != nullptr) {
-                            if (memcmp(k->key, records[0].key.skey->key, std::min(k->key_len,
-                                             records[0].key.skey->key_len)) == 0) {
+                            if (memcmp(
+                                    k->key, records[0].key.skey->key,
+                                    std::min(k->key_len,
+                                             records[0].key.skey->key_len)) ==
+                                0) {
                                 ret = t;
                                 if (value) {
                                     char *garbage = records[0].ptr;

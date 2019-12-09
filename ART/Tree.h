@@ -63,7 +63,7 @@ class Tree {
 
     void rebuild(std::set<std::pair<uint64_t, size_t>> &rs);
 
-    void *lookup(const Key *k) const;
+    Leaf *lookup(const Key *k) const;
 
     OperationResults update(const Key *k) const;
 

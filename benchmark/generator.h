@@ -35,7 +35,7 @@ class RandomGenerator : public WorkloadGenerator {
     int key_len;
 
   public:
-    RandomGenerator(int key_len_ = 8): key_len(key_len_) {
+    RandomGenerator(int key_len_ = 8) : key_len(key_len_) {
         for (int i = 0; i < 3; i++) {
             inital[i] = seed[i] = rand();
             inital2[i] = seed2[i] = rand();
@@ -48,7 +48,7 @@ class RandomGenerator : public WorkloadGenerator {
 
         std::string res = "";
         for (int i = 0; i < len; i++) {
-//            char c = randomInt() % 10 + '0'; // 0-9
+            //            char c = randomInt() % 10 + '0'; // 0-9
             char c = randomInt() % 94 + 33;
             res += c;
         }
@@ -111,6 +111,7 @@ class DataSet {
     std::string *wl_str;
     int data_size;
     int key_len;
+    int emailkey;
 
     static std::string get_file_name_str(int len) {
         std::stringstream ss;
@@ -118,7 +119,7 @@ class DataSet {
         return "/tmp/random_str_data" + ss.str();
     }
 
-    DataSet(int size, int key_length);
+    DataSet(int size, int key_length, int email);
 };
 
 #endif // GENERATOR_H

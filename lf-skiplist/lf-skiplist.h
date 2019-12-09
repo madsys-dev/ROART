@@ -96,7 +96,7 @@ const int max_level = 20; //one cache-line node; use 13 for two cache-line nodes
 
 	svalue_t skiplist_remove(skiplist_t *sl, skey_t key);
 
-	void skiplit_update(skiplist_t *sl, skey_t key, svalue_t val);
+	void skiplist_update(skiplist_t *sl, skey_t key, svalue_t val);
 
 	skiplist_t *new_skiplist();
 

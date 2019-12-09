@@ -4,10 +4,10 @@
 #include "Key.h"
 #include "N.h"
 #include "Tree.h"
-//#include "lf-skiplist.h"
 #include "benchmarks.h"
 #include "config.h"
 #include "fast_fair.h"
+#include "lf-skiplist.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "timer.h"
@@ -146,7 +146,7 @@ template <typename K, typename V, int size> class Coordinator {
                 auto next_operation = benchmark->nextStrOperation();
                 op = next_operation.first;
                 s = next_operation.second;
-                k->Init((char *)s.c_str(), sizeof(uint64_t), value, val_len);
+                k->Init((char *)s.c_str(), s.size(), value, val_len);
             }
 
             cpuCycleTimer t;
@@ -381,6 +381,123 @@ template <typename K, typename V, int size> class Coordinator {
         printf("[WORKER]\tworker %d finished\n", workerid);
     }
 
+    void sl_worker(skiplist::skiplist_t *sl, int workerid, Result *result,
+                   Benchmark *b) {
+        //            Benchmark *benchmark = getBenchmark(conf);
+        Benchmark *benchmark = getBenchmark(conf);
+        printf("[WORKER]\thello, I am worker %d\n", workerid);
+        stick_this_thread_to_core(workerid);
+        skiplist::register_thread();
+        bar->wait();
+
+        unsigned long tx = 0;
+
+        double total_update_latency_breaks[3] = {0.0, 0.0, 0.0};
+        double update_latency_breaks[3] = {0.0, 0.0, 0.0};
+        int update_count = 0;
+
+        double total_find_latency_breaks[3] = {0.0, 0.0, 0.0};
+        double find_latency_breaks[3] = {0.0, 0.0, 0.0};
+        int find_count = 0;
+
+        memset(total_update_latency_breaks, 0, sizeof(double) * 3);
+        memset(total_find_latency_breaks, 0, sizeof(double) * 3);
+
+#define sync_latency(a, b, count)                                              \
+    do {                                                                       \
+        if (b[0] > 0.0 || (count > 100) && (b[0] > 10 * a[0] / count)) {       \
+            for (int i = 0; i < 3; i++) {                                      \
+                a[i] += b[i];                                                  \
+            }                                                                  \
+            count++;                                                           \
+        }                                                                      \
+    } while (0)
+
+        static int scan_values = 0;
+        static int scan_length;
+        scan_length = conf.scan_length;
+
+        auto scan_func = [](K key, V value) -> bool {
+            scan_values++;
+
+            if (scan_values > scan_length) {
+                return true;
+            }
+            return false;
+        };
+
+        int frequency = conf.throughput / conf.num_threads;
+        int submit_time = 1000000000.0 / frequency;
+        int count = 0;
+
+        const int val_len = 100;
+        char value[val_len + 5];
+        memset(value, 'a', val_len);
+        value[val_len] = 0;
+        while (done == 0) {
+
+            V result = 1;
+            OperationType op;
+            std::string s;
+
+            auto next_operation = benchmark->nextStrOperation();
+            op = next_operation.first;
+            s = next_operation.second;
+
+            cpuCycleTimer t;
+            if (conf.latency_test) {
+                t.start();
+            }
+
+            switch (op) {
+            case UPDATE:
+                skiplist::skiplist_update(sl, (char *)s.c_str(), value);
+                break;
+            case INSERT:
+                skiplist::skiplist_insert(sl, (char *)s.c_str(), value);
+                break;
+            case REMOVE:
+                skiplist::skiplist_remove(sl, (char *)s.c_str());
+                break;
+            case GET:
+                skiplist::skiplist_find(sl, (char *)s.c_str());
+                break;
+            case SCAN:
+                // bt->scan(d, scan_func);
+                // scan_values = 0;
+                break;
+            default:
+                printf("not support such operation: %d\n", op);
+                exit(-1);
+            }
+            if (conf.latency_test) {
+                t.end();
+                while (t.duration() < submit_time) {
+                    t.start();
+                    t.end();
+                }
+            }
+
+            tx++;
+        }
+        result->throughput = tx;
+        // printf("[%d] finish %d insert\n", workerid, count);
+
+#ifdef PERF_LATENCY
+        for (int i = 0; i < 3; i++) {
+            result->update_latency_breaks[i] =
+                total_update_latency_breaks[i] / update_count;
+            result->find_latency_breaks[i] =
+                total_find_latency_breaks[i] / find_count;
+            printf("%d result %lf %lf\n", workerid,
+                   total_update_latency_breaks[i],
+                   total_find_latency_breaks[i]);
+        }
+#endif // PERF_LATENCY
+
+        printf("[WORKER]\tworker %d finished\n", workerid);
+    }
+
     void run() {
         printf("[COORDINATOR]\tStart benchmark..\n");
 
@@ -411,12 +528,25 @@ template <typename K, typename V, int size> class Coordinator {
                     art->insert(k);
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
-                    k->Init((char *)s.c_str(), sizeof(uint64_t), value,
+                    k->Init((char *)s.c_str(), s.size(), value,
                             val_len);
                     art->insert(k);
                 }
             }
             printf("init insert finished\n");
+            if(conf.benchmark == RECOVERY_BENCH){
+                NVMMgr *mgr = get_nvm_mgr();
+
+                timer t;
+                t.start();
+                art->rebuild(mgr->recovery_set);
+#ifdef RECLAIM_MEMORY
+//                mgr->recovery_free_memory();
+#endif
+                t.end();
+                printf("rebuild takes time: %.2lf ms\n", t.duration()/1000000.0);
+                return;
+            }
 
             for (int i = 0; i < conf.num_threads; i++) {
                 pid[i] = new std::thread(&Coordinator::art_worker, this, art, i,
@@ -441,7 +571,8 @@ template <typename K, typename V, int size> class Coordinator {
                    (double)final_result.throughput / 1000000.0 / conf.duration,
                    conf.num_threads, (conf.type == PART) ? "ART" : "FF",
                    (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,
-                   (conf.workload == RANDOM) ? 0 : conf.skewness, conf.read_ratio);
+                   (conf.workload == RANDOM) ? 0 : conf.skewness,
+                   conf.read_ratio);
 
             delete art;
             delete[] pid;
@@ -507,7 +638,62 @@ template <typename K, typename V, int size> class Coordinator {
                    (double)final_result.throughput / 1000000.0 / conf.duration,
                    conf.num_threads, (conf.type == PART) ? "ART" : "FF",
                    (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,
-                   (conf.workload == RANDOM) ? 0 : conf.skewness, conf.read_ratio);
+                   (conf.workload == RANDOM) ? 0 : conf.skewness,
+                   conf.read_ratio);
+
+            delete[] pid;
+            delete[] results;
+        } else if (conf.type == SKIPLIST) {
+            printf("test skiplist\n");
+            skiplist::init_pmem();
+            skiplist::skiplist_t *sl = skiplist::new_skiplist();
+            printf("skiplist create\n");
+
+            Benchmark *benchmark = getBenchmark(conf);
+
+            Result *results = new Result[conf.num_threads];
+            memset(results, 0, sizeof(Result) * conf.num_threads);
+
+            std::thread **pid = new std::thread *[conf.num_threads];
+            bar = new boost::barrier(conf.num_threads + 1);
+            printf("init keys: %d\n", (int)conf.init_keys);
+
+            const int val_len = 100;
+            char value[val_len + 5];
+            memset(value, 'a', val_len);
+            value[val_len] = 0;
+
+            for (unsigned long i = 0; i < conf.init_keys; i++) {
+                std::string s = benchmark->nextInitStrKey();
+                skiplist::skiplist_insert(sl, (char *)s.c_str(), value);
+            }
+            printf("init insert finished\n");
+
+            for (int i = 0; i < conf.num_threads; i++) {
+                pid[i] = new std::thread(&Coordinator::sl_worker, this, sl, i,
+                                         &results[i], benchmark);
+            }
+
+            bar->wait();
+            usleep(conf.duration * 1000000);
+            done = 1;
+
+            Result final_result;
+            for (int i = 0; i < conf.num_threads; i++) {
+                pid[i]->join();
+                final_result += results[i];
+                printf("[WORKER]\tworker %d result %lf\n", i,
+                       results[i].throughput);
+            }
+
+            printf("[COORDINATOR]\tFinish benchmark..\n");
+            printf("[RESULT]\ttotal throughput: %.3lf Mtps, %d threads, %s, "
+                   "%s, benchmark %d, zipfian %.2lf, rr is %d\n",
+                   (double)final_result.throughput / 1000000.0 / conf.duration,
+                   conf.num_threads, "SL",
+                   (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,
+                   (conf.workload == RANDOM) ? 0 : conf.skewness,
+                   conf.read_ratio);
 
             delete[] pid;
             delete[] results;

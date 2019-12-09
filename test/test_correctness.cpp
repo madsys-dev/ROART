@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <thread>
 #include <vector>
+#include "generator.h"
 
 using namespace PART_ns;
 
@@ -15,28 +16,50 @@ TEST(TestCorrectness, PM_ART) {
     std::cout << "[TEST]\tstart to test correctness\n";
     clear_data();
 
-    const int nthreads = 24;
-    const int test_iter = 20000;
+    const int nthreads = 30;
+    const int test_iter = 10000;
 
-    std::vector<Key *> Keys;
-    Keys.reserve(nthreads * test_iter);
-
-    uint64_t *keys = new uint64_t[nthreads * test_iter + 1];
+    std::vector<std::string> key_vec;
 
     Tree *art = new Tree();
     std::thread *tid[nthreads];
 
+    RandomGenerator rdm;
+
     // Generate keys
     std::cout << "[TEST]\tstart to build tree\n";
+    for (int i = 0; i < nthreads * test_iter; i++) {
+//        std::string key = std::to_string(i);
+////        key = key + "x";
+        std::string key = rdm.RandomStr();
+        key = "msn" + key + "msn";
+        Key *k = new Key();
+        k->Init((char *)key.c_str(), key.size(), (char *)key.c_str(), key.size());
+
+        Tree::OperationResults res = art->insert(k);
+        ASSERT_EQ(res, Tree::OperationResults::Success);
+
+        Leaf *ret = art->lookup(k);
+        ASSERT_TRUE(ret);
+        ASSERT_EQ(ret->key_len, key.size());
+        ASSERT_EQ(ret->val_len, key.size());
+
+        key_vec.push_back(key);
+    }
+
     for (uint64_t i = 0; i < nthreads * test_iter; i++) {
-        keys[i] = i;
-        Keys[i] = new Key(keys[i], sizeof(uint64_t), i + 1);
-        // Keys[i] = Keys[i]->make_leaf(i, sizeof(uint64_t), i + 1);
-        //        printf("insert start %d\n", i);
-        Tree::OperationResults res = art->insert(Keys[i]);
-        //        printf("insert success\n");
-        ASSERT_EQ(res, Tree::OperationResults::Success)
-            << "insert failed on key " << i;
+        std::string key = key_vec[i];
+        Key *k = new Key();
+        k->Init((char *)key.c_str(), key.size(), (char *)key.c_str(), key.size());
+//        std::cout<<k->fkey<<" "<<k->key_len<<"\n";
+        Leaf *ret = art->lookup(k);
+
+        ASSERT_TRUE(ret);
+        ASSERT_EQ(ret->key_len, key.size());
+        ASSERT_EQ(ret->val_len, key.size());
+        ASSERT_EQ(memcmp(ret->fkey, key.c_str(), key.size()), 0);
+        ASSERT_EQ(memcmp(ret->value, key.c_str(), key.size()), 0);
+//        std::cout<<(char *)ret<<"\n";
     }
 
     std::cout << "initialization finish.....\n";
@@ -45,55 +68,99 @@ TEST(TestCorrectness, PM_ART) {
         tid[i] = new std::thread(
             [&](int id) {
                 NVMMgr_ns::register_threadinfo();
-                // read
+                Key *str_key = new Key();
+                Tree::OperationResults res;
+                // read update read
                 for (int j = 0; j < test_iter; j++) {
-                    uint64_t kk = j * nthreads + id;
-                    void *ret = art->lookup(Keys[kk]);
+                    //read
+                    std::string kk = key_vec[j * nthreads + id];
+                    str_key->Init((char *)kk.c_str(), kk.size(), (char *)kk.c_str(), kk.size());
+                    Leaf *ret = art->lookup(str_key);
+                    ASSERT_TRUE(ret);
+                    ASSERT_EQ(ret->key_len, kk.size());
+                    ASSERT_EQ(ret->val_len, kk.size());
+                    ASSERT_EQ(memcmp(ret->fkey, kk.c_str(), kk.size()), 0);
+                    ASSERT_EQ(memcmp(ret->value, kk.c_str(), kk.size()), 0);
 
-                    ASSERT_TRUE(ret) << "lookup not find the key" << kk;
+                    //update
+                    std::string newval = "0" + kk + "0";
+                    str_key->Init((char *)kk.c_str(), kk.size(), (char *)newval.c_str(), newval.size());
+                    res = art->update(str_key);
+                    ASSERT_EQ(res, Tree::OperationResults::Success);
 
-                    uint64_t val = *((uint64_t *)ret);
-                    ASSERT_EQ(val, kk + 1)
-                        << "lookup fail in thread " << id << ", insert " << kk
-                        << ", lookup " << val;
+                    // read
+                    ret = art->lookup(str_key);
+                    ASSERT_TRUE(ret);
+                    ASSERT_EQ(ret->val_len, kk.size() + 2);
+                    std::string old_ret(kk);
+                    old_ret = "0" + old_ret + "0";
+                    ASSERT_EQ(ret->val_len, old_ret.size());
+                    ASSERT_EQ(memcmp(ret->value, old_ret.c_str(), ret->val_len), 0);
+
                 }
+
+                std::cout<<"finish read update read\n";
+                for(int j = 0; j < test_iter; j++){
+                    std::string kk = key_vec[j * nthreads + id];
+                    str_key->Init((char *)kk.c_str(), kk.size(), (char *)kk.c_str(), kk.size());
+                    Leaf *ret = art->lookup(str_key);
+
+                    ASSERT_TRUE(ret);
+                    ASSERT_EQ(ret->val_len, kk.size() + 2);
+                    std::string old_ret(kk);
+                    old_ret = "0" + old_ret + "0";
+                    ASSERT_EQ(ret->val_len, old_ret.size());
+                    ASSERT_EQ(memcmp(ret->value, old_ret.c_str(), ret->val_len), 0);
+
+                    std::string newval = "madsys" + kk + "aaa";
+                    str_key->Init((char *)kk.c_str(), kk.size(), (char *)newval.c_str(), newval.size());
+                    res = art->update(str_key);
+                    ASSERT_EQ(res, Tree::OperationResults::Success);
+
+                }
+
+                for(int j = 0; j < test_iter; j++){
+                    std::string kk = key_vec[j * nthreads + id];
+                    str_key->Init((char *)kk.c_str(), kk.size(), (char *)kk.c_str(), kk.size());
+                    Leaf *ret = art->lookup(str_key);
+
+                    ASSERT_TRUE(ret);
+                    ASSERT_EQ(ret->val_len, kk.size() + 9);
+                    std::string old_ret(kk);
+                    old_ret = "madsys" + old_ret + "aaa";
+                    ASSERT_EQ(ret->val_len, old_ret.size());
+                    ASSERT_EQ(memcmp(ret->value, old_ret.c_str(), ret->val_len), 0);
+                }
+                std::cout<<"finish check update\n";
                 // remove
                 for (int j = 0; j < test_iter; j++) {
-                    uint64_t kk = j * nthreads + id;
+                    //remove read
+                    std::string kk = key_vec[j * nthreads + id];
+                    str_key->Init((char *)kk.c_str(), kk.size(), (char *)kk.c_str(), kk.size());
 
-                    Tree::OperationResults res = art->remove(Keys[kk]);
-                    ASSERT_EQ(res, Tree::OperationResults::Success)
-                        << "fail to remove key " << kk;
+                    res = art->remove(str_key);
+                    ASSERT_EQ(res, Tree::OperationResults::Success);
+
+                    Leaf *ret = art->lookup(str_key);
+                    ASSERT_FALSE(ret);
                 }
-                // read
+                std::cout<<"finish remove read\n";
+
+                // insert read
                 for (int j = 0; j < test_iter; j++) {
-                    uint64_t kk = j * nthreads + id;
+                    //insert
+                    std::string kk = key_vec[j * nthreads + id];
 
-                    void *ret = art->lookup(Keys[kk]);
-                    ASSERT_FALSE(ret)
-                        << "find key " << kk << ", but it should be removed";
+                    str_key->Init((char *)kk.c_str(), kk.size(), (char *)kk.c_str(), kk.size());
+                    res = art->insert(str_key);
+                    ASSERT_EQ(res, Tree::OperationResults::Success);
+
+                    Leaf *ret = art->lookup(str_key);
+                    ASSERT_TRUE(ret);
+                    ASSERT_EQ(ret->val_len, kk.size());
+                    ASSERT_EQ(memcmp(ret->value, (char *)kk.c_str(), kk.size()), 0);
                 }
-                // insert
-                for (int j = 0; j < test_iter; j++) {
-                    uint64_t kk = j * nthreads + id;
-                    Tree::OperationResults res = art->insert(Keys[kk]);
-
-                    ASSERT_EQ(res, Tree::OperationResults::Success)
-                        << "insert failed on key " << kk;
-                }
-
-                // read
-                for (int j = 0; j < test_iter; j++) {
-                    uint64_t kk = j * nthreads + id;
-                    void *ret = art->lookup(Keys[kk]);
-
-                    ASSERT_TRUE(ret) << "lookup not find the key" << kk;
-
-                    uint64_t val = *((uint64_t *)ret);
-                    ASSERT_EQ(val, kk + 1)
-                        << "lookup fail in thread " << id << ", insert " << kk
-                        << ", lookup " << val;
-                }
+                std::cout<<"finish insert read\n";
                 NVMMgr_ns::unregister_threadinfo();
             },
             i);
@@ -101,10 +168,6 @@ TEST(TestCorrectness, PM_ART) {
 
     for (int i = 0; i < nthreads; i++) {
         tid[i]->join();
-    }
-    for (int i = 0; i < nthreads * test_iter; i++) {
-        void *ret = art->lookup(Keys[i]);
-        ASSERT_TRUE(ret) << "not find key " << i << "but it has been inserted";
     }
 
     std::cout << "passed test.....\n";

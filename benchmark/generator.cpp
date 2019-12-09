@@ -92,29 +92,44 @@ ZipfWrapper::ZipfWrapper(double s, int inital) {
     gen_mtx.unlock();
 }
 
-DataSet::DataSet(int size, int key_length) : data_size(size), key_len(key_length) {
-    std::string fn_str = get_file_name_str(key_len);
-    dataset_mtx.lock();
-    if (access(fn_str.c_str(), 0)) {
-        std::cout << fn_str << " not exist, generate it now\n";
-        RandomGenerator rdm(key_len);
-        std::ofstream myfile;
-        myfile.open(fn_str, std::ios::out);
-        for (unsigned long long i = 0; i < data_size; i++) {
-            std::string s = rdm.RandomStr();
-            myfile << s << "\n";
+DataSet::DataSet(int size, int key_length, int email)
+    : data_size(size), key_len(key_length), emailkey(email) {
+    if (emailkey == 0) { // rand string key
+        std::string fn_str = get_file_name_str(key_len);
+        dataset_mtx.lock();
+        if (access(fn_str.c_str(), 0)) {
+            std::cout << fn_str << " not exist, generate it now\n";
+            RandomGenerator rdm(key_len);
+            std::ofstream myfile;
+            myfile.open(fn_str, std::ios::out);
+            for (unsigned long long i = 0; i < data_size; i++) {
+                std::string s = rdm.RandomStr();
+                myfile << s << "\n";
+            }
+            myfile.close();
         }
-        myfile.close();
-    }
 
-    std::cout << "start to load data\n";
-    std::ifstream fstr;
-    wl_str = new std::string[data_size];
-    fstr.open(fn_str, std::ios::in);
-    for (int i = 0; i < data_size; i++) {
-        fstr >> wl_str[i];
+        std::cout << "start to load data\n";
+        std::ifstream fstr;
+        wl_str = new std::string[data_size];
+        fstr.open(fn_str, std::ios::in);
+        for (int i = 0; i < data_size; i++) {
+            fstr >> wl_str[i];
+        }
+        fstr.close();
+        dataset_mtx.unlock();
+        std::cout << "load random string key successfully\n";
+    } else { // email key
+        std::string email_key_file = "/tmp/email_key";
+        dataset_mtx.lock();
+        std::ifstream fstr;
+        wl_str = new std::string[data_size];
+        fstr.open(email_key_file, std::ios::in);
+        for (int i = 0; i < data_size; i++) {
+            fstr >> wl_str[i];
+        }
+        fstr.close();
+        dataset_mtx.unlock();
+        std::cout << "load string data successfully\n";
     }
-    fstr.close();
-    dataset_mtx.unlock();
-    std::cout << "load string data successfully\n";
 }

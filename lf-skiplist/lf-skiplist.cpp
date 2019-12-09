@@ -549,8 +549,12 @@ namespace skiplist {
                 flush_data(new_val, strlen(val) + 1);
             }
             TX_END
-            CAS_PTR((PVOID *)&(node_to_update->value), (PVOID)old_val, (PVOID)new_val);
-            flush_data((void *)&(node_to_update->value), sizeof(uint64_t));
+
+            PVOID res;
+            res = link_and_persist((PVOID *)&(node_to_update->value), (PVOID)old_val, (PVOID)new_val);
+            if(res != old_val){
+                goto retry; //update fail, retry
+            }
         }
         ti->LeaveEpoch();
         return;
@@ -590,6 +594,7 @@ namespace skiplist {
         node_t *left = sl_left_search(sl, key);
 
         if (comparekey((node_t *)left, key, strlen(key)) == 0) {
+            flush_and_try_unflag((PVOID *)&(left->value));
             result = left->value;
         }
 

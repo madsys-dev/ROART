@@ -42,7 +42,9 @@ Tree::Tree() {
         root = reinterpret_cast<N256 *>(mgr->alloc_tree_root());
         std::cout << "[RECOVERY]\trecovery P-ART and reclaim the memory\n";
         rebuild(mgr->recovery_set);
+#ifdef RECLAIM_MEMORY
         mgr->recovery_free_memory();
+#endif
     }
 }
 
@@ -55,7 +57,7 @@ Tree::~Tree() {
     close_nvm_mgr();
 }
 
-void *Tree::lookup(const Key *k) const {
+Leaf *Tree::lookup(const Key *k) const {
     // enter a new epoch
     EpochGuard NewEpoch;
 
@@ -95,12 +97,12 @@ void *Tree::lookup(const Key *k) const {
                 N::helpFlush(curref);
                 if (level < k->getKeyLen() - 1 || optimisticPrefixMatch) {
                     if (ret->checkKey(k)) {
-                        return ret->value;
+                        return ret;
                     } else {
                         return NULL;
                     }
                 } else {
-                    return ret->value;
+                    return ret;
                 }
             }
         }
@@ -172,13 +174,13 @@ restart:
                     node->writeUnlock();
                     return OperationResults::NotFound;
                 }
-                // find key, update it
+//
                 Leaf *newleaf = new (alloc_new_node_from_type(NTypes::Leaf))
                     Leaf(leaf->fkey, k->key_len, (char *)k->value, k->val_len);
                 //                    std::cout<<(int)(((BaseNode
                 //                    *)newleaf)->type)<<"\n";
                 flush_data((void *)newleaf, sizeof(Leaf));
-
+//
                 N::change(node, nodeKey, N::setLeaf(newleaf));
                 node->writeUnlock();
                 return OperationResults::Success;
@@ -438,16 +440,6 @@ restart:
             if (needRestart)
                 goto restart;
 
-            // 3) lockVersionOrRestart, update parentNode to point to the
-            // new node, unlock
-            parentNode->writeLockOrRestart(needRestart);
-            if (needRestart) {
-                //                free_node(NTypes::N4, newNode);
-                //                free_node(NTypes::Leaf, newLeaf);
-                node->writeUnlock();
-                goto restart;
-            }
-
             // 1) Create new node which will be parent of node, Set common
             // prefix, level to this node
             Prefix prefi = node->getPrefi();
@@ -469,6 +461,16 @@ restart:
             flush_data((void *)newNode, sizeof(N4));
             //            N::clflush((char *)newNode, sizeof(N4), true, true);
 
+            // 3) lockVersionOrRestart, update parentNode to point to the
+            // new node, unlock
+            parentNode->writeLockOrRestart(needRestart);
+            if (needRestart) {
+                EpochGuard::DeleteNode((void *)newNode);
+                EpochGuard::DeleteNode((void *)newLeaf);
+                node->writeUnlock();
+                goto restart;
+            }
+
             N::change(parentNode, parentKey, newNode);
             parentNode->writeUnlock();
 
@@ -476,6 +478,7 @@ restart:
             node->setPrefix(
                 remainingPrefix.prefix,
                 node->getPrefi().prefixCount - ((nextLevel - level) + 1), true);
+//            std::cout<<"insert success\n";
 
             node->writeUnlock();
             return OperationResults::Success;
@@ -511,6 +514,7 @@ restart:
                                N::setLeaf(newLeaf), needRestart);
             if (needRestart)
                 goto restart;
+//            std::cout<<"insert success\n";
             return OperationResults::Success;
         }
         if (N::isLeaf(nextNode)) {
@@ -532,12 +536,16 @@ restart:
                        k->fkey[level + prefixLength]) {
                 prefixLength++;
             }
+            // equal
             if (k->getKeyLen() == key->getKeyLen() &&
                 level + prefixLength == k->getKeyLen()) {
                 // duplicate key
                 node->writeUnlock();
+//                std::cout<<"ohfinish\n";
                 return OperationResults::Existed;
             }
+            // substring
+
 
             auto n4 = new (alloc_new_node_from_type(NTypes::N4))
                 N4(level + prefixLength, &k->fkey[level], prefixLength);
@@ -554,10 +562,12 @@ restart:
 
             N::change(node, k->fkey[level - 1], n4);
             node->writeUnlock();
+//            std::cout<<"insert success\n";
             return OperationResults::Success;
         }
         level++;
     }
+//    std::cout<<"ohfinish\n";
 }
 
 typename Tree::OperationResults Tree::remove(const Key *k) {
@@ -723,15 +733,12 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
                              uint8_t &nonMatchingKey,
                              Prefix &nonMatchingPrefix) {
     Prefix p = n->getPrefi();
-    // art_cout << __func__ << ":Actual=" << p.prefixCount + level <<
-    // ",Expected=" << n->getLevel() << std::endl;
     if (p.prefixCount + level != n->getLevel()) {
         // Intermediate or inconsistent state from path compression "split" or
         // "merge" is detected Inconsistent path compressed prefix should be
         // recovered in here
         bool needRecover = false;
         auto v = n->getVersion();
-        art_cout << __func__ << " INCORRECT LEVEL ENCOUNTERED " << std::endl;
         n->lockVersionOrRestart(v, needRecover);
         if (!needRecover) {
             // Inconsistent state due to prior system crash is suspected --> Do
@@ -739,7 +746,6 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
 
             // 1) Picking up arbitrary two leaf nodes and then 2) rebuilding
             // correct compressed prefix
-            art_cout << __func__ << " PERFORMING RECOVERY" << std::endl;
             uint32_t discrimination =
                 (n->getLevel() > level ? n->getLevel() - level
                                        : level - n->getLevel());
@@ -767,6 +773,7 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
             if (i >= maxStoredPrefixLength && !load_flag) {
+//            if (i == maxStoredPrefixLength) {
                 // Optimistic path compression
                 kt = N::getAnyChildTid(n);
                 load_flag = true;

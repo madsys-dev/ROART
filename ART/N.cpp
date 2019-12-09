@@ -89,8 +89,8 @@ void N::helpFlush(std::atomic<N *> *n) {
     N *now_node = n->load();
     // printf("help\n");
     if (N::isDirty(now_node)) {
-        printf("help, point to type is %d\n",
-               ((BaseNode *)N::clearDirty(now_node))->type);
+//        printf("help, point to type is %d\n",
+//               ((BaseNode *)N::clearDirty(now_node))->type);
         flush_data((void *)n, sizeof(N *));
         //        clflush((char *)n, sizeof(N *), true, true);
         n->compare_exchange_strong(now_node, N::clearDirty(now_node));
@@ -162,8 +162,7 @@ N *N::getAnyChild(const N *node) {
         return n->getAnyChild();
     }
     }
-    assert(false);
-    __builtin_unreachable();
+    return nullptr;
 }
 
 void N::change(N *node, uint8_t key, N *val) {
@@ -189,8 +188,7 @@ void N::change(N *node, uint8_t key, N *val) {
         return;
     }
     }
-    assert(false);
-    __builtin_unreachable();
+    return;
 }
 
 template <typename curN, typename biggerN>
@@ -450,12 +448,10 @@ uint32_t N::getCount() const {
         return n->getCount();
     }
     default: {
-        assert(false);
-        __builtin_unreachable();
+        return 0;
     }
     }
-    assert(false);
-    __builtin_unreachable();
+    return 0;
 }
 
 Prefix N::getPrefi() const { return prefix.load(); }
@@ -516,7 +512,6 @@ std::tuple<N *, uint8_t> N::getSecondChild(N *node, const uint8_t key) {
     }
     default: {
         assert(false);
-        __builtin_unreachable();
     }
     }
 }
@@ -594,26 +589,32 @@ void N::getChildren(N *node, uint8_t start, uint8_t end,
 void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     if (N::isLeaf(node)) {
         // leaf node
+#ifdef RECLAIM_MEMORY
         Leaf *leaf = N::getLeaf(node);
         NTypes type = leaf->type;
         size_t size = size_align(get_node_size(type), 64);
-        size = convert_power_two(size);
+//        size = convert_power_two(size);
         rs.insert(std::make_pair((uint64_t)leaf, size));
 
         // leaf key also need to insert into rs set
-        size = convert_power_two(leaf->key_len);
+        size = leaf->key_len;
+//        size = convert_power_two(size);
         rs.insert(std::make_pair((uint64_t)(leaf->fkey), size));
 
         // value
-        size = convert_power_two(leaf->val_len);
+        size = leaf->val_len;
+//        size = convert_power_two(size);
         rs.insert(std::make_pair((uint64_t)(leaf->value), size));
+#endif
         return;
     }
     // insert internal node into set
     NTypes type = node->type;
+#ifdef RECLAIM_MEMORY
     size_t size = size_align(get_node_size(type), 64);
-    size = convert_power_two(size);
+//    size = convert_power_two(size);
     rs.insert(std::make_pair((uint64_t)node, size));
+#endif
 
     int xcount = 0;
     int xcompactCount = 0;

@@ -18,6 +18,7 @@ add_definitions(-DCLWB)
 add_definitions(-DVARIABLE_LENGTH)
 add_definitions(-DUSE_PMDK)
 add_definitions(-DFF_GC) # ff_gc
+add_definitions(-DRECLAIM_MEMORY)
 
 #malloc
 #add_definitions(-DPMALLOC)
@@ -63,3 +64,4 @@ add_executable(unittest ${DIR_TEST_SRC})
 target_link_libraries(unittest Indexes gtest)
 
 add_executable(gen_mail script/gen_mail.cpp)
+add_executable(extract_data script/extract_data.cpp)

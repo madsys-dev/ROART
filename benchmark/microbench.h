@@ -44,7 +44,7 @@ class Benchmark {
     DataSet *dataset;
 
     Benchmark(Config &conf) : init_key(0), _conf(conf) {
-        dataset = new DataSet(conf.init_keys, conf.key_length);
+        dataset = new DataSet(conf.init_keys, conf.key_length, conf.email);
         if (conf.workload == RANDOM) {
             workload = new RandomGenerator();
         } else if (conf.workload == ZIPFIAN) {
@@ -115,9 +115,7 @@ class InsertOnlyBench : public Benchmark {
     std::pair<OperationType, std::string> nextStrOperation() {
         long long next = workload->Next() % _conf.init_keys;
         std::string s = dataset->wl_str[next];
-        char p1 = rdm.randomInt() % 94 + 33;
-        char p2 = rdm.randomInt() % 94 + 33;
-        s = p1 + s + p2;
+        s = s + "msn";
         return std::make_pair(INSERT, s);
     }
 
@@ -313,6 +311,7 @@ class YSCBC : public Benchmark {
     }
 } __attribute__((aligned(64)));
 
+// read/update/insert
 class YSCBD : public Benchmark {
   public:
     int read_ratio;
@@ -320,7 +319,7 @@ class YSCBD : public Benchmark {
     RandomGenerator rdm;
 
     YSCBD(Config &conf) : Benchmark(conf), read_ratio(conf.read_ratio) {
-        update_ratio = (100 - read_ratio)/2 + read_ratio;
+        update_ratio = (100 - read_ratio) / 2 + read_ratio;
     }
 
     virtual std::pair<OperationType, long long> nextIntOperation() {
@@ -339,22 +338,49 @@ class YSCBD : public Benchmark {
         std::string s = dataset->wl_str[next];
         if (k < read_ratio) {
             return std::make_pair(GET, s);
-        } else if(k < update_ratio){
+        } else if (k < update_ratio) {
             return std::make_pair(UPDATE, s);
-        } else{
+        } else {
             char p1 = rdm.randomInt() % 94 + 33;
             char p2 = rdm.randomInt() % 94 + 33;
-            s = p1 + s + p2;
+            s = s + p2;
             return std::make_pair(INSERT, s);
         }
     }
 } __attribute__((aligned(64)));
 
+// workload D, 95 read 5 insert
 class YSCBE : public Benchmark {
   public:
+    int read_ratio = 95;
+
+    RandomGenerator rdm;
+
     YSCBE(Config &conf) : Benchmark(conf) {}
 
-    OperationType nextOp() { return GET; }
+    virtual std::pair<OperationType, long long> nextIntOperation() {
+        int k = rdm.randomInt() % 100;
+        if (k < read_ratio) {
+            return std::make_pair(GET, workload->Next() % _conf.init_keys);
+        } else {
+            int d = rdm.randomInt() % 128;
+            return std::make_pair(INSERT, workload->Next() * d);
+        }
+    }
+
+    virtual std::pair<OperationType, std::string> nextStrOperation() {
+        int k = rdm.randomInt() % 100;
+        long long next = workload->Next() % _conf.init_keys;
+        std::string s = dataset->wl_str[next];
+        if (k > read_ratio) {
+            char p1 = rdm.randomInt() % 94 + 33;
+            char p2 = rdm.randomInt() % 94 + 33;
+            s = s + p2;
+            return std::make_pair(INSERT, s);
+        } else {
+            return std::make_pair(GET, s);
+        }
+    }
 } __attribute__((aligned(64)));
 
 #endif
