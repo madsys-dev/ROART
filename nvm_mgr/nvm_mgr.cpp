@@ -167,7 +167,7 @@ void *NVMMgr::alloc_block(int tid) {
 // threads using recovery_set
 void NVMMgr::recovery_free_memory() {
     const size_t power_two[10] = {8,   16,  32,   64,   128,
-                                                256, 512, 1024, 2048, 4096};
+                                  256, 512, 1024, 2048, 4096};
     const int thread_num = 16;
     std::thread *tid[thread_num];
     int per_thread_block = meta_data->free_bit_offset / thread_num;
@@ -195,8 +195,8 @@ void NVMMgr::recovery_free_memory() {
                            iter->first < end_addr) {
                         uint64_t this_addr = iter->first;
                         uint64_t this_size = iter->second;
-                        for(int id = 0; id < 10; id++){
-                            if(this_size <= power_two[id]){
+                        for (int id = 0; id < 10; id++) {
+                            if (this_size <= power_two[id]) {
                                 this_size = power_two[id];
                                 break;
                             }

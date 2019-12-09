@@ -174,13 +174,13 @@ restart:
                     node->writeUnlock();
                     return OperationResults::NotFound;
                 }
-//
+                //
                 Leaf *newleaf = new (alloc_new_node_from_type(NTypes::Leaf))
                     Leaf(leaf->fkey, k->key_len, (char *)k->value, k->val_len);
                 //                    std::cout<<(int)(((BaseNode
                 //                    *)newleaf)->type)<<"\n";
                 flush_data((void *)newleaf, sizeof(Leaf));
-//
+                //
                 N::change(node, nodeKey, N::setLeaf(newleaf));
                 node->writeUnlock();
                 return OperationResults::Success;
@@ -478,7 +478,7 @@ restart:
             node->setPrefix(
                 remainingPrefix.prefix,
                 node->getPrefi().prefixCount - ((nextLevel - level) + 1), true);
-//            std::cout<<"insert success\n";
+            //            std::cout<<"insert success\n";
 
             node->writeUnlock();
             return OperationResults::Success;
@@ -514,7 +514,7 @@ restart:
                                N::setLeaf(newLeaf), needRestart);
             if (needRestart)
                 goto restart;
-//            std::cout<<"insert success\n";
+            //            std::cout<<"insert success\n";
             return OperationResults::Success;
         }
         if (N::isLeaf(nextNode)) {
@@ -541,11 +541,10 @@ restart:
                 level + prefixLength == k->getKeyLen()) {
                 // duplicate key
                 node->writeUnlock();
-//                std::cout<<"ohfinish\n";
+                //                std::cout<<"ohfinish\n";
                 return OperationResults::Existed;
             }
             // substring
-
 
             auto n4 = new (alloc_new_node_from_type(NTypes::N4))
                 N4(level + prefixLength, &k->fkey[level], prefixLength);
@@ -562,12 +561,12 @@ restart:
 
             N::change(node, k->fkey[level - 1], n4);
             node->writeUnlock();
-//            std::cout<<"insert success\n";
+            //            std::cout<<"insert success\n";
             return OperationResults::Success;
         }
         level++;
     }
-//    std::cout<<"ohfinish\n";
+    //    std::cout<<"ohfinish\n";
 }
 
 typename Tree::OperationResults Tree::remove(const Key *k) {
@@ -773,7 +772,7 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
             if (i >= maxStoredPrefixLength && !load_flag) {
-//            if (i == maxStoredPrefixLength) {
+                //            if (i == maxStoredPrefixLength) {
                 // Optimistic path compression
                 kt = N::getAnyChildTid(n);
                 load_flag = true;

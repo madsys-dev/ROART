@@ -89,8 +89,8 @@ void N::helpFlush(std::atomic<N *> *n) {
     N *now_node = n->load();
     // printf("help\n");
     if (N::isDirty(now_node)) {
-//        printf("help, point to type is %d\n",
-//               ((BaseNode *)N::clearDirty(now_node))->type);
+        //        printf("help, point to type is %d\n",
+        //               ((BaseNode *)N::clearDirty(now_node))->type);
         flush_data((void *)n, sizeof(N *));
         //        clflush((char *)n, sizeof(N *), true, true);
         n->compare_exchange_strong(now_node, N::clearDirty(now_node));
@@ -593,17 +593,17 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
         Leaf *leaf = N::getLeaf(node);
         NTypes type = leaf->type;
         size_t size = size_align(get_node_size(type), 64);
-//        size = convert_power_two(size);
+        //        size = convert_power_two(size);
         rs.insert(std::make_pair((uint64_t)leaf, size));
 
         // leaf key also need to insert into rs set
         size = leaf->key_len;
-//        size = convert_power_two(size);
+        //        size = convert_power_two(size);
         rs.insert(std::make_pair((uint64_t)(leaf->fkey), size));
 
         // value
         size = leaf->val_len;
-//        size = convert_power_two(size);
+        //        size = convert_power_two(size);
         rs.insert(std::make_pair((uint64_t)(leaf->value), size));
 #endif
         return;
@@ -612,7 +612,7 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     NTypes type = node->type;
 #ifdef RECLAIM_MEMORY
     size_t size = size_align(get_node_size(type), 64);
-//    size = convert_power_two(size);
+    //    size = convert_power_two(size);
     rs.insert(std::make_pair((uint64_t)node, size));
 #endif
 

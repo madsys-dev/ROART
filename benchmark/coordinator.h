@@ -528,13 +528,12 @@ template <typename K, typename V, int size> class Coordinator {
                     art->insert(k);
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
-                    k->Init((char *)s.c_str(), s.size(), value,
-                            val_len);
+                    k->Init((char *)s.c_str(), s.size(), value, val_len);
                     art->insert(k);
                 }
             }
             printf("init insert finished\n");
-            if(conf.benchmark == RECOVERY_BENCH){
+            if (conf.benchmark == RECOVERY_BENCH) {
                 NVMMgr *mgr = get_nvm_mgr();
 
                 timer t;
@@ -544,7 +543,8 @@ template <typename K, typename V, int size> class Coordinator {
 //                mgr->recovery_free_memory();
 #endif
                 t.end();
-                printf("rebuild takes time: %.2lf ms\n", t.duration()/1000000.0);
+                printf("rebuild takes time: %.2lf ms\n",
+                       t.duration() / 1000000.0);
                 return;
             }
 
