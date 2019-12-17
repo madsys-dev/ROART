@@ -123,11 +123,16 @@ template <typename K, typename V, int size> class Coordinator {
         int submit_time = 1000000000.0 / frequency;
         int count = 0;
         PART_ns::Key *k = new PART_ns::Key();
+        PART_ns::Key *maxkey = new PART_ns::Key();
+        PART_ns::Key *continueKey;
+        PART_ns::Leaf *scan_result[200];
 
         // variable value
-        const int val_len = 100;
+        const int val_len = conf.val_length;
         char value[val_len + 5];
         memset(value, 'a', val_len);
+        value[val_len] = 0;
+        maxkey->Init("z", 1, value, val_len);
 
         while (done == 0) {
 
@@ -156,34 +161,38 @@ template <typename K, typename V, int size> class Coordinator {
 
             PART_ns::Tree::OperationResults res;
             switch (op) {
-            case UPDATE:
+            case UPDATE: {
                 //                std::cout<<"update key "<<s<<"\n";
                 art->update(k);
                 break;
-            case INSERT:
+            }
+            case INSERT: {
                 // printf("[%d] start insert %lld\n", workerid, d);
                 res = art->insert(k);
                 break;
-            case REMOVE:
+            }
+            case REMOVE: {
                 //                art->insert(k);
                 art->remove(k);
                 break;
-            case GET:
+            }
+            case GET: {
                 //                std::cout<<"lookup key "<<s<<"\n";
                 art->lookup(k);
-
-                // if (tx % 100 == 0) {
-                //     sync_latency(total_find_latency_breaks,
-                //                  find_latency_breaks, find_count);
-                // }
                 break;
-            case SCAN:
-                // bt->scan(d, scan_func);
-                // scan_values = 0;
+            }
+            case SCAN: {
+                continueKey = nullptr;
+                size_t resultFound = 0;
+//                std::cout<<"scan "<<(char *)(k->fkey)<<"\n";
+                art->lookupRange(k, maxkey, continueKey, scan_result, 100, resultFound);
+//                std::cout<<"found"<<resultFound<<"\n";
                 break;
-            default:
+            }
+            default: {
                 printf("not support such operation: %d\n", op);
                 exit(-1);
+            }
             }
             if (conf.latency_test) {
                 t.end();
@@ -264,10 +273,11 @@ template <typename K, typename V, int size> class Coordinator {
         int submit_time = 1000000000.0 / frequency;
         int count = 0;
 
-        const int val_len = 100;
+        const int val_len = conf.val_length;
         char value[val_len + 5];
         memset(value, 'a', val_len);
         value[val_len] = 0;
+        std::string maxkey = "z";
         while (done == 0) {
 
             V result = 1;
@@ -293,51 +303,60 @@ template <typename K, typename V, int size> class Coordinator {
             }
 
             switch (op) {
-            case UPDATE:
+            case UPDATE: {
                 if (conf.key_type == Integer) {
                     //                    std::cout<<"insert key "<<d<<"\n";
                     bt->btree_update(d, value);
                 } else if (conf.key_type == String) {
-                    bt->btree_update((char *)s.c_str(), value);
+                    bt->btree_update((char *) s.c_str(), value);
                 }
 
                 break;
-            case INSERT:
+            }
+            case INSERT: {
                 // printf("[%d] start insert %lld\n", workerid, d);
 
                 if (conf.key_type == Integer) {
                     //                    std::cout<<"insert key "<<d<<"\n";
                     bt->btree_insert(d, value);
                 } else if (conf.key_type == String) {
-                    bt->btree_insert((char *)s.c_str(), value);
+                    bt->btree_insert((char *) s.c_str(), value);
                 }
-
-                break;
-            case REMOVE:
-                // first insert then remove
-                //                if (conf.key_type == Integer) {
-                //                    //                    std::cout<<"insert
-                //                    key "<<d<<"\n"; bt->btree_insert(d,
-                //                    value);
-                //                } else if (conf.key_type == String) {
-                //                    bt->btree_insert((char *)s.c_str(),
-                //                    value);
-                //                }
 
                 if (conf.key_type == Integer) {
                     //                    std::cout<<"delete key "<<d<<"\n";
                     bt->btree_delete(d);
                 } else if (conf.key_type == String) {
                     //                    std::cout<<"delete key "<<s<<"\n";
-                    bt->btree_delete((char *)s.c_str());
+                    bt->btree_delete((char *) s.c_str());
                 }
 
                 break;
-            case GET:
+            }
+            case REMOVE: {
+                // first insert then remove
+//                                if (conf.key_type == Integer) {
+//                                    //                    std::cout<<"insert key "<<d<<"\n";
+//                                    bt->btree_insert(d, value);
+//                                } else if (conf.key_type == String) {
+//                                    bt->btree_insert((char *)s.c_str(), value);
+//                                }
+
+                if (conf.key_type == Integer) {
+                    //                    std::cout<<"delete key "<<d<<"\n";
+                    bt->btree_delete(d);
+                } else if (conf.key_type == String) {
+                    //                    std::cout<<"delete key "<<s<<"\n";
+                    bt->btree_delete((char *) s.c_str());
+                }
+
+                break;
+            }
+            case GET: {
                 if (conf.key_type == Integer) {
                     bt->btree_search(d);
                 } else if (conf.key_type == String) {
-                    bt->btree_search((char *)s.c_str());
+                    bt->btree_search((char *) s.c_str());
                 }
 
                 // if (tx % 100 == 0) {
@@ -345,13 +364,15 @@ template <typename K, typename V, int size> class Coordinator {
                 //                  find_latency_breaks, find_count);
                 // }
                 break;
-            case SCAN:
-                // bt->scan(d, scan_func);
-                // scan_values = 0;
+            }
+            case SCAN: {
+
                 break;
-            default:
+            }
+            default: {
                 printf("not support such operation: %d\n", op);
                 exit(-1);
+            }
             }
             if (conf.latency_test) {
                 t.end();
@@ -430,7 +451,7 @@ template <typename K, typename V, int size> class Coordinator {
         int submit_time = 1000000000.0 / frequency;
         int count = 0;
 
-        const int val_len = 100;
+        const int val_len = conf.val_length;
         char value[val_len + 5];
         memset(value, 'a', val_len);
         value[val_len] = 0;
@@ -450,25 +471,31 @@ template <typename K, typename V, int size> class Coordinator {
             }
 
             switch (op) {
-            case UPDATE:
-                skiplist::skiplist_update(sl, (char *)s.c_str(), value);
+            case UPDATE: {
+                skiplist::skiplist_update(sl, (char *) s.c_str(), value);
                 break;
-            case INSERT:
-                skiplist::skiplist_insert(sl, (char *)s.c_str(), value);
+            }
+            case INSERT: {
+                skiplist::skiplist_insert(sl, (char *) s.c_str(), value);
                 break;
-            case REMOVE:
-                skiplist::skiplist_remove(sl, (char *)s.c_str());
+            }
+            case REMOVE: {
+                skiplist::skiplist_remove(sl, (char *) s.c_str());
                 break;
-            case GET:
-                skiplist::skiplist_find(sl, (char *)s.c_str());
+            }
+            case GET: {
+                skiplist::skiplist_find(sl, (char *) s.c_str());
                 break;
-            case SCAN:
+            }
+            case SCAN: {
                 // bt->scan(d, scan_func);
                 // scan_values = 0;
                 break;
-            default:
+            }
+            default: {
                 printf("not support such operation: %d\n", op);
                 exit(-1);
+            }
             }
             if (conf.latency_test) {
                 t.end();
@@ -517,9 +544,10 @@ template <typename K, typename V, int size> class Coordinator {
             PART_ns::Key *k = new PART_ns::Key();
             printf("init keys: %d\n", (int)conf.init_keys);
             // variable value
-            const int val_len = 100;
+            const int val_len = conf.val_length;
             char value[val_len + 5];
             memset(value, 'a', val_len);
+            value[val_len] = 0;
 
             for (unsigned long i = 0; i < conf.init_keys; i++) {
                 if (conf.key_type == Integer) {
@@ -599,7 +627,7 @@ template <typename K, typename V, int size> class Coordinator {
             bar = new boost::barrier(conf.num_threads + 1);
             printf("init keys: %d\n", (int)conf.init_keys);
 
-            const int val_len = 100;
+            const int val_len = conf.val_length;
             char value[val_len + 5];
             memset(value, 'a', val_len);
             value[val_len] = 0;
@@ -607,7 +635,7 @@ template <typename K, typename V, int size> class Coordinator {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
                     bt->btree_insert(kk, value);
-                    std::cout << "insert key " << kk << "id: " << i << "\n";
+//                    std::cout << "insert key " << kk << "id: " << i << "\n";
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
                     bt->btree_insert((char *)s.c_str(), value);
@@ -658,7 +686,7 @@ template <typename K, typename V, int size> class Coordinator {
             bar = new boost::barrier(conf.num_threads + 1);
             printf("init keys: %d\n", (int)conf.init_keys);
 
-            const int val_len = 100;
+            const int val_len = conf.val_length;
             char value[val_len + 5];
             memset(value, 'a', val_len);
             value[val_len] = 0;

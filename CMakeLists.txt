@@ -16,8 +16,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O0 -g -march=native -mavx -m
 #add_definitions(-DCLFLUSH_OPT)
 add_definitions(-DCLWB)
 add_definitions(-DVARIABLE_LENGTH)
-add_definitions(-DUSE_PMDK)
-add_definitions(-DFF_GC) # ff_gc
+#add_definitions(-DUSE_PMDK)
+#add_definitions(-DFF_GC) # ff_gc
 add_definitions(-DRECLAIM_MEMORY)
 
 #malloc
@@ -65,3 +65,6 @@ target_link_libraries(unittest Indexes gtest)
 
 add_executable(gen_mail script/gen_mail.cpp)
 add_executable(extract_data script/extract_data.cpp)
+
+add_executable(acmma perf/acmma.cpp)
+target_link_libraries(acmma Indexes)

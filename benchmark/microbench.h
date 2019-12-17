@@ -44,7 +44,7 @@ class Benchmark {
     DataSet *dataset;
 
     Benchmark(Config &conf) : init_key(0), _conf(conf) {
-        dataset = new DataSet(conf.init_keys, conf.key_length, conf.email);
+        dataset = new DataSet(conf.init_keys, conf.val_length, conf.email);
         if (conf.workload == RANDOM) {
             workload = new RandomGenerator();
         } else if (conf.workload == ZIPFIAN) {
@@ -115,7 +115,7 @@ class InsertOnlyBench : public Benchmark {
     std::pair<OperationType, std::string> nextStrOperation() {
         long long next = workload->Next() % _conf.init_keys;
         std::string s = dataset->wl_str[next];
-        s = s + "msn";
+        s = "msn" + s + "msn";
         return std::make_pair(INSERT, s);
     }
 
