@@ -98,6 +98,8 @@ const int max_level = 20; //one cache-line node; use 13 for two cache-line nodes
 
 	void skiplist_update(skiplist_t *sl, skey_t key, svalue_t val);
 
+	void skiplist_scan(skiplist_t *sl, skey_t min, svalue_t *buf, int num, int &off, char *scan_value);
+
 	skiplist_t *new_skiplist();
 
     void init_pmem();

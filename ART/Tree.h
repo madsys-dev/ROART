@@ -75,5 +75,9 @@ class Tree {
 
     OperationResults remove(const Key *k);
 } __attribute__((aligned(64)));
+
+#ifdef CHECK_COUNT
+    int get_count();
+#endif
 } // namespace PART_ns
 #endif // ART_ROWEX_TREE_H

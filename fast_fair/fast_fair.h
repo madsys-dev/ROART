@@ -116,7 +116,8 @@ class btree {
     void btree_update(uint64_t, char *);
     void btree_update(char *, char *);
     void btree_search_range(uint64_t, uint64_t, unsigned long *, int, int &);
-    void btree_search_range(char *, char *, unsigned long *, int, int &);
+    void btree_search_range(char *, char *, unsigned long *, int, int &,
+                            char *);
     key_item *make_key_item(char *, size_t, bool);
 
     friend class page;
@@ -1145,14 +1146,19 @@ class page {
 
     // Search string keys with linear search
     void linear_search_range(key_item *min, key_item *max, unsigned long *buf,
-                             int num, int &off) {
+                             int num, int &off, char *scan_value) {
         int i;
         uint32_t previous_switch_counter;
         page *current = this;
         void *snapshot_n;
         off = 0;
 
+        bool compare_flag = false;
+        int copy_len = 0;
+
         while (current) {
+            boost::shared_lock<boost::shared_mutex> sharedlock(
+                *(current->hdr.mtx));
             int old_off = off;
             snapshot_n = current->hdr.sibling_ptr;
             mfence();
@@ -1165,109 +1171,122 @@ class page {
 
                 if (IS_FORWARD(previous_switch_counter)) {
                     tmp_key = current->records[0].key.skey;
-                    if (memcmp(tmp_key->key, min->key,
-                               std::min(tmp_key->key_len, min->key_len)) > 0) {
-                        // if(memcmp(tmp_key->key, max->key,
-                        // std::min(tmp_key->key_len, max->key_len)) < 0 && off
-                        // < num) {
-                        if (off < num) {
-                            if ((tmp_ptr = current->records[0].ptr) !=
-                                nullptr) {
-                                if (memcmp(tmp_key->key,
-                                           current->records[0].key.skey->key,
-                                           std::min(tmp_key->key_len,
-                                                    current->records[0]
-                                                        .key.skey->key_len)) ==
-                                    0) {
-                                    if (tmp_ptr) {
-                                        buf[off++] = (unsigned long)tmp_ptr;
-                                    }
-                                }
-                            }
-                        } else
+                    tmp_ptr = current->records[0].ptr;
+
+                    if (compare_flag) {
+                        if (off == num)
                             return;
+                        buf[off++] = (unsigned long)tmp_ptr;
+                        if ((uint64_t)tmp_ptr == static_cast<uint64_t>(-1) ||
+                            tmp_ptr == nullptr) {
+                            std::cout << "boom!!!\n";
+                        } else
+                            memcpy(scan_value, tmp_ptr, copy_len);
+                    } else {
+                        if (memcmp(tmp_key->key, min->key,
+                                   std::min(tmp_key->key_len, min->key_len)) >=
+                            0) {
+                            if (off == num)
+                                return;
+                            buf[off++] = (unsigned long)tmp_ptr;
+                            if ((uint64_t)tmp_ptr ==
+                                    static_cast<uint64_t>(-1) ||
+                                tmp_ptr == nullptr) {
+                                std::cout << "boom!!!\n";
+                            } else
+                                memcpy(scan_value, tmp_ptr, copy_len);
+                            compare_flag = true;
+                        }
                     }
 
                     for (i = 1; current->records[i].ptr != nullptr; ++i) {
                         tmp_key = current->records[i].key.skey;
-                        if (memcmp(tmp_key->key, min->key,
-                                   std::min(tmp_key->key_len, min->key_len)) >
-                            0) {
-                            // if(memcmp(tmp_key->key, max->key,
-                            // std::min(tmp_key->key_len, max->key_len)) < 0 &&
-                            // off < num) {
-                            if (off < num) {
-                                if ((tmp_ptr = current->records[i].ptr) !=
-                                    current->records[i - 1].ptr) {
-                                    if (memcmp(
-                                            tmp_key->key,
-                                            current->records[i].key.skey->key,
-                                            std::min(tmp_key->key_len,
-                                                     current->records[i]
-                                                         .key.skey->key_len)) ==
-                                        0) {
-                                        if (tmp_ptr) {
-                                            buf[off++] = (unsigned long)tmp_ptr;
-                                        }
-                                    }
-                                }
-                            } else
+                        tmp_ptr = current->records[i].ptr;
+                        if (compare_flag) {
+                            if (off == num)
                                 return;
+                            buf[off++] = (unsigned long)tmp_ptr;
+                            if ((uint64_t)tmp_ptr ==
+                                    static_cast<uint64_t>(-1) ||
+                                tmp_ptr == nullptr) {
+                                std::cout << "boom!!!\n";
+                            } else
+                                memcpy(scan_value, tmp_ptr, copy_len);
+                        } else {
+                            if (memcmp(tmp_key->key, min->key,
+                                       std::min(tmp_key->key_len,
+                                                min->key_len)) >= 0) {
+                                if (off == num)
+                                    return;
+                                buf[off++] = (unsigned long)tmp_ptr;
+                                if ((uint64_t)tmp_ptr ==
+                                        static_cast<uint64_t>(-1) ||
+                                    tmp_ptr == nullptr) {
+                                    std::cout << "boom!!!\n";
+                                } else
+                                    memcpy(scan_value, tmp_ptr, copy_len);
+                                compare_flag = true;
+                            }
                         }
                     }
                 } else {
                     for (i = count() - 1; i > 0; --i) {
                         tmp_key = current->records[i].key.skey;
-                        if (memcmp(tmp_key->key, min->key,
-                                   std::min(tmp_key->key_len, min->key_len)) >
-                                0 &&
-                            off < num) {
-                            // if(memcmp(tmp_key->key, max->key,
-                            // std::min(tmp_key->key_len, max->key_len)) < 0 &&
-                            // off < num) {
-                            if (off < num) {
-                                if ((tmp_ptr = current->records[i].ptr) !=
-                                    current->records[i - 1].ptr) {
-                                    if (memcmp(
-                                            tmp_key->key,
-                                            current->records[i].key.skey->key,
-                                            std::min(tmp_key->key_len,
-                                                     current->records[i]
-                                                         .key.skey->key_len)) ==
-                                        0) {
-                                        if (tmp_ptr) {
-                                            buf[off++] = (unsigned long)tmp_ptr;
-                                        }
-                                    }
-                                }
-                            } else
+                        tmp_ptr = current->records[i].ptr;
+                        if (compare_flag) {
+                            if (off == num)
                                 return;
+                            buf[off++] = (unsigned long)tmp_ptr;
+                            if ((uint64_t)tmp_ptr ==
+                                    static_cast<uint64_t>(-1) ||
+                                tmp_ptr == nullptr) {
+                                std::cout << "boom!!!\n";
+                            } else
+                                memcpy(scan_value, tmp_ptr, copy_len);
+                        } else {
+                            if (memcmp(tmp_key->key, min->key,
+                                       std::min(tmp_key->key_len,
+                                                min->key_len)) >= 0) {
+                                if (off == num)
+                                    return;
+                                buf[off++] = (unsigned long)tmp_ptr;
+                                if ((uint64_t)tmp_ptr ==
+                                        static_cast<uint64_t>(-1) ||
+                                    tmp_ptr == nullptr) {
+                                    std::cout << "boom!!!\n";
+                                } else
+                                    memcpy(scan_value, tmp_ptr, copy_len);
+                                compare_flag = true;
+                            }
                         }
                     }
 
                     tmp_key = current->records[0].key.skey;
-                    if (memcmp(tmp_key->key, min->key,
-                               std::min(tmp_key->key_len, min->key_len)) > 0 &&
-                        off < num) {
-                        // if(memcmp(tmp_key->key, max->key,
-                        // std::min(tmp_key->key_len, min->key_len)) < 0 && off
-                        // < num) {
-                        if (off < num) {
-                            if ((tmp_ptr = current->records[0].ptr) !=
-                                nullptr) {
-                                if (memcmp(tmp_key->key,
-                                           current->records[0].key.skey->key,
-                                           std::min(tmp_key->key_len,
-                                                    current->records[0]
-                                                        .key.skey->key_len)) ==
-                                    0) {
-                                    if (tmp_ptr) {
-                                        buf[off++] = (unsigned long)tmp_ptr;
-                                    }
-                                }
-                            }
-                        } else
+                    tmp_ptr = current->records[0].ptr;
+                    if (compare_flag) {
+                        if (off == num)
                             return;
+                        buf[off++] = (unsigned long)tmp_ptr;
+                        if ((uint64_t)tmp_ptr == static_cast<uint64_t>(-1) ||
+                            tmp_ptr == nullptr) {
+                            std::cout << "boom!!!\n";
+                        } else
+                            memcpy(scan_value, tmp_ptr, copy_len);
+                    } else {
+                        if (memcmp(tmp_key->key, min->key,
+                                   std::min(tmp_key->key_len, min->key_len)) >=
+                            0) {
+                            if (off == num)
+                                return;
+                            buf[off++] = (unsigned long)tmp_ptr;
+                            if ((uint64_t)tmp_ptr ==
+                                    static_cast<uint64_t>(-1) ||
+                                tmp_ptr == nullptr) {
+                                std::cout << "boom!!!\n";
+                            } else
+                                memcpy(scan_value, tmp_ptr, copy_len);
+                            compare_flag = true;
+                        }
                     }
                 }
             } while (previous_switch_counter != current->hdr.switch_counter);
@@ -2254,7 +2273,7 @@ void btree::btree_search_range(uint64_t min, uint64_t max, unsigned long *buf,
 
 // Function to search string keys from "min" to "max"
 void btree::btree_search_range(char *min, char *max, unsigned long *buf,
-                               int num, int &off) {
+                               int num, int &off, char *scan_value) {
     page *p = (page *)root;
     key_item *min_item = make_key_item(min, strlen(min) + 1, false);
     key_item *max_item = make_key_item(max, strlen(max) + 1, false);
@@ -2265,7 +2284,8 @@ void btree::btree_search_range(char *min, char *max, unsigned long *buf,
             p = (page *)p->linear_search(min_item);
         } else {
             // Found a leaf
-            p->linear_search_range(min_item, max_item, buf, num, off);
+            p->linear_search_range(min_item, max_item, buf, num, off,
+                                   scan_value);
 
             break;
         }

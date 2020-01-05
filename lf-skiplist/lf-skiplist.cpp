@@ -602,4 +602,25 @@ namespace skiplist {
 
         return result;
     }
+
+    void skiplist_scan(skiplist_t *sl, skey_t min, svalue_t *buf, int num, int &off, char *scan_value){
+        ti->JoinEpoch();
+        node_t *left = sl_left_search(sl, min);
+        if(comparekey((node_t *)left, min, strlen(min)) >= 0) {
+            while(left->max_min_flag != MAX_KEY){
+                flush_and_try_unflag((PVOID *)&(left->value));
+                if(off == num){
+                    ti->LeaveEpoch();
+                    return;
+                }
+                buf[off++] = left->value;
+//                memcpy(scan_value, left->value, 0);
+
+                flush_and_try_unflag((PVOID *)&(left->next[0]));
+                left = left->next[0];
+            }
+        }
+
+        ti->LeaveEpoch();
+    }
 }

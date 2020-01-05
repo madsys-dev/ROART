@@ -311,52 +311,14 @@ class YSCBC : public Benchmark {
     }
 } __attribute__((aligned(64)));
 
-// read/update/insert
-class YSCBD : public Benchmark {
-  public:
-    int read_ratio;
-    int update_ratio;
-    RandomGenerator rdm;
-
-    YSCBD(Config &conf) : Benchmark(conf), read_ratio(conf.read_ratio) {
-        update_ratio = (100 - read_ratio) / 2 + read_ratio;
-    }
-
-    virtual std::pair<OperationType, long long> nextIntOperation() {
-        int k = rdm.randomInt() % 100;
-        if (k < read_ratio) {
-            return std::make_pair(GET, workload->Next() % _conf.init_keys);
-        } else {
-            int d = rdm.randomInt() % 128;
-            return std::make_pair(INSERT, workload->Next() * d);
-        }
-    }
-
-    virtual std::pair<OperationType, std::string> nextStrOperation() {
-        int k = rdm.randomInt() % 100;
-        long long next = workload->Next() % _conf.init_keys;
-        std::string s = dataset->wl_str[next];
-        if (k < read_ratio) {
-            return std::make_pair(GET, s);
-        } else if (k < update_ratio) {
-            return std::make_pair(UPDATE, s);
-        } else {
-            char p1 = rdm.randomInt() % 94 + 33;
-            char p2 = rdm.randomInt() % 94 + 33;
-            s = s + p2;
-            return std::make_pair(INSERT, s);
-        }
-    }
-} __attribute__((aligned(64)));
-
 // workload D, 95 read 5 insert
-class YSCBE : public Benchmark {
+class YSCBD : public Benchmark {
   public:
     int read_ratio = 95;
 
     RandomGenerator rdm;
 
-    YSCBE(Config &conf) : Benchmark(conf) {}
+    YSCBD(Config &conf) : Benchmark(conf) {}
 
     virtual std::pair<OperationType, long long> nextIntOperation() {
         int k = rdm.randomInt() % 100;
@@ -379,6 +341,38 @@ class YSCBE : public Benchmark {
             return std::make_pair(INSERT, s);
         } else {
             return std::make_pair(GET, s);
+        }
+    }
+} __attribute__((aligned(64)));
+
+// scan/insert
+class YSCBE : public Benchmark {
+public:
+    int scan_ratio = 95;
+    RandomGenerator rdm;
+
+    YSCBE(Config &conf) : Benchmark(conf){}
+
+    virtual std::pair<OperationType, long long> nextIntOperation() {
+        int k = rdm.randomInt() % 100;
+        if (k < scan_ratio) {
+            return std::make_pair(SCAN, workload->Next() % _conf.init_keys);
+        } else {
+            int d = rdm.randomInt() % 128;
+            return std::make_pair(INSERT, workload->Next() * d);
+        }
+    }
+
+    virtual std::pair<OperationType, std::string> nextStrOperation() {
+        int k = rdm.randomInt() % 100;
+        long long next = workload->Next() % _conf.init_keys;
+        std::string s = dataset->wl_str[next];
+        if (k < scan_ratio) {
+            return std::make_pair(SCAN, s);
+        } else {
+            char p2 = rdm.randomInt() % 94 + 33;
+            s = s + p2;
+            return std::make_pair(INSERT, s);
         }
     }
 } __attribute__((aligned(64)));

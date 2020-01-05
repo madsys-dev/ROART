@@ -125,7 +125,7 @@ template <typename K, typename V, int size> class Coordinator {
         PART_ns::Key *k = new PART_ns::Key();
         PART_ns::Key *maxkey = new PART_ns::Key();
         PART_ns::Key *continueKey;
-        PART_ns::Leaf *scan_result[200];
+        PART_ns::Leaf *scan_result[505];
 
         // variable value
         const int val_len = conf.val_length;
@@ -133,6 +133,8 @@ template <typename K, typename V, int size> class Coordinator {
         memset(value, 'a', val_len);
         value[val_len] = 0;
         maxkey->Init("z", 1, value, val_len);
+
+        char scan_value[val_len + 5];
 
         while (done == 0) {
 
@@ -184,9 +186,14 @@ template <typename K, typename V, int size> class Coordinator {
             case SCAN: {
                 continueKey = nullptr;
                 size_t resultFound = 0;
-//                std::cout<<"scan "<<(char *)(k->fkey)<<"\n";
-                art->lookupRange(k, maxkey, continueKey, scan_result, 100, resultFound);
-//                std::cout<<"found"<<resultFound<<"\n";
+                //                std::cout<<"scan "<<(char *)(k->fkey)<<"\n";
+                art->lookupRange(k, maxkey, continueKey, scan_result,
+                                 conf.scan_length, resultFound);
+                //                std::cout<<"found"<<resultFound<<"\n";
+                //                for(int i = 0; i < resultFound; i++){
+                //                    memcpy(scan_value, scan_result[i]->value,
+                //                    100);
+                //                }
                 break;
             }
             default: {
@@ -220,6 +227,10 @@ template <typename K, typename V, int size> class Coordinator {
 #endif // PERF_LATENCY
 
         unregister_threadinfo();
+
+#ifdef CHECK_COUNT
+        printf("[COUNT]\tworker %d check keys %.2lf\n", workerid, 1.0*PART_ns::get_count()/tx);
+#endif
 
         printf("[WORKER]\tworker %d finished\n", workerid);
     }
@@ -277,7 +288,12 @@ template <typename K, typename V, int size> class Coordinator {
         char value[val_len + 5];
         memset(value, 'a', val_len);
         value[val_len] = 0;
+
+        // for scan
         std::string maxkey = "z";
+        uint64_t buf[505];
+        char scan_value[val_len + 5];
+
         while (done == 0) {
 
             V result = 1;
@@ -308,7 +324,7 @@ template <typename K, typename V, int size> class Coordinator {
                     //                    std::cout<<"insert key "<<d<<"\n";
                     bt->btree_update(d, value);
                 } else if (conf.key_type == String) {
-                    bt->btree_update((char *) s.c_str(), value);
+                    bt->btree_update((char *)s.c_str(), value);
                 }
 
                 break;
@@ -320,7 +336,7 @@ template <typename K, typename V, int size> class Coordinator {
                     //                    std::cout<<"insert key "<<d<<"\n";
                     bt->btree_insert(d, value);
                 } else if (conf.key_type == String) {
-                    bt->btree_insert((char *) s.c_str(), value);
+                    bt->btree_insert((char *)s.c_str(), value);
                 }
 
                 if (conf.key_type == Integer) {
@@ -328,26 +344,31 @@ template <typename K, typename V, int size> class Coordinator {
                     bt->btree_delete(d);
                 } else if (conf.key_type == String) {
                     //                    std::cout<<"delete key "<<s<<"\n";
-                    bt->btree_delete((char *) s.c_str());
+                    bt->btree_delete((char *)s.c_str());
                 }
 
                 break;
             }
             case REMOVE: {
                 // first insert then remove
-//                                if (conf.key_type == Integer) {
-//                                    //                    std::cout<<"insert key "<<d<<"\n";
-//                                    bt->btree_insert(d, value);
-//                                } else if (conf.key_type == String) {
-//                                    bt->btree_insert((char *)s.c_str(), value);
-//                                }
+                //                                if (conf.key_type == Integer)
+                //                                {
+                //                                    // std::cout<<"insert key
+                //                                    "<<d<<"\n";
+                //                                    bt->btree_insert(d,
+                //                                    value);
+                //                                } else if (conf.key_type ==
+                //                                String) {
+                //                                    bt->btree_insert((char
+                //                                    *)s.c_str(), value);
+                //                                }
 
                 if (conf.key_type == Integer) {
                     //                    std::cout<<"delete key "<<d<<"\n";
                     bt->btree_delete(d);
                 } else if (conf.key_type == String) {
                     //                    std::cout<<"delete key "<<s<<"\n";
-                    bt->btree_delete((char *) s.c_str());
+                    bt->btree_delete((char *)s.c_str());
                 }
 
                 break;
@@ -356,7 +377,7 @@ template <typename K, typename V, int size> class Coordinator {
                 if (conf.key_type == Integer) {
                     bt->btree_search(d);
                 } else if (conf.key_type == String) {
-                    bt->btree_search((char *) s.c_str());
+                    bt->btree_search((char *)s.c_str());
                 }
 
                 // if (tx % 100 == 0) {
@@ -366,7 +387,13 @@ template <typename K, typename V, int size> class Coordinator {
                 break;
             }
             case SCAN: {
-
+                int resultFound = 0;
+                //                std::cout<<"ff scan "<<s<<"\n";
+                bt->btree_search_range((char *)s.c_str(),
+                                       (char *)maxkey.c_str(),
+                                       (unsigned long *)buf, conf.scan_length,
+                                       resultFound, scan_value);
+                //                std::cout<<"find "<<resultFound<<"\n";
                 break;
             }
             default: {
@@ -455,6 +482,9 @@ template <typename K, typename V, int size> class Coordinator {
         char value[val_len + 5];
         memset(value, 'a', val_len);
         value[val_len] = 0;
+        char *buf[505];
+        char scan_value[val_len + 5];
+
         while (done == 0) {
 
             V result = 1;
@@ -472,24 +502,27 @@ template <typename K, typename V, int size> class Coordinator {
 
             switch (op) {
             case UPDATE: {
-                skiplist::skiplist_update(sl, (char *) s.c_str(), value);
+                skiplist::skiplist_update(sl, (char *)s.c_str(), value);
                 break;
             }
             case INSERT: {
-                skiplist::skiplist_insert(sl, (char *) s.c_str(), value);
+                skiplist::skiplist_insert(sl, (char *)s.c_str(), value);
                 break;
             }
             case REMOVE: {
-                skiplist::skiplist_remove(sl, (char *) s.c_str());
+                skiplist::skiplist_remove(sl, (char *)s.c_str());
                 break;
             }
             case GET: {
-                skiplist::skiplist_find(sl, (char *) s.c_str());
+                skiplist::skiplist_find(sl, (char *)s.c_str());
                 break;
             }
             case SCAN: {
-                // bt->scan(d, scan_func);
-                // scan_values = 0;
+                int resultFound = 0;
+                skiplist::skiplist_scan(sl, (char *)s.c_str(), buf,
+                                        conf.scan_length, resultFound,
+                                        scan_value);
+//                std::cout<<resultFound<<"\n";
                 break;
             }
             default: {
@@ -635,7 +668,8 @@ template <typename K, typename V, int size> class Coordinator {
                 if (conf.key_type == Integer) {
                     long kk = benchmark->nextInitIntKey();
                     bt->btree_insert(kk, value);
-//                    std::cout << "insert key " << kk << "id: " << i << "\n";
+                    //                    std::cout << "insert key " << kk <<
+                    //                    "id: " << i << "\n";
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
                     bt->btree_insert((char *)s.c_str(), value);

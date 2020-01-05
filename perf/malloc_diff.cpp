@@ -56,9 +56,9 @@ int main(int argc, char **argv){
     }else {
         if (type == 1) {
             cout << "test pmemobj_alloc\n";
-            PMEMoid ptr;
+            TOID(struct my_root) root = POBJ_ROOT(tmp_pool, struct my_root);
             for (int i = 0; i < test_iter; i++) {
-                int ret = pmemobj_zalloc(tmp_pool, &ptr, sizeof(char) * nsize, TOID_TYPE_NUM(char));
+                int ret = pmemobj_zalloc(tmp_pool, &D_RW(root)->ptr, sizeof(char) * nsize, TOID_TYPE_NUM(char));
                 if (ret) {
                     cout << "pmemobj_zalloc error\n";
                     return 1;
@@ -70,11 +70,7 @@ int main(int argc, char **argv){
             PMEMoid ptr;
             for (int i = 0; i < test_iter; i++) {
                 TX_BEGIN(tmp_pool) {
-                    int ret = pmemobj_zalloc(tmp_pool, &ptr, sizeof(char) * nsize, TOID_TYPE_NUM(char));
-                    if (ret) {
-                        cout << "pmemobj_zalloc error\n";
-                        return 1;
-                    }
+                    ptr = pmemobj_tx_zalloc(sizeof(char) * nsize, TOID_TYPE_NUM(char));
                 }
                 TX_END
             }
@@ -85,7 +81,7 @@ int main(int argc, char **argv){
             for (int i = 0; i < 1000000; i++) {
                 TX_BEGIN(tmp_pool) {
                     TX_ADD(root);
-                    D_RW(root)->ptr = pmemobj_tx_alloc(sizeof(char) * nsize, TOID_TYPE_NUM(char));
+                    D_RW(root)->ptr = pmemobj_tx_zalloc(sizeof(char) * nsize, TOID_TYPE_NUM(char));
                 }
                 TX_END
             }

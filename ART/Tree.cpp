@@ -23,6 +23,10 @@ using namespace NVMMgr_ns;
 
 namespace PART_ns {
 
+#ifdef CHECK_COUNT
+    __thread int checkcount = 0;
+#endif
+
 Tree::Tree() {
     std::cout << "[P-ART]\tnew P-ART\n";
 
@@ -69,6 +73,10 @@ Leaf *Tree::lookup(const Key *k) const {
     bool optimisticPrefixMatch = false;
 
     while (true) {
+
+#ifdef CHECK_COUNT
+        int pre = level;
+#endif
         switch (checkPrefix(node, k, level)) { // increases level
         case CheckPrefixResult::NoMatch:
             return NULL;
@@ -81,6 +89,11 @@ Leaf *Tree::lookup(const Key *k) const {
             }
             parentref = curref;
             curref = N::getChild(k->fkey[level], node);
+
+#ifdef CHECK_COUNT
+            checkcount+= std::min(4, (int)level - pre);
+#endif
+
             if (curref == nullptr)
                 node = nullptr;
             else
@@ -96,6 +109,9 @@ Leaf *Tree::lookup(const Key *k) const {
                 N::helpFlush(parentref);
                 N::helpFlush(curref);
                 if (level < k->getKeyLen() - 1 || optimisticPrefixMatch) {
+#ifdef CHECK_COUNT
+                    checkcount+=k->getKeyLen();
+#endif
                     if (ret->checkKey(k)) {
                         return ret;
                     } else {
@@ -110,6 +126,12 @@ Leaf *Tree::lookup(const Key *k) const {
         level++;
     }
 }
+
+#ifdef CHECK_COUNT
+    int get_count(){
+    return checkcount;
+}
+#endif
 
 typename Tree::OperationResults Tree::update(const Key *k) const {
     EpochGuard NewEpoch;
@@ -203,14 +225,15 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
             break;
         }
     }
+    char scan_value[100];
     // enter a new epoch
     EpochGuard NewEpoch;
 
     Leaf *toContinue = NULL;
     bool restart;
     std::function<void(N *, std::atomic<N *> *, std::atomic<N *> *)> copy =
-        [&result, &resultSize, &resultsFound, &toContinue,
-         &copy](N *node, std::atomic<N *> *paref, std::atomic<N *> *curef) {
+        [&result, &resultSize, &resultsFound, &toContinue, &copy, &scan_value](
+            N *node, std::atomic<N *> *paref, std::atomic<N *> *curef) {
             if (N::isLeaf(node)) {
                 if (resultsFound == resultSize) {
                     toContinue = N::getLeaf(node);
@@ -220,7 +243,9 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                 // reinterpret_cast<TID>((N::getLeaf(node))->value);
                 N::helpFlush(paref);
                 N::helpFlush(curef);
+                Leaf *leaf = N::getLeaf(node);
                 result[resultsFound] = N::getLeaf(node);
+                //                memcpy(scan_value, leaf->value, 50);
                 resultsFound++;
             } else {
                 std::tuple<uint8_t, std::atomic<N *> *> children[256];
