@@ -347,11 +347,11 @@ class YSCBD : public Benchmark {
 
 // scan/insert
 class YSCBE : public Benchmark {
-public:
+  public:
     int scan_ratio = 95;
     RandomGenerator rdm;
 
-    YSCBE(Config &conf) : Benchmark(conf){}
+    YSCBE(Config &conf) : Benchmark(conf) {}
 
     virtual std::pair<OperationType, long long> nextIntOperation() {
         int k = rdm.randomInt() % 100;

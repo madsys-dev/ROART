@@ -229,7 +229,8 @@ template <typename K, typename V, int size> class Coordinator {
         unregister_threadinfo();
 
 #ifdef CHECK_COUNT
-        printf("[COUNT]\tworker %d check keys %.2lf\n", workerid, 1.0*PART_ns::get_count()/tx);
+        printf("[COUNT]\tworker %d check keys %.2lf\n", workerid,
+               1.0 * PART_ns::get_count() / tx);
 #endif
 
         printf("[WORKER]\tworker %d finished\n", workerid);
@@ -522,7 +523,7 @@ template <typename K, typename V, int size> class Coordinator {
                 skiplist::skiplist_scan(sl, (char *)s.c_str(), buf,
                                         conf.scan_length, resultFound,
                                         scan_value);
-//                std::cout<<resultFound<<"\n";
+                //                std::cout<<resultFound<<"\n";
                 break;
             }
             default: {

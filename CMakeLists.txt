@@ -38,7 +38,7 @@ include_directories(./ART
         ./fast_fair
         ./lf-skiplist)
 
-aux_source_directory(ART       DIR_ART_SRCS)
+aux_source_directory(ART DIR_ART_SRCS)
 aux_source_directory(benchmark DIR_BENCH_SRCS)
 aux_source_directory(fast_fair DIR_FF_SRCS)
 aux_source_directory(lf-skiplist DIR_SL_SRCS)
@@ -46,7 +46,7 @@ aux_source_directory(nvm_mgr   DIR_NVMMGR_SRCS)
 aux_source_directory(perf      DIR_PERF_SRCS)
 aux_source_directory(test      DIR_TEST_SRC)
 
-add_library(Indexes ${DIR_ART_SRCS} ${DIR_BENCH_SRCS} ${DIR_FF_SRCS} ${DIR_NVMMGR_SRCS} ${DIR_SL_SRCS})
+add_library(Indexes ${DIR_ART_SRCS} ${DIR_BENCH_SRCS} ${DIR_FF_SRCS} ${DIR_NVMMGR_SRCS} ${DIR_SL_SRCS} )
 target_link_libraries(Indexes ${TbbLib})
 
 
