@@ -117,7 +117,7 @@ class N16 : public N {
 #endif
     }
 
-    std::atomic<N *> *getChildPos(const uint8_t k);
+    int getChildPos(const uint8_t k);
 
   public:
     N16(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
@@ -147,7 +147,7 @@ class N16 : public N {
 
     void change(uint8_t key, N *val);
 
-    std::atomic<N *> *getChild(const uint8_t k);
+    N *getChild(const uint8_t k);
 
     bool remove(uint8_t k, bool force, bool flush);
 

@@ -185,9 +185,6 @@ class N : public BaseNode {
     static void rebuild_node(N *node,
                              std::set<std::pair<uint64_t, size_t>> &rs);
 
-    static void mfence();
-
-    static void clflush(char *data, int len, bool front, bool back);
 } __attribute__((aligned(64)));
 #else
 enum class NTypes : uint8_t { N4 = 1, N16 = 2, N48 = 3, N256 = 4, Leaf = 5 };
@@ -238,6 +235,7 @@ class N : public BaseNode {
         : BaseNode(type), level(level) {
         typeVersionLockObsolete = new std::atomic<uint64_t>;
         typeVersionLockObsolete->store(0b100);
+        old_pointer.store(0);
         setType(type);
         setPrefix(prefix, prefixLength, false);
     }
@@ -246,6 +244,7 @@ class N : public BaseNode {
         : BaseNode(type), prefix(prefi), level(level) {
         typeVersionLockObsolete = new std::atomic<uint64_t>;
         typeVersionLockObsolete->store(0b100);
+        old_pointer.store(0);
         setType(type);
     }
 
@@ -263,6 +262,10 @@ class N : public BaseNode {
     const uint32_t level;
     uint16_t count = 0;
     uint16_t compactCount = 0;
+
+    // new transient parameter(48 bits for old pointer, 8 bits for pointer id, 1
+    // bit for valid)
+    std::atomic<uint64_t> old_pointer;
 
     static const uint64_t dirty_bit = ((uint64_t)1 << 60);
 
@@ -312,7 +315,7 @@ class N : public BaseNode {
      */
     void writeUnlockObsolete() { typeVersionLockObsolete->fetch_add(0b11); }
 
-    static std::atomic<N *> *getChild(const uint8_t k, N *node);
+    static N *getChild(const uint8_t k, N *node);
 
     static void insertAndUnlock(N *node, N *parentNode, uint8_t keyParent,
                                 uint8_t key, N *val, bool &needRestart);
@@ -364,9 +367,6 @@ class N : public BaseNode {
     static void rebuild_node(N *node,
                              std::set<std::pair<uint64_t, size_t>> &rs);
 
-    static void mfence();
-
-    static void clflush(char *data, int len, bool front, bool back);
 } __attribute__((aligned(64)));
 #endif
 

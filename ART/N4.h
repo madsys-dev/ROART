@@ -87,7 +87,7 @@ class N4 : public N {
 
     void change(uint8_t key, N *val);
 
-    std::atomic<N *> *getChild(const uint8_t k);
+    N *getChild(const uint8_t k);
 
     bool remove(uint8_t k, bool force, bool flush);
 

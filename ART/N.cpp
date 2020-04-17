@@ -12,21 +12,6 @@
 using namespace NVMMgr_ns;
 
 namespace PART_ns {
-static unsigned long write_latency_in_ns = 0;
-static unsigned long cpu_freq_mhz = 2100;
-static unsigned long cache_line_size = 64;
-
-static inline void cpu_pause() { __asm__ volatile("pause" ::: "memory"); }
-
-static inline unsigned long read_tsc(void) {
-    unsigned long var;
-    unsigned int hi, lo;
-
-    asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
-    var = ((unsigned long long int)hi << 32) | lo;
-
-    return var;
-}
 
 #ifdef LOG_FREE
 Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
@@ -60,28 +45,6 @@ Leaf::Leaf(uint8_t *key_, size_t key_len_, char *value_, size_t val_len_)
     value = new (alloc_new_node_from_size(val_len)) char[val_len];
     memcpy(value, (void *)value_, val_len);
     flush_data((void *)value, val_len);
-}
-
-void N::mfence() { asm volatile("mfence" ::: "memory"); }
-
-void N::clflush(char *data, int len, bool front, bool back) {
-    volatile char *ptr = (char *)((unsigned long)data & ~(cache_line_size - 1));
-    // if (front) mfence();
-    for (; ptr < data + len; ptr += cache_line_size) {
-        unsigned long etsc = read_tsc() + (unsigned long)(write_latency_in_ns *
-                                                          cpu_freq_mhz / 1000);
-#ifdef CLFLUSH
-        asm volatile("clflush %0" : "+m"(*(volatile char *)ptr));
-#elif CLFLUSH_OPT
-        asm volatile(".byte 0x66; clflush %0" : "+m"(*(volatile char *)(ptr)));
-#elif CLWB
-        asm volatile(".byte 0x66; xsaveopt %0" : "+m"(*(volatile char *)(ptr)));
-#endif
-        while (read_tsc() < etsc)
-            cpu_pause();
-    }
-    if (back)
-        mfence();
 }
 
 void N::helpFlush(std::atomic<N *> *n) {
@@ -715,28 +678,6 @@ Leaf::Leaf(uint8_t *key_, size_t key_len_, char *value_, size_t val_len_)
     flush_data((void *)value, val_len);
 }
 
-void N::mfence() { asm volatile("mfence" ::: "memory"); }
-
-void N::clflush(char *data, int len, bool front, bool back) {
-    volatile char *ptr = (char *)((unsigned long)data & ~(cache_line_size - 1));
-    // if (front) mfence();
-    for (; ptr < data + len; ptr += cache_line_size) {
-        unsigned long etsc = read_tsc() + (unsigned long)(write_latency_in_ns *
-                                                          cpu_freq_mhz / 1000);
-#ifdef CLFLUSH
-        asm volatile("clflush %0" : "+m"(*(volatile char *)ptr));
-#elif CLFLUSH_OPT
-        asm volatile(".byte 0x66; clflush %0" : "+m"(*(volatile char *)(ptr)));
-#elif CLWB
-        asm volatile(".byte 0x66; xsaveopt %0" : "+m"(*(volatile char *)(ptr)));
-#endif
-        while (read_tsc() < etsc)
-            cpu_pause();
-    }
-    if (back)
-        mfence();
-}
-
 void N::helpFlush(std::atomic<N *> *n) {
     if (n == nullptr)
         return;
@@ -854,7 +795,6 @@ void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     }
 
     // grow and lock parent
-    // TODO: first lock parent or create new node
     parentNode->writeLockOrRestart(needRestart);
     if (needRestart) {
         // free_node(type, nBig);
@@ -950,7 +890,7 @@ void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
     }
 }
 
-std::atomic<N *> *N::getChild(const uint8_t k, N *node) {
+N *N::getChild(const uint8_t k, N *node) {
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);

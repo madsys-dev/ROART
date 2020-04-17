@@ -148,32 +148,40 @@ bool N16::insert(uint8_t key, N *n, bool flush) {
     keys[compactCount].store(flipSign(key), std::memory_order_seq_cst);
     if (flush)
         flush_data((void *)&keys[compactCount], sizeof(std::atomic<uint8_t>));
-    //        clflush((char *)&keys[compactCount], sizeof(N *), false, true);
 
-    children[compactCount].store(N::setDirty(n), std::memory_order_seq_cst);
-    if (flush)
-        flush_data((void *)&children[compactCount], sizeof(std::atomic<N *>));
-    //        clflush((char *)&children[compactCount], sizeof(N *), false,
-    //        true);
+
+    if(flush){
+        uint64_t oldp = (1ull << 56) | ((uint64_t)compactCount << 48);
+        old_pointer.store(oldp); // store the old version
+    }
+
     children[compactCount].store(n, std::memory_order_seq_cst);
+
+    if (flush){
+        flush_data((void *)&children[compactCount], sizeof(std::atomic<N *>));
+        old_pointer.store(0);
+    }
+
     compactCount++;
     count++;
-    // this clflush will atomically flush the cache line including counters and
-    // entire key entries
-    // if (flush) clflush((char *)this, sizeof(uintptr_t), true, true);
     return true;
 }
 
 void N16::change(uint8_t key, N *val) {
     auto childPos = getChildPos(key);
-    assert(childPos != nullptr);
-    childPos->store(N::setDirty(val), std::memory_order_seq_cst);
-    flush_data((void *)childPos, sizeof(std::atomic<N *>));
-    //    clflush((char *)childPos, sizeof(N *), false, true);
-    childPos->store(val, std::memory_order_seq_cst);
+    assert(childPos != -1);
+
+    uint64_t oldp = (1ull << 56) | ((uint64_t)childPos << 48) |
+                    ((uint64_t)children[childPos].load() & ((1ull << 48) - 1));
+    old_pointer.store(oldp); // store the old version
+
+    children[childPos].store(val, std::memory_order_seq_cst);
+    flush_data((void *)&children[childPos], sizeof(std::atomic<N *>));
+
+    old_pointer.store(0);
 }
 
-std::atomic<N *> *N16::getChildPos(const uint8_t k) {
+int N16::getChildPos(const uint8_t k) {
     __m128i cmp = _mm_cmpeq_epi8(
         _mm_set1_epi8(flipSign(k)),
         _mm_loadu_si128(reinterpret_cast<const __m128i *>(keys)));
@@ -182,14 +190,14 @@ std::atomic<N *> *N16::getChildPos(const uint8_t k) {
         uint8_t pos = ctz(bitfield);
 
         if (children[pos].load() != nullptr) {
-            return &children[pos];
+            return pos;
         }
         bitfield = bitfield ^ (1 << pos);
     }
-    return nullptr;
+    return -1;
 }
 
-std::atomic<N *> *N16::getChild(const uint8_t k) {
+N *N16::getChild(const uint8_t k) {
     __m128i cmp = _mm_cmpeq_epi8(
         _mm_set1_epi8(flipSign(k)),
         _mm_loadu_si128(reinterpret_cast<const __m128i *>(keys)));
@@ -199,9 +207,30 @@ std::atomic<N *> *N16::getChild(const uint8_t k) {
 
         N *child = children[pos].load();
         if (child != nullptr && keys[pos].load() == flipSign(k)) {
-            return &children[pos];
+            uint64_t oldp = old_pointer.load();
+            int valid = (oldp >> 56) & 1;
+            int index = (oldp >> 48) & ((1 << 8) - 1);
+            uint64_t p = oldp & ((1ull << 48) - 1);
+            if(valid && pos == index){
+                // guarantee the p is persistent
+                return (N*)p;
+            }
+            else{
+                // guarantee child is not being modified
+                return child;
+            }
         }
         bitfield = bitfield ^ (1 << pos);
+    }
+    // we can check from old_pointer
+    // weather val of key is being modified or not
+    uint64_t oldp = old_pointer.load();
+    int valid = (oldp >> 56) & 1;
+    int index = (oldp >> 48) & ((1 << 8) - 1);
+    uint64_t p = oldp & ((1ull << 48) - 1);
+    if(valid && keys[index].load() == k){
+        // guarantee the p is persistent
+        return (N*)p;
     }
     return nullptr;
 }
@@ -211,16 +240,23 @@ bool N16::remove(uint8_t k, bool force, bool flush) {
         return false;
     }
     auto leafPlace = getChildPos(k);
-    assert(leafPlace != nullptr);
-    leafPlace->store(N::setDirty(nullptr), std::memory_order_seq_cst);
-    flush_data((void *)leafPlace, sizeof(std::atomic<N *>));
-    //    clflush((char *)leafPlace, sizeof(N *), false, true);
-    leafPlace->store(nullptr, std::memory_order_seq_cst);
+    assert(leafPlace != -1);
+
+    uint64_t oldp = (1ull << 56) | ((uint64_t)leafPlace << 48) |
+                    ((uint64_t)children[leafPlace].load() & ((1ull << 48) - 1));
+    old_pointer.store(oldp); // store the old version
+
+    children[leafPlace].store(nullptr, std::memory_order_seq_cst);
+    flush_data((void *)&children[leafPlace], sizeof(std::atomic<N *>));
+
+    old_pointer.store(0);
+
     count--;
     assert(getChild(k) == nullptr);
     return true;
 }
 
+//TODO
 N *N16::getAnyChild() const {
     N *anyChild = nullptr;
     for (int i = 0; i < 16; ++i) {
@@ -235,6 +271,7 @@ N *N16::getAnyChild() const {
     return anyChild;
 }
 
+//TODO
 void N16::deleteChildren() {
     for (std::size_t i = 0; i < compactCount; ++i) {
         N *child = N::clearDirty(children[i].load());
@@ -245,6 +282,7 @@ void N16::deleteChildren() {
     }
 }
 
+//TODO
 void N16::getChildren(uint8_t start, uint8_t end,
                       std::tuple<uint8_t, std::atomic<N *> *> children[],
                       uint32_t &childrenCount) {

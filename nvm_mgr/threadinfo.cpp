@@ -9,22 +9,22 @@
 namespace NVMMgr_ns {
 
 // global block allocator
-PMBlockAllocator *pmblock = NULL;
+PMBlockAllocator *pmblock = nullptr;
 
 // global threadinfo lock to protect alloc thread info
 std::mutex ti_lock;
 
 // global threadinfo list hread
-thread_info *ti_list_head = NULL;
+thread_info *ti_list_head = nullptr;
 
 // thread local info
-__thread thread_info *ti = NULL;
+__thread thread_info *ti = nullptr;
 
 // global thread id
 int tid = 0;
 
 // global Epoch_Mgr
-Epoch_Mgr *epoch_mgr = NULL;
+Epoch_Mgr *epoch_mgr = nullptr;
 
 size_t get_node_size(PART_ns::NTypes type) {
     switch (type) {
@@ -276,20 +276,20 @@ void free_node_from_size(uint64_t addr, size_t size) {
 void register_threadinfo() {
     std::lock_guard<std::mutex> lock_guard(ti_lock);
 
-    if (pmblock == NULL) {
+    if (pmblock == nullptr) {
         pmblock = new PMBlockAllocator(get_nvm_mgr());
         std::cout << "[THREAD]\tfirst new pmblock\n";
         //        std::cout<<"PPPPP meta data addr "<<
         //        get_nvm_mgr()->meta_data<<"\n";
     }
-    if (epoch_mgr == NULL) {
+    if (epoch_mgr == nullptr) {
         epoch_mgr = new Epoch_Mgr();
 
         // need to call function to create a new thread to increase epoch
         epoch_mgr->StartThread();
         std::cout << "[THREAD]\tfirst new epoch_mgr and add global epoch\n";
     }
-    if (ti == NULL) {
+    if (ti == nullptr) {
         if (tid == NVMMgr::max_threads) {
             std::cout << "[THREAD]\tno available threadinfo to allocate\n";
             assert(0);
@@ -327,13 +327,13 @@ void unregister_threadinfo() {
     }
     std::cout << "[THREAD]\tunregister thread\n";
     //    delete ti;
-    ti = NULL;
-    if (ti_list_head == NULL) {
+    ti = nullptr;
+    if (ti_list_head == nullptr) {
         // reset all, only use for gtest
         delete epoch_mgr;
-        epoch_mgr = NULL;
+        epoch_mgr = nullptr;
         delete pmblock;
-        pmblock = NULL;
+        pmblock = nullptr;
         tid = 0;
     }
 }
