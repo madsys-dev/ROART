@@ -932,8 +932,6 @@ Leaf *Tree::lookup(const Key *k) const {
     EpochGuard NewEpoch;
 
     N *node = root;
-    std::atomic<N *> *parentref = nullptr;
-    std::atomic<N *> *curref = nullptr;
 
     uint32_t level = 0;
     bool optimisticPrefixMatch = false;
@@ -945,35 +943,25 @@ Leaf *Tree::lookup(const Key *k) const {
 #endif
         switch (checkPrefix(node, k, level)) { // increases level
         case CheckPrefixResult::NoMatch:
-            return NULL;
+            return nullptr;
         case CheckPrefixResult::OptimisticMatch:
             optimisticPrefixMatch = true;
             // fallthrough
         case CheckPrefixResult::Match: {
             if (k->getKeyLen() <= level) {
-                return NULL;
+                return nullptr;
             }
-            parentref = curref;
-            curref = N::getChild(k->fkey[level], node);
+            node = N::getChild(k->fkey[level], node);
 
 #ifdef CHECK_COUNT
             checkcount += std::min(4, (int)level - pre);
 #endif
 
-            if (curref == nullptr)
-                node = nullptr;
-            else
-                node = N::clearDirty(curref->load());
-
             if (node == nullptr) {
-                N::helpFlush(parentref);
-                N::helpFlush(curref);
-                return NULL;
+                return nullptr;
             }
             if (N::isLeaf(node)) {
                 Leaf *ret = N::getLeaf(node);
-                N::helpFlush(parentref);
-                N::helpFlush(curref);
                 if (level < k->getKeyLen() - 1 || optimisticPrefixMatch) {
 #ifdef CHECK_COUNT
                     checkcount += k->getKeyLen();
@@ -981,7 +969,7 @@ Leaf *Tree::lookup(const Key *k) const {
                     if (ret->checkKey(k)) {
                         return ret;
                     } else {
-                        return NULL;
+                        return nullptr;
                     }
                 } else {
                     return ret;
@@ -1004,16 +992,11 @@ restart:
 
     N *node = nullptr;
     N *nextNode = root;
-    N *parentNode = nullptr;
-    uint8_t parentKey, nodeKey = 0;
+    uint8_t nodeKey = 0;
     uint32_t level = 0;
-    std::atomic<N *> *parentref = nullptr;
-    std::atomic<N *> *curref = nullptr;
     // bool optimisticPrefixMatch = false;
 
     while (true) {
-        parentNode = node;
-        parentKey = nodeKey;
         node = nextNode;
 
         auto v = node->getVersion(); // check version
@@ -1034,12 +1017,7 @@ restart:
             // }
             nodeKey = k->fkey[level];
 
-            parentref = curref;
-            curref = N::getChild(nodeKey, node);
-            if (curref == nullptr)
-                nextNode = nullptr;
-            else
-                nextNode = N::clearDirty(curref->load());
+            nextNode = N::getChild(nodeKey, node);
 
             if (nextNode == nullptr) {
                 if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
@@ -1093,11 +1071,11 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
     // enter a new epoch
     EpochGuard NewEpoch;
 
-    Leaf *toContinue = NULL;
+    Leaf *toContinue = nullptr;
     bool restart;
-    std::function<void(N *, std::atomic<N *> *, std::atomic<N *> *)> copy =
+    std::function<void(N *)> copy =
         [&result, &resultSize, &resultsFound, &toContinue, &copy, &scan_value](
-            N *node, std::atomic<N *> *paref, std::atomic<N *> *curef) {
+            N *node) {
             if (N::isLeaf(node)) {
                 if (resultsFound == resultSize) {
                     toContinue = N::getLeaf(node);
@@ -1105,8 +1083,6 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                 }
                 // result[resultsFound] =
                 // reinterpret_cast<TID>((N::getLeaf(node))->value);
-                N::helpFlush(paref);
-                N::helpFlush(curef);
                 Leaf *leaf = N::getLeaf(node);
                 result[resultsFound] = N::getLeaf(node);
                 //                memcpy(scan_value, leaf->value, 50);
@@ -1117,19 +1093,18 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                 N::getChildren(node, 0u, 255u, children, childrenCount);
                 for (uint32_t i = 0; i < childrenCount; ++i) {
                     std::atomic<N *> *n = std::get<1>(children[i]);
-                    copy(n->load(), curef, n);
-                    if (toContinue != NULL) {
+                    copy(n->load());
+                    if (toContinue != nullptr) {
                         break;
                     }
                 }
             }
         };
-    std::function<void(N *, uint32_t, std::atomic<N *> *, std::atomic<N *> *)>
+    std::function<void(N *, uint32_t)>
         findStart = [&copy, &start, &findStart, &toContinue, &restart,
-                     this](N *node, uint32_t level, std::atomic<N *> *paref,
-                           std::atomic<N *> *curef) {
+                     this](N *node, uint32_t level) {
             if (N::isLeaf(node)) {
-                copy(node, paref, curef);
+                copy(node);
                 return;
             }
 
@@ -1137,11 +1112,11 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
             prefixResult = checkPrefixCompare(node, start, level);
             switch (prefixResult) {
             case PCCompareResults::Bigger:
-                copy(node, paref, curef);
+                copy(node);
                 break;
             case PCCompareResults::Equal: {
                 uint8_t startLevel =
-                    (start->getKeyLen() > level) ? start->fkey[level] : 0;
+                    (start->getKeyLen() > level) ? start->fkey[level] : (uint8_t)0;
                 std::tuple<uint8_t, std::atomic<N *> *> children[256];
                 uint32_t childrenCount = 0;
                 N::getChildren(node, startLevel, 255, children, childrenCount);
@@ -1149,11 +1124,11 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                     const uint8_t k = std::get<0>(children[i]);
                     std::atomic<N *> *n = std::get<1>(children[i]);
                     if (k == startLevel) {
-                        findStart(n->load(), level + 1, curef, n);
+                        findStart(n->load(), level + 1);
                     } else if (k > startLevel) {
-                        copy(n->load(), curef, n);
+                        copy(n->load());
                     }
-                    if (toContinue != NULL || restart) {
+                    if (toContinue != nullptr|| restart) {
                         break;
                     }
                 }
@@ -1166,10 +1141,9 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                 break;
             }
         };
-    std::function<void(N *, uint32_t, std::atomic<N *> *, std::atomic<N *> *)>
+    std::function<void(N *, uint32_t)>
         findEnd = [&copy, &end, &toContinue, &restart, &findEnd,
-                   this](N *node, uint32_t level, std::atomic<N *> *paref,
-                         std::atomic<N *> *curef) {
+                   this](N *node, uint32_t level) {
             if (N::isLeaf(node)) {
                 return;
             }
@@ -1179,11 +1153,11 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
 
             switch (prefixResult) {
             case PCCompareResults::Smaller:
-                copy(node, paref, curef);
+                copy(node);
                 break;
             case PCCompareResults::Equal: {
                 uint8_t endLevel =
-                    (end->getKeyLen() > level) ? end->fkey[level] : 255;
+                    (end->getKeyLen() > level) ? end->fkey[level] : (uint8_t)255;
                 std::tuple<uint8_t, std::atomic<N *> *> children[256];
                 uint32_t childrenCount = 0;
                 N::getChildren(node, 0, endLevel, children, childrenCount);
@@ -1191,11 +1165,11 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                     const uint8_t k = std::get<0>(children[i]);
                     std::atomic<N *> *n = std::get<1>(children[i]);
                     if (k == endLevel) {
-                        findEnd(n->load(), level + 1, curef, n);
+                        findEnd(n->load(), level + 1);
                     } else if (k < endLevel) {
-                        copy(n->load(), curef, n);
+                        copy(n->load());
                     }
-                    if (toContinue != NULL || restart) {
+                    if (toContinue != nullptr || restart) {
                         break;
                     }
                 }
@@ -1216,8 +1190,6 @@ restart:
     uint32_t level = 0;
     N *node = nullptr;
     N *nextNode = root;
-    std::atomic<N *> *parentref = nullptr;
-    std::atomic<N *> *curref = nullptr;
 
     while (true) {
         if (!(node = nextNode) || toContinue)
@@ -1231,14 +1203,14 @@ restart:
             return false;
         }
         case PCEqualsResults::Contained: {
-            copy(node, parentref, curref);
+            copy(node);
             break;
         }
         case PCEqualsResults::BothMatch: {
             uint8_t startLevel =
-                (start->getKeyLen() > level) ? start->fkey[level] : 0;
+                (start->getKeyLen() > level) ? start->fkey[level] : (uint8_t)0;
             uint8_t endLevel =
-                (end->getKeyLen() > level) ? end->fkey[level] : 255;
+                (end->getKeyLen() > level) ? end->fkey[level] : (uint8_t)255;
             if (startLevel != endLevel) {
                 std::tuple<uint8_t, std::atomic<N *> *> children[256];
                 uint32_t childrenCount = 0;
@@ -1248,11 +1220,11 @@ restart:
                     const uint8_t k = std::get<0>(children[i]);
                     std::atomic<N *> *n = std::get<1>(children[i]);
                     if (k == startLevel) {
-                        findStart(n->load(), level + 1, curref, n);
+                        findStart(n->load(), level + 1);
                     } else if (k > startLevel && k < endLevel) {
-                        copy(n->load(), curref, n);
+                        copy(n->load());
                     } else if (k == endLevel) {
-                        findEnd(n->load(), level + 1, curref, n);
+                        findEnd(n->load(), level + 1);
                     }
                     if (restart) {
                         goto restart;
@@ -1262,12 +1234,9 @@ restart:
                     }
                 }
             } else {
-                parentref = curref;
-                curref = N::getChild(startLevel, node);
-                if (curref == nullptr)
-                    nextNode = nullptr;
-                else
-                    nextNode = N::clearDirty(curref->load());
+
+                nextNode = N::getChild(startLevel, node);
+
                 level++;
                 continue;
             }
@@ -1277,7 +1246,7 @@ restart:
         break;
     }
 
-    if (toContinue != NULL) {
+    if (toContinue != nullptr) {
         Key *newkey = new Key();
         newkey->Init((char *)toContinue->fkey, toContinue->key_len,
                      toContinue->value, toContinue->val_len);
@@ -1289,11 +1258,8 @@ restart:
 }
 
 bool Tree::checkKey(const Key *ret, const Key *k) const {
-    if (ret->getKeyLen() == k->getKeyLen() &&
-        memcmp(ret->fkey, k->fkey, k->getKeyLen()) == 0) {
-        return true;
-    }
-    return false;
+    return ret->getKeyLen() == k->getKeyLen() &&
+    memcmp(ret->fkey, k->fkey, k->getKeyLen()) == 0;
 }
 
 typename Tree::OperationResults Tree::insert(const Key *k) {
@@ -1306,8 +1272,6 @@ restart:
     N *parentNode = nullptr;
     uint8_t parentKey, nodeKey = 0;
     uint32_t level = 0;
-    std::atomic<N *> *parentref = nullptr;
-    std::atomic<N *> *curref = nullptr;
 
     while (true) {
         parentNode = node;
@@ -1382,12 +1346,7 @@ restart:
         level = nextLevel;
         nodeKey = k->fkey[level];
 
-        parentref = curref;
-        curref = N::getChild(nodeKey, node);
-        if (curref == nullptr)
-            nextNode = nullptr;
-        else
-            nextNode = N::clearDirty(curref->load());
+        nextNode = N::getChild(nodeKey, node);
 
         if (nextNode == nullptr) {
             node->lockVersionOrRestart(v, needRestart);
@@ -1468,8 +1427,6 @@ restart:
     N *parentNode = nullptr;
     uint8_t parentKey, nodeKey = 0;
     uint32_t level = 0;
-    std::atomic<N *> *parentref = nullptr;
-    std::atomic<N *> *curref = nullptr;
     // bool optimisticPrefixMatch = false;
 
     while (true) {
@@ -1494,12 +1451,7 @@ restart:
             // }
             nodeKey = k->fkey[level];
 
-            parentref = curref;
-            curref = N::getChild(nodeKey, node);
-            if (curref == nullptr)
-                nextNode = nullptr;
-            else
-                nextNode = N::clearDirty(curref->load());
+            nextNode = N::getChild(nodeKey, node);
 
             if (nextNode == nullptr) {
                 if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) { // TODO
@@ -1656,7 +1608,7 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
 
     if (p.prefixCount > 0) {
         uint32_t prevLevel = level;
-        Leaf *kt = NULL;
+        Leaf *kt = nullptr;
         bool load_flag = false;
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
@@ -1700,7 +1652,7 @@ Tree::checkPrefixCompare(const N *n, const Key *k, uint32_t &level) {
         return PCCompareResults::SkippedLevel;
     }
     if (p.prefixCount > 0) {
-        Leaf *kt = NULL;
+        Leaf *kt = nullptr;
         bool load_flag = false;
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
@@ -1709,7 +1661,7 @@ Tree::checkPrefixCompare(const N *n, const Key *k, uint32_t &level) {
                 kt = N::getAnyChildTid(n);
                 load_flag = true;
             }
-            uint8_t kLevel = (k->getKeyLen() > level) ? k->fkey[level] : 0;
+            uint8_t kLevel = (k->getKeyLen() > level) ? k->fkey[level] : (uint8_t)0;
 
             uint8_t curKey =
                 i >= maxStoredPrefixLength ? kt->fkey[level] : p.prefix[i];
@@ -1733,7 +1685,7 @@ typename Tree::PCEqualsResults Tree::checkPrefixEquals(const N *n,
         return PCEqualsResults::SkippedLevel;
     }
     if (p.prefixCount > 0) {
-        Leaf *kt = NULL;
+        Leaf *kt = nullptr;
         bool load_flag = false;
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < p.prefixCount; ++i) {
@@ -1743,9 +1695,9 @@ typename Tree::PCEqualsResults Tree::checkPrefixEquals(const N *n,
                 load_flag = true;
             }
             uint8_t startLevel =
-                (start->getKeyLen() > level) ? start->fkey[level] : 0;
+                (start->getKeyLen() > level) ? start->fkey[level] : (uint8_t)0;
             uint8_t endLevel =
-                (end->getKeyLen() > level) ? end->fkey[level] : 0;
+                (end->getKeyLen() > level) ? end->fkey[level] : (uint8_t)0;
 
             uint8_t curKey =
                 i >= maxStoredPrefixLength ? kt->fkey[level] : p.prefix[i];
