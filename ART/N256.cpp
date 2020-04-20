@@ -95,15 +95,15 @@ void N256::deleteChildren() {
 }
 
 bool N256::insert(uint8_t key, N *val, bool flush) {
-    if(flush){
+    if (flush) {
         uint64_t oldp = (1ull << 56) | ((uint64_t)key << 48);
-        old_pointer.store(oldp); // store the old version
+        old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
     }
 
     children[key].store(val, std::memory_order_seq_cst);
-    if (flush){
+    if (flush) {
         flush_data((void *)&children[key], sizeof(std::atomic<N *>));
-        old_pointer.store(0);
+        old_pointer.store(0, std::memory_order_seq_cst);
     }
 
     count++;
@@ -113,24 +113,23 @@ bool N256::insert(uint8_t key, N *val, bool flush) {
 void N256::change(uint8_t key, N *n) {
     uint64_t oldp = (1ull << 56) | ((uint64_t)key << 48) |
                     ((uint64_t)children[key].load() & ((1ull << 48) - 1));
-    old_pointer.store(oldp); // store the old version
+    old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
 
     children[key].store(n, std::memory_order_seq_cst);
     flush_data((void *)&children[key], sizeof(std::atomic<N *>));
-    old_pointer.store(0);
+    old_pointer.store(0, std::memory_order_seq_cst);
 }
 
 N *N256::getChild(const uint8_t k) {
     N *child = children[k].load();
     uint64_t oldp = old_pointer.load();
-    int valid = (oldp >> 56) & 1;
-    int index = (oldp >> 48) & ((1 << 8) - 1);
+    uint8_t valid = (oldp >> 56) & 1;
+    uint8_t index = (oldp >> 48) & ((1 << 8) - 1);
     uint64_t p = oldp & ((1ull << 48) - 1);
-    if(valid && k == index){
+    if (valid && k == index) {
         // guarantee the p is persistent
-        return (N*)p;
-    }
-    else{
+        return (N *)p;
+    } else {
         // guarantee child is not being modified
         return child;
     }
@@ -143,26 +142,39 @@ bool N256::remove(uint8_t k, bool force, bool flush) {
 
     uint64_t oldp = (1ull << 56) | ((uint64_t)k << 48) |
                     ((uint64_t)children[k].load() & ((1ull << 48) - 1));
-    old_pointer.store(oldp); // store the old version
+    old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
 
     children[k].store(nullptr, std::memory_order_seq_cst);
     flush_data((void *)&children[k], sizeof(std::atomic<N *>));
 
-    old_pointer.store(0);
+    old_pointer.store(0, std::memory_order_seq_cst);
 
     count--;
     return true;
 }
 
-//TODO
 N *N256::getAnyChild() const {
     N *anyChild = nullptr;
     for (uint64_t i = 0; i < 256; ++i) {
-        N *child = N::clearDirty(children[i].load());
-        if (child != nullptr) {
-            if (N::isLeaf(child)) {
-                return child;
-            } else {
+        N *child = children[i].load();
+
+        // check old pointer
+        uint64_t oldp = old_pointer.load();
+        uint8_t valid = (oldp >> 56) & 1;
+        uint8_t index = (oldp >> 48) & ((1 << 8) - 1);
+        uint64_t p = oldp & ((1ull << 48) - 1);
+        if (valid && index == i) {
+            if ((N *)p != nullptr) {
+                if (N::isLeaf((N *)p)) {
+                    return (N *)p;
+                }
+                anyChild = (N *)p;
+            }
+        } else {
+            if (child != nullptr) {
+                if (N::isLeaf(child)) {
+                    return child;
+                }
                 anyChild = child;
             }
         }
@@ -170,16 +182,29 @@ N *N256::getAnyChild() const {
     return anyChild;
 }
 
-//TODO
 void N256::getChildren(uint8_t start, uint8_t end,
-                       std::tuple<uint8_t, std::atomic<N *> *> children[],
+                       std::tuple<uint8_t, N *> children[],
                        uint32_t &childrenCount) {
     childrenCount = 0;
     for (unsigned i = start; i <= end; i++) {
         N *child = this->children[i].load();
-        if (child != nullptr) {
-            children[childrenCount] = std::make_tuple(i, &(this->children[i]));
-            childrenCount++;
+
+        // check old pointer
+        uint64_t oldp = old_pointer.load();
+        uint8_t valid = (oldp >> 56) & 1;
+        uint8_t index = (oldp >> 48) & ((1 << 8) - 1);
+        uint64_t p = oldp & ((1ull << 48) - 1);
+
+        if (valid && index == i) {
+            if ((N *)p != nullptr) {
+                children[childrenCount] = std::make_tuple(i, (N *)p);
+                childrenCount++;
+            }
+        } else {
+            if (child != nullptr) {
+                children[childrenCount] = std::make_tuple(i, child);
+                childrenCount++;
+            }
         }
     }
 }

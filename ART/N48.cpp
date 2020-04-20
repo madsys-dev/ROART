@@ -119,11 +119,10 @@ bool N48::insert(uint8_t key, N *n, bool flush) {
     if (flush)
         flush_data((void *)&childIndex[key], sizeof(std::atomic<uint8_t>));
 
-
     // record the old version and index
     if (flush) {
         uint64_t oldp = (1ull << 56) | ((uint64_t)compactCount << 48);
-        old_pointer.store(oldp); // store the old version
+        old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
     }
 
     // modify the pointer
@@ -132,7 +131,7 @@ bool N48::insert(uint8_t key, N *n, bool flush) {
     // flush the new pointer and clear the old version
     if (flush) {
         flush_data((void *)&children[compactCount], sizeof(std::atomic<N *>));
-        old_pointer.store(0); // after persisting, clear the old version
+        old_pointer.store(0, std::memory_order_seq_cst); // after persisting, clear the old version
     }
 
     compactCount++;
@@ -146,12 +145,12 @@ void N48::change(uint8_t key, N *val) {
 
     uint64_t oldp = (1ull << 56) | ((uint64_t)index << 48) |
                     ((uint64_t)children[index].load() & ((1ull << 48) - 1));
-    old_pointer.store(oldp); // store the old version
+    old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
 
     children[index].store(val, std::memory_order_seq_cst);
     flush_data((void *)&children[index], sizeof(std::atomic<N *>));
 
-    old_pointer.store(0);
+    old_pointer.store(0, std::memory_order_seq_cst);
 }
 
 N *N48::getChild(const uint8_t k) {
@@ -161,14 +160,13 @@ N *N48::getChild(const uint8_t k) {
     } else {
         N *child = children[index].load();
         uint64_t oldp = old_pointer.load();
-        int valid = (oldp >> 56) & 1;
-        int id = (oldp >> 48) & ((1 << 8) - 1);
+        uint8_t valid = (oldp >> 56) & 1;
+        uint8_t id = (oldp >> 48) & ((1 << 8) - 1);
         uint64_t p = oldp & ((1ull << 48) - 1);
-        if(valid && id == index){
+        if (valid && id == index) {
             // guarantee the p is persistent
-            return (N*)p;
-        }
-        else{
+            return (N *)p;
+        } else {
             // guarantee child is not being modified
             return child;
         }
@@ -182,37 +180,49 @@ bool N48::remove(uint8_t k, bool force, bool flush) {
     uint8_t index = childIndex[k].load();
     assert(index != emptyMarker);
 
-
     uint64_t oldp = (1ull << 56) | ((uint64_t)index << 48) |
                     ((uint64_t)children[index].load() & ((1ull << 48) - 1));
-    old_pointer.store(oldp); // store the old version
+    old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
 
     children[index].store(nullptr, std::memory_order_seq_cst);
     flush_data((void *)&children[index], sizeof(std::atomic<N *>));
 
-    old_pointer.store(0);
+    old_pointer.store(0, std::memory_order_seq_cst);
 
     count--;
     assert(getChild(k) == nullptr);
     return true;
 }
 
-//TODO
 N *N48::getAnyChild() const {
     N *anyChild = nullptr;
     for (unsigned i = 0; i < 48; i++) {
-        N *child = N::clearDirty(children[i].load());
-        if (child != nullptr) {
-            if (N::isLeaf(child)) {
-                return child;
+        N *child = children[i].load();
+
+        // check old pointer
+        uint64_t oldp = old_pointer.load();
+        uint8_t valid = (oldp >> 56) & 1;
+        uint8_t index = (oldp >> 48) & ((1 << 8) - 1);
+        uint64_t p = oldp & ((1ull << 48) - 1);
+        if (valid && index == i) {
+            if ((N *)p != nullptr) {
+                if (N::isLeaf((N *)p)) {
+                    return (N *)p;
+                }
+                anyChild = (N *)p;
             }
-            anyChild = child;
+        } else {
+            if (child != nullptr) {
+                if (N::isLeaf(child)) {
+                    return child;
+                }
+                anyChild = child;
+            }
         }
     }
     return anyChild;
 }
 
-//TODO
 void N48::deleteChildren() {
     for (unsigned i = 0; i < 256; i++) {
         uint8_t index = childIndex[i].load();
@@ -224,19 +234,31 @@ void N48::deleteChildren() {
     }
 }
 
-//TODO
 void N48::getChildren(uint8_t start, uint8_t end,
-                      std::tuple<uint8_t, std::atomic<N *> *> children[],
+                      std::tuple<uint8_t, N *> children[],
                       uint32_t &childrenCount) {
     childrenCount = 0;
     for (unsigned i = start; i <= end; i++) {
         uint8_t index = this->childIndex[i].load();
         if (index != emptyMarker && this->children[index] != nullptr) {
             N *child = this->children[index].load();
-            if (child != nullptr) {
-                children[childrenCount] =
-                    std::make_tuple(i, &(this->children[index]));
-                childrenCount++;
+
+            // check old pointer
+            uint64_t oldp = old_pointer.load();
+            uint8_t valid = (oldp >> 56) & 1;
+            uint8_t ind = (oldp >> 48) & ((1 << 8) - 1);
+            uint64_t p = oldp & ((1ull << 48) - 1);
+
+            if (valid && ind == index) {
+                if ((N *)p != nullptr) {
+                    children[childrenCount] = std::make_tuple(i, (N*)p);
+                    childrenCount++;
+                }
+            } else {
+                if (child != nullptr) {
+                    children[childrenCount] = std::make_tuple(i, child);
+                    childrenCount++;
+                }
             }
         }
     }

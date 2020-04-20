@@ -756,6 +756,9 @@ N *N::getAnyChild(const N *node) {
         auto n = static_cast<const N256 *>(node);
         return n->getAnyChild();
     }
+    default: {
+        assert(false);
+    }
     }
     return nullptr;
 }
@@ -782,8 +785,10 @@ void N::change(N *node, uint8_t key, N *val) {
         n->change(key, val);
         return;
     }
+    default: {
+        assert(false);
     }
-    return;
+    }
 }
 
 template <typename curN, typename biggerN>
@@ -887,6 +892,9 @@ void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
         node->writeUnlock();
         break;
     }
+    default: {
+        assert(false);
+    }
     }
 }
 
@@ -908,10 +916,14 @@ N *N::getChild(const uint8_t k, N *node) {
         auto n = static_cast<N256 *>(node);
         return n->getChild(k);
     }
+    default: {
+        assert(false);
+    }
     }
     return nullptr;
 }
 
+// only use in normally shutdown
 void N::deleteChildren(N *node) {
     if (N::isLeaf(node)) {
         return;
@@ -937,8 +949,10 @@ void N::deleteChildren(N *node) {
         n->deleteChildren();
         return;
     }
+    default: {
+        assert(false);
     }
-    return;
+    }
 }
 
 template <typename curN, typename smallerN>
@@ -1001,6 +1015,9 @@ void N::removeAndUnlock(N *node, uint8_t key, N *parentNode, uint8_t keyParent,
                                    needRestart);
         break;
     }
+    default: {
+        assert(false);
+    }
     }
 }
 
@@ -1023,29 +1040,29 @@ void N::setCount(uint16_t count_, uint16_t compactCount_) {
     compactCount = compactCount_;
 }
 
-uint32_t N::getCount() const {
-    switch (this->getType()) {
+// only invoked in the critical section
+uint32_t N::getCount(N *node) {
+    switch (node->getType()) {
     case NTypes::N4: {
-        auto n = static_cast<const N4 *>(this);
+        auto n = static_cast<const N4 *>(node);
         return n->getCount();
     }
     case NTypes::N16: {
-        auto n = static_cast<const N16 *>(this);
+        auto n = static_cast<const N16 *>(node);
         return n->getCount();
     }
     case NTypes::N48: {
-        auto n = static_cast<const N48 *>(this);
+        auto n = static_cast<const N48 *>(node);
         return n->getCount();
     }
     case NTypes::N256: {
-        auto n = static_cast<const N256 *>(this);
+        auto n = static_cast<const N256 *>(node);
         return n->getCount();
     }
     default: {
         return 0;
     }
     }
-    return 0;
 }
 
 Prefix N::getPrefi() const { return prefix.load(); }
@@ -1063,7 +1080,6 @@ void N::setPrefix(const uint8_t *prefix, uint32_t length, bool flush) {
     }
     if (flush)
         flush_data((void *)&(this->prefix), sizeof(Prefix));
-    //        clflush((char *)&(this->prefix), sizeof(Prefix), false, true);
 }
 
 void N::addPrefixBefore(N *node, uint8_t key) {
@@ -1081,7 +1097,6 @@ void N::addPrefixBefore(N *node, uint8_t key) {
     p.prefixCount += nodeP.prefixCount + 1;
     this->prefix.store(p, std::memory_order_release);
     flush_data((void *)&(this->prefix), sizeof(Prefix));
-    //    clflush((char *)&this->prefix, sizeof(Prefix), false, true);
 }
 
 bool N::isLeaf(const N *n) {
@@ -1098,6 +1113,7 @@ Leaf *N::getLeaf(const N *n) {
         (reinterpret_cast<uintptr_t>(n) & ~(1ULL << 0))));
 }
 
+// only invoke this in remove and N4
 std::tuple<N *, uint8_t> N::getSecondChild(N *node, const uint8_t key) {
     switch (node->getType()) {
     case NTypes::N4: {
@@ -1110,6 +1126,7 @@ std::tuple<N *, uint8_t> N::getSecondChild(N *node, const uint8_t key) {
     }
 }
 
+// only invoke in the shutdown normally
 void N::deleteNode(N *node) {
     if (N::isLeaf(node)) {
         return;
@@ -1135,10 +1152,15 @@ void N::deleteNode(N *node) {
         delete n;
         return;
     }
+    default: {
+        assert(false);
+    }
     }
     delete node;
 }
 
+// invoke in the insert
+// not all nodes are in the critical secton
 Leaf *N::getAnyChildTid(const N *n) {
     const N *nextNode = n;
 
@@ -1153,8 +1175,9 @@ Leaf *N::getAnyChildTid(const N *n) {
     }
 }
 
+// for range query
 void N::getChildren(N *node, uint8_t start, uint8_t end,
-                    std::tuple<uint8_t, std::atomic<N *> *> children[],
+                    std::tuple<uint8_t, N *> children[],
                     uint32_t &childrenCount) {
     switch (node->getType()) {
     case NTypes::N4: {
@@ -1176,6 +1199,9 @@ void N::getChildren(N *node, uint8_t start, uint8_t end,
         auto n = static_cast<N256 *>(node);
         n->getChildren(start, end, children, childrenCount);
         return;
+    }
+    default: {
+        assert(false);
     }
     }
 }

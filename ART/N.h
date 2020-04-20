@@ -235,7 +235,7 @@ class N : public BaseNode {
         : BaseNode(type), level(level) {
         typeVersionLockObsolete = new std::atomic<uint64_t>;
         typeVersionLockObsolete->store(0b100);
-        old_pointer.store(0);
+        old_pointer.store(0, std::memory_order_seq_cst);
         setType(type);
         setPrefix(prefix, prefixLength, false);
     }
@@ -244,7 +244,7 @@ class N : public BaseNode {
         : BaseNode(type), prefix(prefi), level(level) {
         typeVersionLockObsolete = new std::atomic<uint64_t>;
         typeVersionLockObsolete->store(0b100);
-        old_pointer.store(0);
+        old_pointer.store(0, std::memory_order_seq_cst);
         setType(type);
     }
 
@@ -288,7 +288,7 @@ class N : public BaseNode {
 
     uint32_t getLevel() const;
 
-    uint32_t getCount() const;
+    static uint32_t getCount(N *node);
 
     void setCount(uint16_t count_, uint16_t compactCount_);
 
@@ -361,7 +361,7 @@ class N : public BaseNode {
                                 uint8_t key, NTypes type, bool &needRestart);
 
     static void getChildren(N *node, uint8_t start, uint8_t end,
-                            std::tuple<uint8_t, std::atomic<N *> *> children[],
+                            std::tuple<uint8_t, N *> children[],
                             uint32_t &childrenCount);
 
     static void rebuild_node(N *node,

@@ -98,7 +98,7 @@ class N4 : public N {
     void deleteChildren();
 
     void getChildren(uint8_t start, uint8_t end,
-                     std::tuple<uint8_t, std::atomic<N *> *> children[],
+                     std::tuple<uint8_t, N *> children[],
                      uint32_t &childrenCount);
 
     uint32_t getCount() const;
