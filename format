@@ -1,1 +1,1 @@
-find ART benchmark fast_fair nvm_mgr test -type f -name '*.cpp' -o -name '*.h' | xargs clang-format -style=file -i
+find ART benchmark fast_fair lf-skiplist nvm_mgr test -type f -name '*.cpp' -o -name '*.h' | xargs clang-format -style=file -i
