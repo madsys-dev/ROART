@@ -927,6 +927,22 @@ Tree::~Tree() {
     close_nvm_mgr();
 }
 
+// allocate a leaf and persist it
+Leaf *Tree::allocLeaf(const Key *k) const {
+#ifdef KEY_INLINE
+    Leaf *newLeaf =
+        new (alloc_new_node_from_size(sizeof(Leaf) + k->key_len + k->val_len))
+            Leaf(k);
+    flush_data((void *)newLeaf, sizeof(Leaf) + k->key_len + k->val_len);
+    return newLeaf;
+#else
+    Leaf *newLeaf =
+        new (alloc_new_node_from_type(NTypes::Leaf)) Leaf(k); // not persist
+    flush_data((void *)newLeaf, sizeof(Leaf));
+    return newLeaf;
+#endif
+}
+
 Leaf *Tree::lookup(const Key *k) const {
     // enter a new epoch
     EpochGuard NewEpoch;
@@ -1039,11 +1055,7 @@ restart:
                     return OperationResults::NotFound;
                 }
                 //
-                Leaf *newleaf = new (alloc_new_node_from_type(NTypes::Leaf))
-                    Leaf(leaf->fkey, k->key_len, (char *)k->value, k->val_len);
-                //                    std::cout<<(int)(((BaseNode
-                //                    *)newleaf)->type)<<"\n";
-                flush_data((void *)newleaf, sizeof(Leaf));
+                Leaf *newleaf = allocLeaf(k);
                 //
                 N::change(node, nodeKey, N::setLeaf(newleaf));
                 node->writeUnlock();
@@ -1248,8 +1260,13 @@ restart:
 
     if (toContinue != nullptr) {
         Key *newkey = new Key();
+#ifdef KEY_INLINE
+        newkey->Init((char *)toContinue->GetKey(), toContinue->key_len,
+                     toContinue->GetValue(), toContinue->val_len);
+#else
         newkey->Init((char *)toContinue->fkey, toContinue->key_len,
                      toContinue->value, toContinue->val_len);
+#endif
         continueKey = newkey;
         return true;
     } else {
@@ -1301,11 +1318,7 @@ restart:
                 N4(nextLevel, prefi); // not persist
 
             // 2)  add node and (tid, *k) as children
-            Leaf *newLeaf = new (alloc_new_node_from_type(NTypes::Leaf))
-                Leaf(k); // not persist
-            flush_data((void *)newLeaf, sizeof(Leaf));
-            //            N::clflush((char *)newLeaf, sizeof(Leaf), true,
-            //                       true); // persist leaf and key pointer
+            Leaf *newLeaf = allocLeaf(k);
 
             // not persist
             newNode->insert(k->fkey[nextLevel], N::setLeaf(newLeaf), false);
@@ -1353,10 +1366,7 @@ restart:
             if (needRestart)
                 goto restart;
 
-            Leaf *newLeaf =
-                new (alloc_new_node_from_type(NTypes::Leaf)) Leaf(k);
-            flush_data((void *)newLeaf, sizeof(Leaf));
-            //            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
+            Leaf *newLeaf = allocLeaf(k);
 
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeaf(newLeaf), needRestart);
@@ -1378,12 +1388,21 @@ restart:
             // but if I want to insert a prefix of this key, i also need to
             // insert successfully
             uint32_t prefixLength = 0;
+#ifdef KEY_INLINE
+            while (level + prefixLength <
+                       std::min(k->getKeyLen(), key->getKeyLen()) &&
+                   key->kv[level + prefixLength] ==
+                       k->fkey[level + prefixLength]) {
+                prefixLength++;
+            }
+#else
             while (level + prefixLength <
                        std::min(k->getKeyLen(), key->getKeyLen()) &&
                    key->fkey[level + prefixLength] ==
                        k->fkey[level + prefixLength]) {
                 prefixLength++;
             }
+#endif
             // equal
             if (k->getKeyLen() == key->getKeyLen() &&
                 level + prefixLength == k->getKeyLen()) {
@@ -1395,15 +1414,18 @@ restart:
             // substring
 
             auto n4 = new (alloc_new_node_from_type(NTypes::N4))
-                N4(level + prefixLength, &k->fkey[level], prefixLength);
-            Leaf *newLeaf =
-                new (alloc_new_node_from_type(NTypes::Leaf)) Leaf(k);
-            flush_data((void *)newLeaf, sizeof(Leaf));
+                N4(level + prefixLength, &k->fkey[level],
+                   prefixLength); // not persist
+            Leaf *newLeaf = allocLeaf(k);
             //            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
 
             n4->insert(k->fkey[level + prefixLength], N::setLeaf(newLeaf),
                        false);
+#ifdef KEY_INLINE
+            n4->insert(key->kv[level + prefixLength], nextNode, false);
+#else
             n4->insert(key->fkey[level + prefixLength], nextNode, false);
+#endif
             flush_data((void *)n4, sizeof(N4));
             //            N::clflush((char *)n4, sizeof(N4), true, true);
 
@@ -1592,8 +1614,13 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
             Leaf *kr = N::getAnyChildTid(n);
             p.prefixCount = discrimination;
             for (uint32_t i = 0;
-                 i < std::min(discrimination, maxStoredPrefixLength); i++)
+                 i < std::min(discrimination, maxStoredPrefixLength); i++) {
+#ifdef KEY_INLINE
+                p.prefix[i] = kr->kv[level + i];
+#else
                 p.prefix[i] = kr->fkey[level + i];
+#endif
+            }
             n->setPrefix(p.prefix, p.prefixCount, true);
             n->writeUnlock();
         }
@@ -1618,8 +1645,13 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
                 kt = N::getAnyChildTid(n);
                 load_flag = true;
             }
+#ifdef KEY_INLINE
+            uint8_t curKey = i >= maxStoredPrefixLength ? (uint8_t)kt->kv[level]
+                                                        : p.prefix[i];
+#else
             uint8_t curKey =
                 i >= maxStoredPrefixLength ? kt->fkey[level] : p.prefix[i];
+#endif
             if (curKey != k->fkey[level]) {
                 nonMatchingKey = curKey;
                 if (p.prefixCount > maxStoredPrefixLength) {
@@ -1630,7 +1662,12 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
                          j < std::min((p.prefixCount - (level - prevLevel) - 1),
                                       maxStoredPrefixLength);
                          ++j) {
+#ifdef KEY_INLINE
+                        nonMatchingPrefix.prefix[j] =
+                            (uint8_t)kt->kv[level + j + 1];
+#else
                         nonMatchingPrefix.prefix[j] = kt->fkey[level + j + 1];
+#endif
                     }
                 } else {
                     for (uint32_t j = 0; j < p.prefixCount - i - 1; ++j) {
@@ -1664,8 +1701,13 @@ Tree::checkPrefixCompare(const N *n, const Key *k, uint32_t &level) {
             uint8_t kLevel =
                 (k->getKeyLen() > level) ? k->fkey[level] : (uint8_t)0;
 
+#ifdef KEY_INLINE
+            uint8_t curKey = i >= maxStoredPrefixLength ? (uint8_t)kt->kv[level]
+                                                        : p.prefix[i];
+#else
             uint8_t curKey =
                 i >= maxStoredPrefixLength ? kt->fkey[level] : p.prefix[i];
+#endif
             if (curKey < kLevel) {
                 return PCCompareResults::Smaller;
             } else if (curKey > kLevel) {
@@ -1700,8 +1742,13 @@ typename Tree::PCEqualsResults Tree::checkPrefixEquals(const N *n,
             uint8_t endLevel =
                 (end->getKeyLen() > level) ? end->fkey[level] : (uint8_t)0;
 
+#ifdef KEY_INLINE
+            uint8_t curKey = i >= maxStoredPrefixLength ? (uint8_t)kt->kv[level]
+                                                        : p.prefix[i];
+#else
             uint8_t curKey =
                 i >= maxStoredPrefixLength ? kt->fkey[level] : p.prefix[i];
+#endif
             if (curKey > startLevel && curKey < endLevel) {
                 return PCEqualsResults::Contained;
             } else if (curKey < startLevel || curKey > endLevel) {

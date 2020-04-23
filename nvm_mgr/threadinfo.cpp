@@ -245,12 +245,18 @@ void thread_info::FreeEpochNode(void *node_p) {
     if (n->type == PART_ns::NTypes::Leaf) {
         // reclaim leaf key
         PART_ns::Leaf *leaf = (PART_ns::Leaf *)n;
+#ifdef KEY_INLINE
+        free_node_from_size((uint64_t)n, sizeof(PART_ns::Leaf) + leaf->key_len +
+                                             leaf->val_len);
+#else
         free_node_from_size((uint64_t)(leaf->fkey), leaf->key_len);
         free_node_from_size((uint64_t)(leaf->value), leaf->val_len);
+        free_node_from_type((uint64_t)n, n->type);
+#endif
+    } else {
+        // reclaim the node
+        free_node_from_type((uint64_t)n, n->type);
     }
-
-    // reclaim the node
-    free_node_from_type((uint64_t)n, n->type);
 }
 
 void *alloc_new_node_from_type(PART_ns::NTypes type) {

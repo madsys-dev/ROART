@@ -147,6 +147,8 @@ class Tree {
     OperationResults insert(const Key *k);
 
     OperationResults remove(const Key *k);
+
+    Leaf *allocLeaf(const Key *k) const;
 } __attribute__((aligned(64)));
 
 #ifdef CHECK_COUNT

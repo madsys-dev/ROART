@@ -19,6 +19,7 @@ add_definitions(-DVARIABLE_LENGTH)
 add_definitions(-DUSE_PMDK)
 add_definitions(-DFF_GC) # ff_gc
 add_definitions(-DRECLAIM_MEMORY)
+add_definitions(-DKEY_INLINE)
 #add_definitions(-DLOG_FREE)
 #add_definitions(-DCHECK_COUNT)
 

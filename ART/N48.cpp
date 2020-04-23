@@ -122,7 +122,8 @@ bool N48::insert(uint8_t key, N *n, bool flush) {
     // record the old version and index
     if (flush) {
         uint64_t oldp = (1ull << 56) | ((uint64_t)compactCount << 48);
-        old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
+        old_pointer.store(oldp,
+                          std::memory_order_seq_cst); // store the old version
     }
 
     // modify the pointer
@@ -131,7 +132,9 @@ bool N48::insert(uint8_t key, N *n, bool flush) {
     // flush the new pointer and clear the old version
     if (flush) {
         flush_data((void *)&children[compactCount], sizeof(std::atomic<N *>));
-        old_pointer.store(0, std::memory_order_seq_cst); // after persisting, clear the old version
+        old_pointer.store(0,
+                          std::memory_order_seq_cst); // after persisting, clear
+                                                      // the old version
     }
 
     compactCount++;
@@ -251,7 +254,7 @@ void N48::getChildren(uint8_t start, uint8_t end,
 
             if (valid && ind == index) {
                 if ((N *)p != nullptr) {
-                    children[childrenCount] = std::make_tuple(i, (N*)p);
+                    children[childrenCount] = std::make_tuple(i, (N *)p);
                     childrenCount++;
                 }
             } else {

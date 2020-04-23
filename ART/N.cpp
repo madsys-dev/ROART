@@ -649,9 +649,9 @@ Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
     key_len = k->key_len;
     val_len = k->val_len;
 #ifdef KEY_INLINE
-    key = k->key; // compare to store the key, new an array will decrease
-                  // 30% performance
-    fkey = (uint8_t *)&key;
+    // have allocate the memory for kv
+    memcpy(kv, k->fkey, key_len);
+    memcpy(kv + key_len, (void *)k->value, val_len);
 #else
     // allocate from NVM for variable key
     fkey = new (alloc_new_node_from_size(key_len)) uint8_t[key_len];
@@ -672,10 +672,15 @@ Leaf::Leaf(uint8_t *key_, size_t key_len_, char *value_, size_t val_len_)
     : BaseNode(NTypes::Leaf) {
     key_len = key_len_;
     val_len = val_len_;
+#ifdef KEY_INLINE
+    memcpy(kv, key_, key_len);
+    memcpy(kv + key_len, value_, val_len);
+#else
     fkey = key_; // no need to alloc a new key, key_ is persistent
     value = new (alloc_new_node_from_size(val_len)) char[val_len];
     memcpy(value, (void *)value_, val_len);
     flush_data((void *)value, val_len);
+#endif
 }
 
 void N::helpFlush(std::atomic<N *> *n) {
@@ -1211,6 +1216,12 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
         // leaf node
 #ifdef RECLAIM_MEMORY
         Leaf *leaf = N::getLeaf(node);
+#ifdef KEY_INLINE
+        size_t size =
+            size_align(sizeof(Leaf) + leaf->key_len + leaf->val_len, 64);
+        //        size = convert_power_two(size);
+        rs.insert(std::make_pair((uint64_t)leaf, size));
+#else
         NTypes type = leaf->type;
         size_t size = size_align(get_node_size(type), 64);
         //        size = convert_power_two(size);
@@ -1225,6 +1236,8 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
         size = leaf->val_len;
         //        size = convert_power_two(size);
         rs.insert(std::make_pair((uint64_t)(leaf->value), size));
+#endif // KEY_INLINE
+
 #endif
         return;
     }

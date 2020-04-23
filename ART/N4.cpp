@@ -152,12 +152,12 @@ bool N4::insert(uint8_t key, N *n, bool flush) {
     keys[compactCount].store(key, std::memory_order_seq_cst);
     if (flush)
         flush_data((void *)&keys[compactCount], sizeof(std::atomic<uint8_t>));
-    //        clflush((char *)&keys[compactCount], sizeof(uint8_t), true, true);
 
     // record the old version and index
     if (flush) {
         uint64_t oldp = (1ull << 56) | ((uint64_t)compactCount << 48);
-        old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
+        old_pointer.store(oldp,
+                          std::memory_order_seq_cst); // store the old version
     }
 
     // modify the pointer
@@ -166,7 +166,9 @@ bool N4::insert(uint8_t key, N *n, bool flush) {
     // flush the new pointer and clear the old version
     if (flush) {
         flush_data((void *)&children[compactCount], sizeof(std::atomic<N *>));
-        old_pointer.store(0, std::memory_order_seq_cst); // after persisting, clear the old version
+        old_pointer.store(0,
+                          std::memory_order_seq_cst); // after persisting, clear
+                                                      // the old version
     }
 
     compactCount++;
@@ -181,7 +183,8 @@ void N4::change(uint8_t key, N *val) {
 
             uint64_t oldp = (1ull << 56) | ((uint64_t)i << 48) |
                             ((uint64_t)children[i].load() & ((1ull << 48) - 1));
-            old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
+            old_pointer.store(
+                oldp, std::memory_order_seq_cst); // store the old version
 
             children[i].store(val, std::memory_order_seq_cst);
             flush_data((void *)&children[i], sizeof(std::atomic<N *>));
@@ -229,7 +232,8 @@ bool N4::remove(uint8_t k, bool force, bool flush) {
 
             uint64_t oldp = (1ull << 56) | ((uint64_t)i << 48) |
                             ((uint64_t)children[i].load() & ((1ull << 48) - 1));
-            old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
+            old_pointer.store(
+                oldp, std::memory_order_seq_cst); // store the old version
 
             children[i].store(nullptr, std::memory_order_seq_cst);
             flush_data((void *)&children[i], sizeof(std::atomic<N *>));

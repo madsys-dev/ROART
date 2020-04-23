@@ -200,10 +200,14 @@ class Leaf : public BaseNode {
   public:
     size_t key_len;
     size_t val_len;
-    uint64_t key;
-    // variable key
+//    uint64_t key;
+// variable key
+#ifdef KEY_INLINE
+    char kv[0]; // append key and value
+#else
     uint8_t *fkey;
     char *value;
+#endif
 
   public:
     Leaf(const Key *k);
@@ -215,11 +219,31 @@ class Leaf : public BaseNode {
     virtual ~Leaf() {}
 
     bool checkKey(const Key *k) const {
+#ifdef KEY_INLINE
+        if (key_len == k->getKeyLen() && memcmp(kv, k->fkey, key_len) == 0)
+            return true;
+        return false;
+#else
         if (key_len == k->getKeyLen() && memcmp(fkey, k->fkey, key_len) == 0)
             return true;
         return false;
+#endif
     }
     size_t getKeyLen() const { return key_len; }
+    char *GetKey() {
+#ifdef KEY_INLINE
+        return kv;
+#else
+        return (char *)fkey;
+#endif
+    }
+    char *GetValue() {
+#ifdef KEY_INLINE
+        return kv + key_len;
+#else
+        return value;
+#endif
+    }
 } __attribute__((aligned(64)));
 
 static constexpr uint32_t maxStoredPrefixLength = 4;

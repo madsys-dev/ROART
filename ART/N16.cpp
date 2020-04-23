@@ -151,7 +151,8 @@ bool N16::insert(uint8_t key, N *n, bool flush) {
 
     if (flush) {
         uint64_t oldp = (1ull << 56) | ((uint64_t)compactCount << 48);
-        old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
+        old_pointer.store(oldp,
+                          std::memory_order_seq_cst); // store the old version
     }
 
     children[compactCount].store(n, std::memory_order_seq_cst);

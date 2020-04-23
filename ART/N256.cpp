@@ -97,7 +97,8 @@ void N256::deleteChildren() {
 bool N256::insert(uint8_t key, N *val, bool flush) {
     if (flush) {
         uint64_t oldp = (1ull << 56) | ((uint64_t)key << 48);
-        old_pointer.store(oldp, std::memory_order_seq_cst); // store the old version
+        old_pointer.store(oldp,
+                          std::memory_order_seq_cst); // store the old version
     }
 
     children[key].store(val, std::memory_order_seq_cst);
