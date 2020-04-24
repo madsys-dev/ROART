@@ -16,7 +16,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O0 -g -march=native -mavx -m
 #add_definitions(-DCLFLUSH_OPT)
 add_definitions(-DCLWB)
 add_definitions(-DVARIABLE_LENGTH)
-#add_definitions(-DUSE_PMDK)
+add_definitions(-DUSE_PMDK)
 add_definitions(-DFF_GC) # ff_gc
 add_definitions(-DRECLAIM_MEMORY)
 add_definitions(-DKEY_INLINE)
@@ -24,8 +24,8 @@ add_definitions(-DKEY_INLINE)
 #add_definitions(-DCHECK_COUNT)
 
 #malloc
-add_definitions(-DPMALLOC)
-#add_definitions(-DTXPMALLOC)
+#add_definitions(-DPMALLOC)
+add_definitions(-DTXPMALLOC)
 #add_definitions(-DTRANSACTIONAL)
 
 link_libraries(pthread atomic boost_system boost_thread gtest)

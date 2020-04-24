@@ -1,4 +1,4 @@
-#include "lf-skiplist.h"
+#include "lf-skiplist-alloc.h"
 #include <string.h>
 
 namespace skiplist {
@@ -189,6 +189,27 @@ skiplist_t *new_skiplist() {
 
     skiplist_t *sl = (skiplist_t *)malloc(sizeof(skiplist_t));
     (*sl) = min;
+
+    std::cout << "start to test allocator\n";
+#ifdef USE_PMDK
+
+#ifdef PMALLOC
+    std::cout << "atomic PMALLOC\n";
+#elif TXPMALLOC
+    std::cout << "tx+atomic pmalloc\n";
+#elif TRANSACTIONAL
+    std::cout << "transactional\n";
+#endif
+
+#else
+    std::cout << "using DRAM allocator\n";
+#endif
+
+#ifdef VARIABLE_LENGTH
+    std::cout << "variable length key\n";
+#else
+    std::cout << "fixed length key\n";
+#endif
 
     return sl;
 }
@@ -414,7 +435,7 @@ svalue_t skiplist_remove(skiplist_t *sl, skey_t key) {
         // already visible, or it is already in the flushbuffer, which will be
         // emptied when the epoch change occurs at the latest
         result = node_to_delete->value;
-        sl_search(sl, key, NULL, NULL);
+        sl_search(sl, key, nullptr, nullptr);
 
         sl_finalize_node((void *)node_to_delete);
         sl_finalize_node((void *)node_to_delete->key);
@@ -503,6 +524,7 @@ retry:
 
 #else // USE_PMDK
     char *kk, *vv;
+    to_insert = new node_t;
     kk = new char[strlen(key) + 1];
     vv = new char[strlen(val) + 1];
     memcpy(kk, key, strlen(key) + 1);
@@ -652,6 +674,7 @@ retry:
         if (res != old_val) {
             goto retry; // update fail, retry
         }
+        node_to_update->val_len = strlen(val);
     }
     ti->LeaveEpoch();
     return;

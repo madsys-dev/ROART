@@ -1,6 +1,8 @@
 #pragma once
 
+#include <iostream>
 #include <libpmemobj.h>
+#include <thread>
 
 namespace skiplist {
 

@@ -452,9 +452,8 @@ class page {
 #elif TXPMALLOC
             TX_BEGIN(pmem_pool) {
 
-                PMEMoid p1;
-                pmemobj_zalloc(pmem_pool, &p1, sizeof(key_item) + key->key_len,
-                               TOID_TYPE_NUM(struct key_item));
+                PMEMoid p1 = pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
+                                               TOID_TYPE_NUM(struct key_item));
                 key_item *k = (key_item *)pmemobj_direct(p1);
 
                 k->key_len = key->key_len;
@@ -540,10 +539,9 @@ class page {
                     records[i + 1].ptr = ptr;
 #elif TXPMALLOC
                     TX_BEGIN(pmem_pool) {
-                        PMEMoid p;
-                        pmemobj_zalloc(pmem_pool, &p,
-                                       sizeof(key_item) + key->key_len,
-                                       TOID_TYPE_NUM(struct key_item));
+                        PMEMoid p =
+                            pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
+                                              TOID_TYPE_NUM(struct key_item));
 
                         key_item *k = (key_item *)pmemobj_direct(p);
                         if ((uint64_t)k == static_cast<uint64_t>(-1)) {
@@ -610,10 +608,9 @@ class page {
                 records[0].ptr = ptr;
 #elif TXPMALLOC
                 TX_BEGIN(pmem_pool) {
-                    PMEMoid p;
-                    pmemobj_zalloc(pmem_pool, &p,
-                                   sizeof(key_item) + key->key_len,
-                                   TOID_TYPE_NUM(struct key_item));
+                    PMEMoid p =
+                        pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
+                                          TOID_TYPE_NUM(struct key_item));
 
                     key_item *k = (key_item *)pmemobj_direct(p);
                     if ((uint64_t)k == static_cast<uint64_t>(-1)) {
@@ -779,9 +776,8 @@ class page {
             page *sibling;
             int sibling_cnt;
             TX_BEGIN(pmem_pool) {
-                PMEMoid ptr;
-                pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
-                               TOID_TYPE_NUM(char));
+                PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
+                                                TOID_TYPE_NUM(char));
                 sibling = new (pmemobj_direct(ptr)) page(hdr.level);
                 // copy half to sibling and init sibling
                 m = (int)ceil(num_entries / 2);
@@ -940,12 +936,12 @@ class page {
 #elif TXPMALLOC
                 page *new_root;
                 TX_BEGIN(pmem_pool) {
-                    PMEMoid ptr;
-                    pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
-                                   TOID_TYPE_NUM(char));
+                    PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
+                                                    TOID_TYPE_NUM(char));
                     new_root = new (pmemobj_direct(ptr))
                         page((page *)this, split_key, sibling, hdr.level + 1);
-                    bt->setNewRoot((char *)new_root);
+                    bt->root = (char *)new_root;
+                    bt->height++;
                 }
                 TX_END
 #elif TRANSACTIONAL
@@ -1125,9 +1121,8 @@ class page {
             key_item *split_key;
             int sibling_cnt;
             TX_BEGIN(pmem_pool) {
-                PMEMoid ptr;
-                pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
-                               TOID_TYPE_NUM(char));
+                PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
+                                                TOID_TYPE_NUM(char));
                 sibling = new (pmemobj_direct(ptr)) page(hdr.level);
 
                 m = (int)ceil(num_entries / 2);
@@ -1287,12 +1282,12 @@ class page {
 #elif TXPMALLOC
                 page *new_root;
                 TX_BEGIN(pmem_pool) {
-                    PMEMoid ptr;
-                    pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * PAGESIZE,
-                                   TOID_TYPE_NUM(char));
+                    PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
+                                                    TOID_TYPE_NUM(char));
                     new_root = new (pmemobj_direct(ptr))
                         page((page *)this, split_key, sibling, hdr.level + 1);
-                    bt->setNewRoot((char *)new_root);
+                    bt->root = (char *)new_root;
+                    bt->height++;
                 }
                 TX_END
 #elif TRANSACTIONAL
@@ -2356,6 +2351,27 @@ btree::btree() {
     flush_data((void *)root, sizeof(page));
 #endif
     height = 1;
+
+    std::cout << "start to test allocator\n";
+#ifdef USE_PMDK
+
+#ifdef PMALLOC
+    std::cout << "atomic PMALLOC\n";
+#elif TXPMALLOC
+    std::cout << "tx+atomic pmalloc\n";
+#elif TRANSACTIONAL
+    std::cout << "transactional\n";
+#endif
+
+#else
+    std::cout << "using DRAM allocator\n";
+#endif
+
+#ifdef VARIABLE_LENGTH
+    std::cout << "variable length key\n";
+#else
+    std::cout << "fixed length key\n";
+#endif
 }
 
 void btree::setNewRoot(char *new_root) {

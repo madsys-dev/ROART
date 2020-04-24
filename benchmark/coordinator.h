@@ -6,8 +6,8 @@
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
-#include "fast_fair.h"
-#include "lf-skiplist.h"
+#include "fast_fair_alloc.h"
+#include "lf-skiplist-alloc.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "timer.h"
@@ -390,10 +390,14 @@ template <typename K, typename V, int size> class Coordinator {
             case SCAN: {
                 int resultFound = 0;
                 //                std::cout<<"ff scan "<<s<<"\n";
-                bt->btree_search_range((char *)s.c_str(),
-                                       (char *)maxkey.c_str(),
-                                       (unsigned long *)buf, conf.scan_length,
-                                       resultFound, scan_value);
+                // TODO
+                //                bt->btree_search_range((char *)s.c_str(),
+                //                                       (char *)maxkey.c_str(),
+                //                                       (unsigned long *)buf,
+                //                                       conf.scan_length,
+                //                                       resultFound,
+                //                                       scan_value);
+
                 //                std::cout<<"find "<<resultFound<<"\n";
                 break;
             }

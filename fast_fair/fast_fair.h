@@ -1957,6 +1957,28 @@ btree::btree() {
     flush_data((void *)root, sizeof(page));
 #endif
     height = 1;
+
+    std::cout << "test different component\n";
+
+#ifdef USE_PMDK
+
+#ifdef PMALLOC
+    std::cout << "atomic PMALLOC\n";
+#elif TXPMALLOC
+    std::cout << "tx+atomic pmalloc\n";
+#elif TRANSACTIONAL
+    std::cout << "transactional\n";
+#endif
+
+#else
+    std::cout << "using DRAM allocator\n";
+#endif
+
+#ifdef VARIABLE_LENGTH
+    std::cout << "variable length key\n";
+#else
+    std::cout << "fixed length key\n";
+#endif
 }
 
 void btree::setNewRoot(char *new_root) {

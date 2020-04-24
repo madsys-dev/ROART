@@ -108,9 +108,9 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     state.num_threads = 4;
     state.key_type = Integer;
     state.email = 0;
-    state.init_keys = 3000000;
+    state.init_keys = 10000000;
     state.time = 5;
-    state.val_length = 100;
+    state.val_length = 8;
     state.share_memory = true;
     state.duration = 1;
     state.benchmark = READ_ONLY;
