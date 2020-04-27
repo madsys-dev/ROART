@@ -4,6 +4,7 @@
 #include <string.h>
 #include <libpmemobj.h>
 #include <chrono>
+#include "util.h"
 
 using namespace std;
 
@@ -47,11 +48,15 @@ int main(int argc, char **argv){
         tmp_pool = pmemobj_open(pool_name, layout_name);
     }
 
+    char value[nsize + 5];
+    memset(value, 'a', nsize);
     auto starttime = chrono::system_clock::now();
     if(type == 0){
         cout<<"test new/libvmmalloc\n";
         for(int i = 0; i < test_iter; i++){
             addr[i] = (uint64_t)malloc(nsize);
+//            memcpy((char *)addr[i], value, nsize);
+//            flush_data((void*)addr[i], nsize);
         }
     }else {
         if (type == 1) {
@@ -63,6 +68,9 @@ int main(int argc, char **argv){
                     cout << "pmemobj_zalloc error\n";
                     return 1;
                 }
+                char *ad = (char *)pmemobj_direct(D_RW(root)->ptr);
+                memcpy(ad, value, nsize);
+                flush_data(ad, nsize);
             }
         }
         else if(type == 2){
@@ -73,6 +81,9 @@ int main(int argc, char **argv){
                     ptr = pmemobj_tx_zalloc(sizeof(char) * nsize, TOID_TYPE_NUM(char));
                 }
                 TX_END
+                char *ad = (char *)pmemobj_direct(ptr);
+                memcpy(ad, value, nsize);
+                flush_data(ad, nsize);
             }
         }
         else{
@@ -84,6 +95,9 @@ int main(int argc, char **argv){
                     D_RW(root)->ptr = pmemobj_tx_zalloc(sizeof(char) * nsize, TOID_TYPE_NUM(char));
                 }
                 TX_END
+                char *ad = (char *)pmemobj_direct(D_RW(root)->ptr);
+                memcpy(ad, value, nsize);
+                flush_data(ad, nsize);
             }
         }
     }

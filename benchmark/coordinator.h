@@ -6,9 +6,9 @@
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
-#include "fast_fair_alloc.h"
-#include "lf-skiplist-alloc.h"
+#include "fast_fair.h"
 #include "nvm_mgr.h"
+#include "skiplist.h"
 #include "threadinfo.h"
 #include "timer.h"
 #include "util.h"
@@ -493,12 +493,21 @@ template <typename K, typename V, int size> class Coordinator {
         while (done == 0) {
 
             V result = 1;
+            long long d;
             OperationType op;
             std::string s;
 
-            auto next_operation = benchmark->nextStrOperation();
-            op = next_operation.first;
-            s = next_operation.second;
+            if (conf.key_type == Integer) {
+                auto next_operation = benchmark->nextIntOperation();
+
+                op = next_operation.first;
+                d = next_operation.second;
+            } else if (conf.key_type == String) {
+                auto next_operation = benchmark->nextStrOperation();
+
+                op = next_operation.first;
+                s = next_operation.second;
+            }
 
             cpuCycleTimer t;
             if (conf.latency_test) {
@@ -507,26 +516,50 @@ template <typename K, typename V, int size> class Coordinator {
 
             switch (op) {
             case UPDATE: {
+#ifdef VARIABLE_LENGTH
                 skiplist::skiplist_update(sl, (char *)s.c_str(), value);
+#else
+                skiplist::skiplist_update(sl, d,d);
+#endif
                 break;
             }
             case INSERT: {
+#ifdef VARIABLE_LENGTH
                 skiplist::skiplist_insert(sl, (char *)s.c_str(), value);
+                skiplist::skiplist_remove(sl, (char *)s.c_str());
+#else
+                skiplist::skiplist_insert(sl, d, d);
+                skiplist::skiplist_remove(sl, d);
+#endif
                 break;
             }
             case REMOVE: {
+#ifdef VARIABLE_LENGTH
                 skiplist::skiplist_remove(sl, (char *)s.c_str());
+#else
+                skiplist::skiplist_remove(sl, d);
+#endif
                 break;
             }
             case GET: {
+#ifdef VARIABLE_LENGTH
                 skiplist::skiplist_find(sl, (char *)s.c_str());
+#else
+                skiplist::skiplist_find(sl, d);
+#endif
                 break;
             }
             case SCAN: {
                 int resultFound = 0;
+#ifdef VARIABLE_LENGTH
                 skiplist::skiplist_scan(sl, (char *)s.c_str(), buf,
                                         conf.scan_length, resultFound,
                                         scan_value);
+#else
+                skiplist::skiplist_scan(sl, d, (uint64_t *)buf,
+                                        conf.scan_length, resultFound,
+                                        scan_value);
+#endif
                 //                std::cout<<resultFound<<"\n";
                 break;
             }
@@ -731,8 +764,20 @@ template <typename K, typename V, int size> class Coordinator {
             value[val_len] = 0;
 
             for (unsigned long i = 0; i < conf.init_keys; i++) {
-                std::string s = benchmark->nextInitStrKey();
+                long long kk;
+                std::string s;
+                if (conf.key_type == Integer) {
+                    kk = benchmark->nextInitIntKey();
+                    //                    std::cout << "insert key " << kk <<
+                    //                    "id: " << i << "\n";
+                } else if (conf.key_type == String) {
+                    s = benchmark->nextInitStrKey();
+                }
+#ifdef VARIABLE_LENGTH
                 skiplist::skiplist_insert(sl, (char *)s.c_str(), value);
+#else
+                skiplist::skiplist_insert(sl, kk,kk);
+#endif
             }
             printf("init insert finished\n");
 

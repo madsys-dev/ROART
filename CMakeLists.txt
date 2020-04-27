@@ -25,8 +25,8 @@ add_definitions(-DKEY_INLINE)
 
 #malloc
 #add_definitions(-DPMALLOC)
-add_definitions(-DTXPMALLOC)
-#add_definitions(-DTRANSACTIONAL)
+#add_definitions(-DTXPMALLOC)
+add_definitions(-DTRANSACTIONAL)
 
 link_libraries(pthread atomic boost_system boost_thread gtest)
 link_libraries(pmemobj)

@@ -549,7 +549,7 @@ retry:
 
 #else // fix length
     to_insert = new node_t;
-    init_new_node_and_set_next(to_insert, (skey_t)kk, (svalue_t)vv,
+    init_new_node_and_set_next(to_insert, (skey_t)key, (svalue_t)val,
                                get_random_level());
 
 #endif
