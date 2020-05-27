@@ -4,6 +4,7 @@
 #include "N256.h"
 #include "N4.h"
 #include "N48.h"
+#include "Tree.h"
 #include "threadinfo.h"
 #include <algorithm>
 #include <assert.h>
@@ -12,8 +13,12 @@
 using namespace NVMMgr_ns;
 
 namespace PART_ns {
+__thread int helpcount = 0;
+
+int gethelpcount() { return helpcount; }
 
 #ifdef LOG_FREE
+
 Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
     key_len = k->key_len;
     val_len = k->val_len;
@@ -53,6 +58,7 @@ void N::helpFlush(std::atomic<N *> *n) {
     N *now_node = n->load();
     // printf("help\n");
     if (N::isDirty(now_node)) {
+        helpcount++;
         //        printf("help, point to type is %d\n",
         //               ((BaseNode *)N::clearDirty(now_node))->type);
         flush_data((void *)n, sizeof(N *));
@@ -697,6 +703,103 @@ void N::helpFlush(std::atomic<N *> *n) {
     }
 }
 
+void N::set_generation() {
+    NVMMgr *mgr = get_nvm_mgr();
+    generation_version = mgr->get_generation_version();
+}
+
+uint64_t N::get_generation() { return generation_version; }
+
+#ifdef INSTANT_RESTART
+void N::check_generation() {
+    //    if(generation_version != 1100000){
+    //        return;
+    //    }else{
+    //        generation_version++;
+    //        return;
+    //    }
+    uint64_t mgr_generation = get_threadlocal_generation();
+
+    uint64_t zero = 0;
+    uint64_t one = 1;
+    if (generation_version != mgr_generation) {
+        //        printf("start to recovery of this node %lld\n",
+        //        (uint64_t)this);
+        if (recovery_latch.compare_exchange_strong(zero, one)) {
+            //            printf("start to recovery of this node %lld\n",
+            //            (uint64_t)this);
+            typeVersionLockObsolete = new std::atomic<uint64_t>;
+            typeVersionLockObsolete->store(convertTypeToVersion(type));
+            typeVersionLockObsolete->fetch_add(0b100);
+            old_pointer.store(0);
+
+            count = 0;
+            compactCount = 0;
+
+            NTypes t = this->type;
+            switch (t) {
+            case NTypes::N4: {
+                auto n = static_cast<N4 *>(this);
+                for (int i = 0; i < 4; i++) {
+                    N *child = n->children[i].load();
+                    if (child != nullptr) {
+                        count++;
+                        compactCount = i;
+                    }
+                }
+                break;
+            }
+            case NTypes::N16: {
+                auto n = static_cast<N16 *>(this);
+                for (int i = 0; i < 16; i++) {
+                    N *child = n->children[i].load();
+                    if (child != nullptr) {
+                        count++;
+                        compactCount = i;
+                    }
+                }
+                break;
+            }
+            case NTypes::N48: {
+                auto n = static_cast<N48 *>(this);
+                for (int i = 0; i < 48; i++) {
+                    N *child = n->children[i].load();
+                    if (child != nullptr) {
+                        count++;
+                        compactCount = i;
+                    }
+                }
+                break;
+            }
+            case NTypes::N256: {
+                auto n = static_cast<N256 *>(this);
+                for (int i = 0; i < 256; i++) {
+                    N *child = n->children[i].load();
+                    if (child != nullptr) {
+                        count++;
+                        compactCount = i;
+                    }
+                }
+                break;
+            }
+            default: {
+                std::cout << "[Recovery]\twrong type " << (int)type << "\n";
+                assert(0);
+            }
+            }
+
+            generation_version = mgr_generation;
+            flush_data(&generation_version, sizeof(uint64_t));
+            recovery_latch.store(zero);
+
+        } else {
+            while (generation_version != mgr_generation) {
+            }
+        }
+    }
+}
+#endif
+
 void N::setType(NTypes type) {
     typeVersionLockObsolete->fetch_add(convertTypeToVersion(type));
 }
@@ -743,7 +846,10 @@ void N::lockVersionOrRestart(uint64_t &version, bool &needRestart) {
 
 void N::writeUnlock() { typeVersionLockObsolete->fetch_add(0b10); }
 
-N *N::getAnyChild(const N *node) {
+N *N::getAnyChild(N *node) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<const N4 *>(node);
@@ -769,6 +875,9 @@ N *N::getAnyChild(const N *node) {
 }
 
 void N::change(N *node, uint8_t key, N *val) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
@@ -813,8 +922,13 @@ void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     }
 
     // allocate a bigger node from NVMMgr
+#ifdef ARTPMDK
+    biggerN *nBig = new (allocate_size(sizeof(biggerN)))
+        biggerN(n->getLevel(), n->getPrefi()); // not persist
+#else
     auto nBig = new (NVMMgr_ns::alloc_new_node_from_type(type))
         biggerN(n->getLevel(), n->getPrefi()); // not persist
+#endif
     n->copyTo(nBig);                           // not persist
     nBig->insert(key, val, false);             // not persist
     // persist the node
@@ -840,8 +954,13 @@ void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     }
 
     // allocate a new node from NVMMgr
+#ifdef ARTPMDK
+    curN *nNew = new (allocate_size(sizeof(curN)))
+        curN(n->getLevel(), n->getPrefi()); // not persist
+#else
     auto nNew = new (NVMMgr_ns::alloc_new_node_from_type(type))
         curN(n->getLevel(), n->getPrefi()); // not persist
+#endif
     n->copyTo(nNew);                        // not persist
     nNew->insert(key, val, false);          // not persist
     // persist the node
@@ -857,6 +976,9 @@ void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
 
 void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
                         N *val, bool &needRestart) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
@@ -904,6 +1026,9 @@ void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
 }
 
 N *N::getChild(const uint8_t k, N *node) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
@@ -933,6 +1058,9 @@ void N::deleteChildren(N *node) {
     if (N::isLeaf(node)) {
         return;
     }
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
@@ -977,9 +1105,13 @@ void N::removeAndShrink(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
     }
 
     // allocate a smaller node from NVMMgr
+#ifdef ARTPMDK
+    smallerN *nSmall = new (allocate_size(sizeof(smallerN)))
+        smallerN(n->getLevel(), n->getPrefi()); // not persist
+#else
     auto nSmall = new (NVMMgr_ns::alloc_new_node_from_type(type))
         smallerN(n->getLevel(), n->getPrefi()); // not persist
-
+#endif
     n->remove(key, true, true);
     n->copyTo(nSmall); // not persist
 
@@ -995,6 +1127,9 @@ void N::removeAndShrink(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
 
 void N::removeAndUnlock(N *node, uint8_t key, N *parentNode, uint8_t keyParent,
                         bool &needRestart) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
@@ -1047,6 +1182,9 @@ void N::setCount(uint16_t count_, uint16_t compactCount_) {
 
 // only invoked in the critical section
 uint32_t N::getCount(N *node) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<const N4 *>(node);
@@ -1120,6 +1258,9 @@ Leaf *N::getLeaf(const N *n) {
 
 // only invoke this in remove and N4
 std::tuple<N *, uint8_t> N::getSecondChild(N *node, const uint8_t key) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
@@ -1136,6 +1277,9 @@ void N::deleteNode(N *node) {
     if (N::isLeaf(node)) {
         return;
     }
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
@@ -1170,7 +1314,7 @@ Leaf *N::getAnyChildTid(const N *n) {
     const N *nextNode = n;
 
     while (true) {
-        const N *node = nextNode;
+        N *node = const_cast<N *>(nextNode);
         nextNode = getAnyChild(node);
 
         assert(nextNode != nullptr);
@@ -1184,6 +1328,9 @@ Leaf *N::getAnyChildTid(const N *n) {
 void N::getChildren(N *node, uint8_t start, uint8_t end,
                     std::tuple<uint8_t, N *> children[],
                     uint32_t &childrenCount) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
@@ -1211,16 +1358,19 @@ void N::getChildren(N *node, uint8_t start, uint8_t end,
     }
 }
 
-void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
+void N::rebuild_node(N *node, std::vector<std::pair<uint64_t, size_t>> &rs,
+                     uint64_t start_addr, uint64_t end_addr, int thread_id) {
     if (N::isLeaf(node)) {
         // leaf node
 #ifdef RECLAIM_MEMORY
         Leaf *leaf = N::getLeaf(node);
+        if ((uint64_t)leaf < start_addr || (uint64_t)leaf >= end_addr)
+            return;
 #ifdef KEY_INLINE
         size_t size =
             size_align(sizeof(Leaf) + leaf->key_len + leaf->val_len, 64);
         //        size = convert_power_two(size);
-        rs.insert(std::make_pair((uint64_t)leaf, size));
+        rs.push_back(std::make_pair((uint64_t)leaf, size));
 #else
         NTypes type = leaf->type;
         size_t size = size_align(get_node_size(type), 64);
@@ -1244,9 +1394,11 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     // insert internal node into set
     NTypes type = node->type;
 #ifdef RECLAIM_MEMORY
-    size_t size = size_align(get_node_size(type), 64);
-    //    size = convert_power_two(size);
-    rs.insert(std::make_pair((uint64_t)node, size));
+    if ((uint64_t)node >= start_addr && (uint64_t)node < end_addr) {
+        size_t size = size_align(get_node_size(type), 64);
+        //    size = convert_power_two(size);
+        rs.push_back(std::make_pair((uint64_t)node, size));
+    }
 #endif
 
     int xcount = 0;
@@ -1257,11 +1409,11 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
         for (int i = 0; i < 4; i++) {
-            N *child = N::clearDirty(n->children[i].load());
+            N *child = n->children[i].load();
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
-                rebuild_node(child, rs);
+                rebuild_node(child, rs, start_addr, end_addr, thread_id);
             }
         }
         break;
@@ -1269,11 +1421,11 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     case NTypes::N16: {
         auto n = static_cast<N16 *>(node);
         for (int i = 0; i < 16; i++) {
-            N *child = N::clearDirty(n->children[i].load());
+            N *child = n->children[i].load();
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
-                rebuild_node(child, rs);
+                rebuild_node(child, rs, start_addr, end_addr, thread_id);
             }
         }
         break;
@@ -1281,11 +1433,11 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     case NTypes::N48: {
         auto n = static_cast<N48 *>(node);
         for (int i = 0; i < 48; i++) {
-            N *child = N::clearDirty(n->children[i].load());
+            N *child = n->children[i].load();
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
-                rebuild_node(child, rs);
+                rebuild_node(child, rs, start_addr, end_addr, thread_id);
             }
         }
         break;
@@ -1293,25 +1445,32 @@ void N::rebuild_node(N *node, std::set<std::pair<uint64_t, size_t>> &rs) {
     case NTypes::N256: {
         auto n = static_cast<N256 *>(node);
         for (int i = 0; i < 256; i++) {
-            N *child = N::clearDirty(n->children[i].load());
+            N *child = n->children[i].load();
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
-                rebuild_node(child, rs);
+                rebuild_node(child, rs, start_addr, end_addr, thread_id);
             }
         }
         break;
     }
     default: {
-        std::cout << "[NODE]\twrong type for rebuild node\n";
+        std::cout << "[Rebuild]\twrong type is " << (int)type << "\n";
         assert(0);
     }
     }
     // reset count and version and lock
-    node->setCount(xcount, xcompactCount);
-    node->typeVersionLockObsolete = new std::atomic<uint64_t>;
-    node->typeVersionLockObsolete->store(convertTypeToVersion(type));
-    node->typeVersionLockObsolete->fetch_add(0b100);
+#ifdef INSTANT_RESTART
+#else
+    if ((uint64_t)node >= start_addr && (uint64_t)node < end_addr) {
+        node->setCount(xcount, xcompactCount);
+        node->typeVersionLockObsolete = new std::atomic<uint64_t>;
+        node->typeVersionLockObsolete->store(convertTypeToVersion(type));
+        node->typeVersionLockObsolete->fetch_add(0b100);
+        node->old_pointer.store(0);
+        //        rs.push_back(std::make_pair(0,0));
+    }
+#endif
 }
 #endif
 } // namespace PART_ns

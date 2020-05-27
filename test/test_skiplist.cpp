@@ -2,13 +2,13 @@
 //#include <gtest/gtest.h>
 //#include <thread>
 //
-//using namespace skiplist;
+// using namespace skiplist;
 //
-//inline void clear_data() {
+// inline void clear_data() {
 //    system("rm -rf /mnt/pmem0/matianmao/skiplist.data");
 //}
 //
-//TEST(TestSkipList, skiplist) {
+// TEST(TestSkipList, skiplist) {
 //    std::cout << "start test skiplist\n";
 //    clear_data();
 //    init_pmem();
@@ -50,11 +50,12 @@
 //                    ASSERT_EQ(strlen(value), key.size());
 //                    //                std::cout<<strlen(value)<<"
 //                    //                "<<value<<"\n";
-//                    ASSERT_EQ(memcmp(value, (char *)key.c_str(), strlen(value)),
+//                    ASSERT_EQ(memcmp(value, (char *)key.c_str(),
+//                    strlen(value)),
 //                              0);
 //
-//                    char *delete_val = skiplist_remove(sl, (char *)key.c_str());
-//                    ASSERT_TRUE(delete_val);
+//                    char *delete_val = skiplist_remove(sl, (char
+//                    *)key.c_str()); ASSERT_TRUE(delete_val);
 //                    ASSERT_EQ(strlen(delete_val), strlen(value));
 //                    ASSERT_EQ(memcmp(delete_val, value, strlen(value)), 0);
 //
@@ -71,7 +72,8 @@
 //                    char *value = skiplist_find(sl, (char *)key.c_str());
 //                    ASSERT_TRUE(value);
 //                    ASSERT_EQ(strlen(value), key.size());
-//                    ASSERT_EQ(memcmp(value, (char *)key.c_str(), strlen(value)),
+//                    ASSERT_EQ(memcmp(value, (char *)key.c_str(),
+//                    strlen(value)),
 //                              0);
 //
 //                    std::string newval = "0" + key + "0";

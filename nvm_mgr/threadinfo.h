@@ -120,6 +120,17 @@ class thread_info {
 
 } __attribute__((aligned(64)));
 
+#ifdef COUNT_ALLOC
+double getdcmmalloctime();
+#endif
+
+#ifdef INSTANT_RESTART
+void init();
+void increase(int id);
+uint64_t total(int thread_num);
+uint64_t get_threadlocal_generation();
+#endif
+
 void register_threadinfo();
 void unregister_threadinfo();
 

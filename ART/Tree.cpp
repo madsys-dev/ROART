@@ -3,6 +3,7 @@
 #include "N.h"
 #include "nvm_mgr.h"
 #include "threadinfo.h"
+#include "timer.h"
 #include <algorithm>
 #include <assert.h>
 #include <fstream>
@@ -893,6 +894,34 @@ typename Tree::PCEqualsResults Tree::checkPrefixEquals(const N *n,
 __thread int checkcount = 0;
 #endif
 
+#ifdef COUNT_ALLOC
+__thread cpuCycleTimer *alloc_time = nullptr;
+double getalloctime() { return alloc_time->duration(); }
+#endif
+
+#ifdef ARTPMDK
+POBJ_LAYOUT_BEGIN(DLART);
+POBJ_LAYOUT_TOID(DLART, char);
+POBJ_LAYOUT_END(DLART);
+PMEMobjpool *pmem_pool;
+
+void *allocate_size(size_t size) {
+#ifdef COUNT_ALLOC
+    if (alloc_time == nullptr)
+        alloc_time = new cpuCycleTimer();
+    alloc_time->start();
+#endif
+    PMEMoid ptr;
+    pmemobj_zalloc(pmem_pool, &ptr, size, TOID_TYPE_NUM(char));
+    void *addr = (void *)pmemobj_direct(ptr);
+
+#ifdef COUNT_ALLOC
+    alloc_time->end();
+#endif
+    return addr;
+}
+#endif
+
 Tree::Tree() {
     std::cout << "[P-ART]\tnew P-ART\n";
 
@@ -900,6 +929,28 @@ Tree::Tree() {
     register_threadinfo();
     NVMMgr *mgr = get_nvm_mgr();
     //    Epoch_Mgr * epoch_mgr = new Epoch_Mgr();
+#ifdef ARTPMDK
+    const char *pool_name = "/mnt/pmem0/matianmao/dlartpmdk.data";
+    const char *layout_name = "DLART";
+    size_t pool_size = 64LL * 1024 * 1024 * 1024; // 16GB
+
+    if (access(pool_name, 0)) {
+        pmem_pool = pmemobj_create(pool_name, layout_name, pool_size, 0666);
+        if (pmem_pool == nullptr) {
+            std::cout << "[DLART]\tcreate fail\n";
+            assert(0);
+        }
+        std::cout << "[DLART]\tcreate\n";
+    } else {
+        pmem_pool = pmemobj_open(pool_name, layout_name);
+        std::cout << "[DLART]\topen\n";
+    }
+    std::cout << "[DLART]\topen pmem pool successfully\n";
+
+    root = new (allocate_size(sizeof(N256))) N256(0, {});
+    flush_data((void *)root, sizeof(N256));
+
+#else
 
     if (mgr->first_created) {
         // first open
@@ -910,12 +961,19 @@ Tree::Tree() {
     } else {
         // recovery
         root = reinterpret_cast<N256 *>(mgr->alloc_tree_root());
-        std::cout << "[RECOVERY]\trecovery P-ART and reclaim the memory\n";
-        rebuild(mgr->recovery_set);
-#ifdef RECLAIM_MEMORY
-        mgr->recovery_free_memory();
+#ifdef INSTANT_RESTART
+        root->check_generation();
 #endif
+        std::cout << "[RECOVERY]\trecovery P-ART and reclaim the memory, root "
+                     "addr is "
+                  << (uint64_t)root << "\n";
+        //        rebuild(mgr->recovery_set);
+        //#ifdef RECLAIM_MEMORY
+        //        mgr->recovery_free_memory();
+        //#endif
     }
+
+#endif
 }
 
 Tree::~Tree() {
@@ -930,10 +988,18 @@ Tree::~Tree() {
 // allocate a leaf and persist it
 Leaf *Tree::allocLeaf(const Key *k) const {
 #ifdef KEY_INLINE
+
+#ifdef ARTPMDK
+    Leaf *newLeaf =
+        new (allocate_size(sizeof(Leaf) + k->key_len + k->val_len)) Leaf(k);
+    flush_data((void *)newLeaf, sizeof(Leaf) + k->key_len + k->val_len);
+#else
+
     Leaf *newLeaf =
         new (alloc_new_node_from_size(sizeof(Leaf) + k->key_len + k->val_len))
             Leaf(k);
     flush_data((void *)newLeaf, sizeof(Leaf) + k->key_len + k->val_len);
+#endif
     return newLeaf;
 #else
     Leaf *newLeaf =
@@ -953,6 +1019,9 @@ Leaf *Tree::lookup(const Key *k) const {
     bool optimisticPrefixMatch = false;
 
     while (true) {
+#ifdef INSTANT_RESTART
+        node->check_generation();
+#endif
 
 #ifdef CHECK_COUNT
         int pre = level;
@@ -1014,7 +1083,9 @@ restart:
 
     while (true) {
         node = nextNode;
-
+#ifdef INSTANT_RESTART
+        node->check_generation();
+#endif
         auto v = node->getVersion(); // check version
 
         switch (checkPrefix(node, k, level)) { // increases level
@@ -1294,6 +1365,9 @@ restart:
         parentNode = node;
         parentKey = nodeKey;
         node = nextNode;
+#ifdef INSTANT_RESTART
+        node->check_generation();
+#endif
         auto v = node->getVersion();
 
         uint32_t nextLevel = level;
@@ -1314,8 +1388,13 @@ restart:
             // prefix, level to this node
             Prefix prefi = node->getPrefi();
             prefi.prefixCount = nextLevel - level;
+
+#ifdef ARTPMDK
+            N4 *newNode = new (allocate_size(sizeof(N4))) N4(nextLevel, prefi);
+#else
             auto newNode = new (alloc_new_node_from_type(NTypes::N4))
                 N4(nextLevel, prefi); // not persist
+#endif
 
             // 2)  add node and (tid, *k) as children
             Leaf *newLeaf = allocLeaf(k);
@@ -1413,9 +1492,15 @@ restart:
             }
             // substring
 
+#ifdef ARTPMDK
+            N4 *n4 = new (allocate_size(sizeof(N4)))
+                N4(level + prefixLength, &k->fkey[level],
+                   prefixLength); // not persist
+#else
             auto n4 = new (alloc_new_node_from_type(NTypes::N4))
                 N4(level + prefixLength, &k->fkey[level],
                    prefixLength); // not persist
+#endif
             Leaf *newLeaf = allocLeaf(k);
             //            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
 
@@ -1455,6 +1540,9 @@ restart:
         parentNode = node;
         parentKey = nodeKey;
         node = nextNode;
+#ifdef INSTANT_RESTART
+        node->check_generation();
+#endif
         auto v = node->getVersion();
 
         switch (checkPrefix(node, k, level)) { // increases level
@@ -1557,10 +1645,11 @@ restart:
     }
 }
 
-void Tree::rebuild(std::set<std::pair<uint64_t, size_t>> &rs) {
+void Tree::rebuild(std::vector<std::pair<uint64_t, size_t>> &rs,
+                   uint64_t start_addr, uint64_t end_addr, int thread_id) {
     // rebuild meta data count/compactcount
     // record all used memory (offset, size) into rs set
-    N::rebuild_node(root, rs);
+    N::rebuild_node(root, rs, start_addr, end_addr, thread_id);
 }
 
 typename Tree::CheckPrefixResult Tree::checkPrefix(N *n, const Key *k,

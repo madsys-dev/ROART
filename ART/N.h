@@ -10,6 +10,8 @@
 
 namespace PART_ns {
 
+int gethelpcount();
+
 #ifdef LOG_FREE
 enum class NTypes : uint8_t { N4 = 1, N16 = 2, N48 = 3, N256 = 4, Leaf = 5 };
 
@@ -186,6 +188,7 @@ class N : public BaseNode {
                              std::set<std::pair<uint64_t, size_t>> &rs);
 
 } __attribute__((aligned(64)));
+
 #else
 enum class NTypes : uint8_t { N4 = 1, N16 = 2, N48 = 3, N256 = 4, Leaf = 5 };
 
@@ -260,6 +263,7 @@ class N : public BaseNode {
         typeVersionLockObsolete = new std::atomic<uint64_t>;
         typeVersionLockObsolete->store(0b100);
         old_pointer.store(0, std::memory_order_seq_cst);
+        recovery_latch.store(0, std::memory_order_seq_cst);
         setType(type);
         setPrefix(prefix, prefixLength, false);
     }
@@ -269,6 +273,7 @@ class N : public BaseNode {
         typeVersionLockObsolete = new std::atomic<uint64_t>;
         typeVersionLockObsolete->store(0b100);
         old_pointer.store(0, std::memory_order_seq_cst);
+        recovery_latch.store(0, std::memory_order_seq_cst);
         setType(type);
     }
 
@@ -290,6 +295,8 @@ class N : public BaseNode {
     // new transient parameter(48 bits for old pointer, 8 bits for pointer id, 1
     // bit for valid)
     std::atomic<uint64_t> old_pointer;
+    uint64_t generation_version = 0;
+    std::atomic<uint64_t> recovery_latch;
 
     static const uint64_t dirty_bit = ((uint64_t)1 << 60);
 
@@ -307,6 +314,12 @@ class N : public BaseNode {
     static inline bool isDirty(N *val) { return (uint64_t)val & dirty_bit; }
 
     static void helpFlush(std::atomic<N *> *n);
+
+    void set_generation();
+
+    uint64_t get_generation();
+
+    void check_generation();
 
     NTypes getType() const;
 
@@ -361,7 +374,7 @@ class N : public BaseNode {
 
     static N *setLeaf(const Leaf *k);
 
-    static N *getAnyChild(const N *n);
+    static N *getAnyChild(N *n);
 
     static Leaf *getAnyChildTid(const N *n);
 
@@ -389,7 +402,9 @@ class N : public BaseNode {
                             uint32_t &childrenCount);
 
     static void rebuild_node(N *node,
-                             std::set<std::pair<uint64_t, size_t>> &rs);
+                             std::vector<std::pair<uint64_t, size_t>> &rs,
+                             uint64_t start_addr, uint64_t end_addr,
+                             int thread_id);
 
 } __attribute__((aligned(64)));
 #endif

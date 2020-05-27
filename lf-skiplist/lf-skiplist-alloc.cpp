@@ -1,36 +1,37 @@
 //#include "lf-skiplist-alloc.h"
 //#include <string.h>
 //
-//namespace skiplist {
+// namespace skiplist {
 //
 ///**
 // *  epoch-based GC
 // */
-//std::mutex ti_mtx;
+// std::mutex ti_mtx;
 //__thread threadinfo *ti = nullptr;
-//threadinfo *ti_list = nullptr;
-//Epoch_Mgr *e_mgr = nullptr;
-//int tid = 0;
+// threadinfo *ti_list = nullptr;
+// Epoch_Mgr *e_mgr = nullptr;
+// int tid = 0;
 //
-//PMEMobjpool *pmem_pool;
+// PMEMobjpool *pmem_pool;
 //
-//static inline UINT_PTR unmarked_ptr(UINT_PTR p) {
+// static inline UINT_PTR unmarked_ptr(UINT_PTR p) {
 //    return (p & ~(UINT_PTR)0x01);
 //}
 //
 //#define UNMARKED_PTR(p) (node_t *)unmarked_ptr((UINT_PTR)p)
 //
-//static inline UINT_PTR unmarked_ptr_all(UINT_PTR p) {
+// static inline UINT_PTR unmarked_ptr_all(UINT_PTR p) {
 //    return (p & ~(UINT_PTR)0x07);
 //}
 //
 //#define UNMARKED_PTR_ALL(p) (node_t *)unmarked_ptr_all((UINT_PTR)p)
 //
-//static inline UINT_PTR marked_ptr(UINT_PTR p) { return (p | (UINT_PTR)0x01); }
+// static inline UINT_PTR marked_ptr(UINT_PTR p) { return (p | (UINT_PTR)0x01);
+// }
 //
 //#define MARKED_PTR(p) (node_t *)marked_ptr((UINT_PTR)p)
 //
-//static inline int ptr_is_marked(UINT_PTR p) {
+// static inline int ptr_is_marked(UINT_PTR p) {
 //    return (int)(p & (UINT_PTR)0x01);
 //}
 //
@@ -39,7 +40,7 @@
 ///**
 // * used for PMDK
 // */
-//void init_pmem() {
+// void init_pmem() {
 //    // create pool
 //
 //    const char *pool_name = "/mnt/pmem0/matianmao/skiplist.data";
@@ -60,7 +61,7 @@
 //    std::cout << "[SL]\topen pmem pool successfully\n";
 //}
 //
-//void register_thread() {
+// void register_thread() {
 //    std::lock_guard<std::mutex> lock_guard(ti_mtx);
 //    if (e_mgr == nullptr) {
 //        e_mgr = new Epoch_Mgr();
@@ -107,7 +108,7 @@
 //    std::cout << "register thread\n";
 //}
 //
-//int comparekey(node_t *n, skey_t k2, int len2) {
+// int comparekey(node_t *n, skey_t k2, int len2) {
 //    if (n->max_min_flag == MIN_KEY)
 //        return -1;
 //    if (n->max_min_flag == MAX_KEY)
@@ -133,7 +134,7 @@
 //    }
 //}
 //
-//int get_random_level() {
+// int get_random_level() {
 //    int i;
 //    int level = 1;
 //
@@ -147,7 +148,7 @@
 //    return level;
 //}
 //
-//void init_new_node_and_set_next(node_t *the_node, skey_t key, svalue_t value,
+// void init_new_node_and_set_next(node_t *the_node, skey_t key, svalue_t value,
 //                                int height) {
 //    the_node->key = key;
 //    the_node->key_len = (key == nullptr) ? 0 : strlen(key);
@@ -157,7 +158,7 @@
 //    the_node->toplevel = height;
 //}
 //
-//skiplist_t *new_skiplist() {
+// skiplist_t *new_skiplist() {
 //    register_thread();
 //
 //    node_t *min = nullptr;
@@ -214,13 +215,13 @@
 //    return sl;
 //}
 //
-//void sl_finalize_node(void *node) { ti->AddGarbageNode(node); }
+// void sl_finalize_node(void *node) { ti->AddGarbageNode(node); }
 //
-//// search operation; retrieves predecessors and successors of the searched node;
-//// does cleanup if necessary - if the searched node is marked for removal, it is
-//// unlinked for the pourposes of non-volatile memory, it is the level 0 unlink
-//// that is critical
-//int sl_search(skiplist_t *sl, skey_t key, node_t **left_nodes,
+//// search operation; retrieves predecessors and successors of the searched
+/// node; / does cleanup if necessary - if the searched node is marked for
+/// removal, it is / unlinked for the pourposes of non-volatile memory, it is
+/// the level 0 unlink / that is critical
+// int sl_search(skiplist_t *sl, skey_t key, node_t **left_nodes,
 //              node_t **right_nodes) {
 //    int i;
 //    node_t *left;
@@ -228,7 +229,7 @@
 //    node_t *left_next;
 //    node_t *right_next;
 //
-//retry:
+// retry:
 //    left = (*sl);
 //    for (i = max_level - 1; i >= 0; i--) {
 //        left_next = (node_t *)unmark_ptr_cache((UINT_PTR)left->next[i]);
@@ -298,9 +299,9 @@
 //    return (comparekey((node_t *)right, key, strlen(key)) == 0);
 //}
 //
-//// search with no cleanup, retrieves both the predecessors and the successors of
-//// the searched node
-//int sl_search_no_cleanup(skiplist_t *sl, skey_t key, node_t **left_nodes,
+//// search with no cleanup, retrieves both the predecessors and the successors
+/// of / the searched node
+// int sl_search_no_cleanup(skiplist_t *sl, skey_t key, node_t **left_nodes,
 //                         node_t **right_nodes) {
 //    int i;
 //    node_t *left;
@@ -336,7 +337,7 @@
 //
 //// simple search, does not do any cleanup, only sets the successors of the
 //// retrieved node
-//int sl_search_no_cleanup_succs(skiplist_t *sl, skey_t key,
+// int sl_search_no_cleanup_succs(skiplist_t *sl, skey_t key,
 //                               node_t **right_nodes) {
 //    int i;
 //    node_t *left;
@@ -370,7 +371,7 @@
 //    return (comparekey((node_t *)right, key, strlen(key)) == 0);
 //}
 //
-//inline int mark_node_pointers(node_t *node) {
+// inline int mark_node_pointers(node_t *node) {
 //    int i;
 //    int success = 0;
 //    // fprintf(stderr, "in mark node ptrs\n");
@@ -410,7 +411,7 @@
 //    return success;
 //}
 //
-//svalue_t skiplist_remove(skiplist_t *sl, skey_t key) {
+// svalue_t skiplist_remove(skiplist_t *sl, skey_t key) {
 //    node_t *successors[max_level];
 //    svalue_t result = 0;
 //
@@ -445,7 +446,7 @@
 //    return result;
 //}
 //
-//int skiplist_insert(skiplist_t *sl, skey_t key, svalue_t val) {
+// int skiplist_insert(skiplist_t *sl, skey_t key, svalue_t val) {
 //    node_t *to_insert;
 //    node_t *pred;
 //    node_t *succ;
@@ -458,7 +459,7 @@
 //    int found;
 //
 //    ti->JoinEpoch();
-//retry:
+// retry:
 //    found = sl_search_no_cleanup(sl, key, preds, succs);
 //
 //    if (found) {
@@ -577,7 +578,8 @@
 //            // tentative fix for problematic case in the original fraser
 //            // algorithm
 //            if ((succ != new_next) &&
-//                (CAS_PTR(&(to_insert->next[i]), new_next, succ) != new_next)) {
+//                (CAS_PTR(&(to_insert->next[i]), new_next, succ) != new_next))
+//                {
 //                // fprintf(stderr, "case\n");
 //                for (j = 1; j < to_insert->toplevel; j++) {
 //                    flush_data(&preds[j], sizeof(uint64_t));
@@ -612,13 +614,13 @@
 //    return 1;
 //}
 //
-//void skiplist_update(skiplist_t *sl, skey_t key, svalue_t val) {
+// void skiplist_update(skiplist_t *sl, skey_t key, svalue_t val) {
 //    node_t *successors[max_level];
 //    svalue_t result = 0;
 //
 //    // fprintf(stderr, "in rmove\n");
 //    ti->JoinEpoch();
-//retry:
+// retry:
 //    int found = sl_search_no_cleanup_succs(sl, key, successors);
 //
 //    // fprintf(stderr, "in rmove 2\n");
@@ -681,7 +683,7 @@
 //}
 //
 //// simple search, no cleanup;
-//static node_t *sl_left_search(skiplist_t *sl, skey_t key) {
+// static node_t *sl_left_search(skiplist_t *sl, skey_t key) {
 //    node_t *left = NULL;
 //    node_t *left_prev;
 //
@@ -705,7 +707,7 @@
 //    return left;
 //}
 //
-//svalue_t skiplist_find(skiplist_t *sl, skey_t key) {
+// svalue_t skiplist_find(skiplist_t *sl, skey_t key) {
 //
 //    svalue_t result = nullptr;
 //
@@ -723,7 +725,8 @@
 //    return result;
 //}
 //
-//void skiplist_scan(skiplist_t *sl, skey_t min, svalue_t *buf, int num, int &off,
+// void skiplist_scan(skiplist_t *sl, skey_t min, svalue_t *buf, int num, int
+// &off,
 //                   char *scan_value) {
 //    ti->JoinEpoch();
 //    node_t *left = sl_left_search(sl, min);

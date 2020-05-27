@@ -1,7 +1,9 @@
 #ifndef BTREE_H_
 #define BTREE_H_
 
-#include "pmdk_gc.h"
+#include "EpochGuard.h"
+#include "nvm_mgr.h"
+#include "threadinfo.h"
 #include "util.h"
 #include <boost/thread/shared_mutex.hpp>
 #include <cassert>
@@ -20,7 +22,10 @@
 #include <unistd.h>
 #include <vector>
 
+using namespace NVMMgr_ns;
+
 namespace fastfair {
+
 #define PAGESIZE 512
 
 static uint64_t CPU_FREQ_MHZ = 2100;
@@ -77,13 +82,10 @@ static inline void clflush(char *data, int len) {
 /**
  *  epoch-based GC
  */
-std::mutex ti_mtx;
-__thread threadinfo *ti = nullptr;
-threadinfo *ti_list = nullptr;
-Epoch_Mgr *e_mgr = nullptr;
-int tid = 0;
-
-PMEMobjpool *pmem_pool;
+typedef struct key_item {
+    size_t key_len;
+    char key[];
+} key_item;
 
 union Key {
     uint64_t ikey;
@@ -129,7 +131,7 @@ class header {
     page *sibling_ptr;       // 8 bytes
     uint32_t level;          // 4 bytes
     uint32_t switch_counter; // 4 bytes
-                             //    std::mutex *mtx;         // 8 bytes
+    //    std::mutex *mtx;         // 8 bytes
     boost::shared_mutex *mtx;
     union Key highest;  // 8 bytes
     uint8_t is_deleted; // 1 bytes
@@ -311,7 +313,7 @@ class page {
                     (i == 0) ? (char *)hdr.leftmost_ptr : records[i - 1].ptr;
 #ifdef USE_PMDK
 #ifdef FF_GC // ff_gc
-                ti->AddGarbageNode((void *)records[i].key.skey);
+//                EpochGuard::DeleteNode((void *)records[i].key.skey);
 //                printf("add garbage node, key is %s, len is %d\n",
 //                records[i].key.skey->key, records[i].key.skey->key_len);
 #endif
@@ -464,18 +466,12 @@ class page {
             entry *new_entry = (entry *)&records[0];
             entry *array_end = (entry *)&records[1];
 #ifdef USE_PMDK
-            TX_BEGIN(pmem_pool) {
-                pmemobj_tx_add_range_direct(new_entry, sizeof(entry));
-                PMEMoid p1 = pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
-                                               TOID_TYPE_NUM(struct key_item));
-                key_item *k = (key_item *)pmemobj_direct(p1);
-
-                k->key_len = key->key_len;
-                memcpy(k->key, key->key, key->key_len);
-                flush_data(k, sizeof(key_item) + key->key_len);
-                new_entry->key.skey = k;
-            }
-            TX_END
+            key_item *k = (key_item *)alloc_new_node_from_size(
+                sizeof(key_item) + key->key_len);
+            k->key_len = key->key_len;
+            memcpy(k->key, key->key, key->key_len);
+            flush_data(k, sizeof(key_item) + key->key_len);
+            new_entry->key.skey = k;
 
 #else
             //            new_entry->key.skey = make_new_key_item(key);
@@ -520,27 +516,15 @@ class page {
                 } else {
                     records[i + 1].ptr = records[i].ptr;
 #ifdef USE_PMDK
-                    TX_BEGIN(pmem_pool) {
-                        // undo log
-                        pmemobj_tx_add_range_direct(&(records[i + 1]),
-                                                    sizeof(entry));
-
-                        // allocate
-                        PMEMoid p1 =
-                            pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
-                                              TOID_TYPE_NUM(struct key_item));
-
-                        // copy key and persist
-                        key_item *k = (key_item *)pmemobj_direct(p1);
-                        if ((uint64_t)k == static_cast<uint64_t>(-1)) {
-                            std::cout << "alloc failed\n";
-                        }
-                        k->key_len = key->key_len;
-                        memcpy(k->key, key->key, key->key_len);
-                        flush_data((void *)k, sizeof(key_item) + k->key_len);
-                        records[i + 1].key.skey = k;
+                    key_item *k = (key_item *)alloc_new_node_from_size(
+                        sizeof(key_item) + key->key_len);
+                    if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                        std::cout << "alloc failed\n";
                     }
-                    TX_END
+                    k->key_len = key->key_len;
+                    memcpy(k->key, key->key, key->key_len);
+                    flush_data((void *)k, sizeof(key_item) + k->key_len);
+                    records[i + 1].key.skey = k;
 
 #else
 
@@ -558,24 +542,15 @@ class page {
                 records[0].ptr = (char *)hdr.leftmost_ptr;
 
 #ifdef USE_PMDK
-                TX_BEGIN(pmem_pool) {
-                    // undo log
-                    pmemobj_tx_add_range_direct(&records[0], sizeof(entry));
-                    PMEMoid p1 =
-                        pmemobj_tx_zalloc(sizeof(key_item) + key->key_len,
-                                          TOID_TYPE_NUM(struct key_item));
-
-                    // copy key
-                    key_item *k = (key_item *)pmemobj_direct(p1);
-                    if ((uint64_t)k == static_cast<uint64_t>(-1)) {
-                        std::cout << "alloc failed\n";
-                    }
-                    k->key_len = key->key_len;
-                    memcpy(k->key, key->key, key->key_len);
-                    flush_data((void *)k, sizeof(key_item) + k->key_len);
-                    records[0].key.skey = k;
+                key_item *k = (key_item *)alloc_new_node_from_size(
+                    sizeof(key_item) + key->key_len);
+                if ((uint64_t)k == static_cast<uint64_t>(-1)) {
+                    std::cout << "alloc failed\n";
                 }
-                TX_END
+                k->key_len = key->key_len;
+                memcpy(k->key, key->key, key->key_len);
+                flush_data((void *)k, sizeof(key_item) + k->key_len);
+                records[0].key.skey = k;
 #else
                 //                records[0].key.skey = make_new_key_item(key);
                 records[0].key.skey = key;
@@ -665,46 +640,40 @@ class page {
             uint64_t split_key;
             page *sibling;
             int sibling_cnt;
-            TX_BEGIN(pmem_pool) {
-                pmemobj_tx_add_range_direct(&hdr.sibling_ptr,
-                                            sizeof(uint64_t)); // undo log
-                PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
-                                                TOID_TYPE_NUM(char));
-                sibling = new (pmemobj_direct(ptr)) page(hdr.level);
-                // copy half to sibling and init sibling
-                m = (int)ceil(num_entries / 2);
-                split_key = records[m].key.ikey;
 
-                // migrate half of keys into the sibling
-                sibling_cnt = 0;
-                if (hdr.leftmost_ptr == nullptr) { // leaf node
-                    for (int i = m; i < num_entries; ++i) {
-                        sibling->insert_key(records[i].key.ikey, records[i].ptr,
-                                            &sibling_cnt, false);
-                    }
-                } else { // internal node
-                    for (int i = m + 1; i < num_entries; ++i) {
-                        sibling->insert_key(records[i].key.ikey, records[i].ptr,
-                                            &sibling_cnt, false);
-                    }
-                    sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
+            sibling = new (alloc_new_node_from_size(PAGESIZE)) page(hdr.level);
+            m = (int)ceil(num_entries / 2);
+            split_key = records[m].key.ikey;
+
+            // migrate half of keys into the sibling
+            sibling_cnt = 0;
+            if (hdr.leftmost_ptr == nullptr) { // leaf node
+                for (int i = m; i < num_entries; ++i) {
+                    sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                                        &sibling_cnt, false);
                 }
-
-                sibling->hdr.highest.ikey = records[m].key.ikey;
-                sibling->hdr.sibling_ptr = hdr.sibling_ptr;
-                flush_data((void *)sibling, sizeof(page));
-
-                if (hdr.leftmost_ptr == nullptr)
-                    sibling->hdr.mtx->lock();
-
-                if (IS_FORWARD(hdr.switch_counter))
-                    hdr.switch_counter++;
-                else
-                    hdr.switch_counter += 2;
-                mfence();
-                hdr.sibling_ptr = sibling;
+            } else { // internal node
+                for (int i = m + 1; i < num_entries; ++i) {
+                    sibling->insert_key(records[i].key.ikey, records[i].ptr,
+                                        &sibling_cnt, false);
+                }
+                sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
             }
-            TX_END
+
+            sibling->hdr.highest.ikey = records[m].key.ikey;
+            sibling->hdr.sibling_ptr = hdr.sibling_ptr;
+            flush_data((void *)sibling, sizeof(page));
+
+            if (hdr.leftmost_ptr == nullptr)
+                sibling->hdr.mtx->lock();
+
+            if (IS_FORWARD(hdr.switch_counter))
+                hdr.switch_counter++;
+            else
+                hdr.switch_counter += 2;
+            mfence();
+            hdr.sibling_ptr = sibling;
+
 #else
             page *sibling = new page(hdr.level); // 重载了new运算符
             register int m = (int)ceil(num_entries / 2);
@@ -768,19 +737,10 @@ class page {
 #ifdef USE_PMDK
                 //                printf("split root\n");
                 page *new_root;
-                TX_BEGIN(pmem_pool) {
-                    pmemobj_tx_add_range_direct(
-                        &(bt->root), sizeof(uint64_t)); // root undo log
-                    pmemobj_tx_add_range_direct(&(bt->height),
-                                                sizeof(uint64_t));
-                    PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
-                                                    TOID_TYPE_NUM(char));
-                    new_root = new (pmemobj_direct(ptr))
-                        page((page *)this, split_key, sibling, hdr.level + 1);
-                    bt->root = (char *)new_root;
-                    bt->height++;
-                }
-                TX_END
+                new_root = new (alloc_new_node_from_size(PAGESIZE))
+                    page((page *)this, split_key, sibling, hdr.level + 1);
+                bt->root = (char *)new_root;
+                bt->height++;
 #else
 
                 page *new_root =
@@ -895,45 +855,40 @@ class page {
             register int m;
             key_item *split_key;
             int sibling_cnt;
-            TX_BEGIN(pmem_pool) {
-                pmemobj_tx_add_range_direct(&hdr.sibling_ptr, sizeof(uint64_t));
-                PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
-                                                TOID_TYPE_NUM(char));
-                sibling = new (pmemobj_direct(ptr)) page(hdr.level);
 
-                m = (int)ceil(num_entries / 2);
-                split_key = records[m].key.skey;
-                sibling_cnt = 0;
+            sibling = new (alloc_new_node_from_size(PAGESIZE)) page(hdr.level);
 
-                if (hdr.leftmost_ptr == nullptr) { // leaf node
-                    for (int i = m; i < num_entries; ++i) {
-                        sibling->insert_key(records[i].key.skey, records[i].ptr,
-                                            &sibling_cnt, false);
-                    }
-                } else { // internal node
-                    for (int i = m + 1; i < num_entries; ++i) {
-                        sibling->insert_key(records[i].key.skey, records[i].ptr,
-                                            &sibling_cnt, false);
-                    }
-                    sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
+            m = (int)ceil(num_entries / 2);
+            split_key = records[m].key.skey;
+            sibling_cnt = 0;
+
+            if (hdr.leftmost_ptr == nullptr) { // leaf node
+                for (int i = m; i < num_entries; ++i) {
+                    sibling->insert_key(records[i].key.skey, records[i].ptr,
+                                        &sibling_cnt, false);
                 }
-
-                sibling->hdr.highest.skey = records[m].key.skey;
-                sibling->hdr.sibling_ptr = hdr.sibling_ptr;
-                flush_data((void *)sibling, sizeof(page));
-
-                if (hdr.leftmost_ptr == nullptr)
-                    sibling->hdr.mtx->lock();
-
-                // set to nullptr
-                if (IS_FORWARD(hdr.switch_counter))
-                    hdr.switch_counter++;
-                else
-                    hdr.switch_counter += 2;
-                mfence();
-                hdr.sibling_ptr = sibling;
+            } else { // internal node
+                for (int i = m + 1; i < num_entries; ++i) {
+                    sibling->insert_key(records[i].key.skey, records[i].ptr,
+                                        &sibling_cnt, false);
+                }
+                sibling->hdr.leftmost_ptr = (page *)records[m].ptr;
             }
-            TX_END
+
+            sibling->hdr.highest.skey = records[m].key.skey;
+            sibling->hdr.sibling_ptr = hdr.sibling_ptr;
+            flush_data((void *)sibling, sizeof(page));
+
+            if (hdr.leftmost_ptr == nullptr)
+                sibling->hdr.mtx->lock();
+
+            // set to nullptr
+            if (IS_FORWARD(hdr.switch_counter))
+                hdr.switch_counter++;
+            else
+                hdr.switch_counter += 2;
+            mfence();
+            hdr.sibling_ptr = sibling;
 #else
 
             page *sibling = new page(hdr.level);
@@ -1000,19 +955,11 @@ class page {
 
 #ifdef USE_PMDK
                 page *new_root;
-                TX_BEGIN(pmem_pool) {
-                    pmemobj_tx_add_range_direct(
-                        &(bt->root), sizeof(uint64_t)); // root undo log
-                    pmemobj_tx_add_range_direct(&(bt->height),
-                                                sizeof(uint64_t));
-                    PMEMoid ptr = pmemobj_tx_zalloc(sizeof(char) * PAGESIZE,
-                                                    TOID_TYPE_NUM(char));
-                    new_root = new (pmemobj_direct(ptr))
-                        page((page *)this, split_key, sibling, hdr.level + 1);
-                    bt->root = (char *)new_root;
-                    bt->height++;
-                }
-                TX_END
+
+                new_root = new (alloc_new_node_from_size(PAGESIZE))
+                    page((page *)this, split_key, sibling, hdr.level + 1);
+                bt->root = (char *)new_root;
+                bt->height++;
 #else
                 page *new_root =
                     new page((page *)this, split_key, sibling, hdr.level + 1);
@@ -1634,7 +1581,7 @@ class page {
                                                sizeof(uint64_t));
 #ifdef USE_PMDK
 #ifdef FF_GC
-                                    ti->AddGarbageNode((void *)garbage);
+//                                    ti->AddGarbageNode((void *)garbage);
 #endif
 #endif
                                 }
@@ -1666,7 +1613,7 @@ class page {
                                                    sizeof(uint64_t));
 #ifdef USE_PMDK
 #ifdef FF_GC
-                                        ti->AddGarbageNode((void *)garbage);
+//                                        ti->AddGarbageNode((void *)garbage);
 #endif
 #endif
                                     }
@@ -1701,7 +1648,7 @@ class page {
                                                    sizeof(uint64_t));
 #ifdef USE_PMDK
 #ifdef FF_GC
-                                        ti->AddGarbageNode((void *)garbage);
+//                                        ti->AddGarbageNode((void *)garbage);
 #endif
 #endif
                                     }
@@ -1734,7 +1681,7 @@ class page {
                                                    sizeof(uint64_t));
 #ifdef USE_PMDK
 #ifdef FF_GC
-                                        ti->AddGarbageNode((void *)garbage);
+//                                        ti->AddGarbageNode((void *)garbage);
 #endif
 #endif
                                     }
@@ -1846,113 +1793,19 @@ class page {
     }
 };
 
-void init_pmem() {
-    // create pool
-    const char *pool_name = "/mnt/pmem0/matianmao/fast_fair.data";
-    const char *layout_name = "fast_fair";
-    size_t pool_size = 64LL * 1024 * 1024 * 1024; // 16GB
-
-    if (access(pool_name, 0)) {
-        pmem_pool = pmemobj_create(pool_name, layout_name, pool_size, 0666);
-        if (pmem_pool == nullptr) {
-            std::cout << "[FAST FAIR]\tcreate fail\n";
-            assert(0);
-        }
-        std::cout << "[FAST FAIR]\tcreate\n";
-    } else {
-        pmem_pool = pmemobj_open(pool_name, layout_name);
-        std::cout << "[FAST FAIR]\topen\n";
-    }
-    std::cout << "[FAST FAIR]\topen pmem pool successfully\n";
-}
-
-void *allocate(size_t size) {
-    void *addr;
-    PMEMoid ptr;
-    int ret = pmemobj_zalloc(pmem_pool, &ptr, sizeof(char) * size,
-                             TOID_TYPE_NUM(char));
-    if (ret) {
-        std::cout << "[FAST FAIR]\tallocate btree successfully\n";
-        assert(0);
-    }
-    addr = (char *)pmemobj_direct(ptr);
-    return addr;
-}
-
-void register_thread() {
-    std::lock_guard<std::mutex> lock_guard(ti_mtx);
-    if (e_mgr == nullptr) {
-        e_mgr = new Epoch_Mgr();
-        e_mgr->StartThread();
-    }
-    if (ti_list == nullptr) {
-#ifdef USE_PMDK
-        PMEMoid ptr;
-        int ret = pmemobj_zalloc(pmem_pool, &ptr, sizeof(threadinfo),
-                                 TOID_TYPE_NUM(char));
-        if (ret) {
-            std::cout << "[FAST FAIR]\tti head allocate fail\n";
-            assert(0);
-        }
-        ti_list = new (pmemobj_direct(ptr)) threadinfo(e_mgr);
-#else
-        ti_list = new threadinfo(e_mgr);
-#endif
-        ti_list->next = nullptr;
-    }
-
-#ifdef USE_PMDK
-    PMEMoid ptr;
-    int ret = pmemobj_zalloc(pmem_pool, &ptr, sizeof(threadinfo),
-                             TOID_TYPE_NUM(char));
-    if (ret) {
-        std::cout << "[FAST FAIR]\tti allocate fail\n";
-        assert(0);
-    }
-    ti = new (pmemobj_direct(ptr)) threadinfo(e_mgr);
-#else
-    ti = new threadinfo(e_mgr);
-#endif
-    ti->id = tid++;
-    ti->next = ti_list->next;
-    ti->head = ti_list;
-    ti_list->next = ti;
-#ifdef USE_PMDK
-    ti->pool = pmem_pool;
-
-    ret = pmemobj_zalloc(pmem_pool, &ptr, sizeof(GCMetaData),
-                         TOID_TYPE_NUM(char));
-    if (ret) {
-        std::cout << "[FAST FAIR]\tgc meta data allocate fail\n";
-        assert(0);
-    }
-    ti->md = new (pmemobj_direct(ptr)) GCMetaData();
-#else
-    ti->md = new GCMetaData();
-#endif
-    // persist garbage list
-    flush_data((void *)ti->md, sizeof(GCMetaData));
-    flush_data((void *)ti, sizeof(threadinfo));
-    flush_data((void *)ti_list, sizeof(threadinfo));
-}
-
 /*
  * class btree
  */
 btree::btree() {
-    register_thread();
+    std::cout << "FastFair with ACMA test\n";
 
+    init_nvm_mgr();
+    register_threadinfo();
+    NVMMgr *mgr = get_nvm_mgr();
     // allocate root
 #ifdef USE_PMDK
-    TX_BEGIN(pmem_pool) {
-        pmemobj_tx_add_range_direct(&root, sizeof(uint64_t));
-        std::cout << "[FAST FAIR]\topen pmem pool successfully\n";
-        PMEMoid ptr =
-            pmemobj_tx_zalloc(sizeof(char) * PAGESIZE, TOID_TYPE_NUM(char));
-        root = (char *)(new (pmemobj_direct(ptr)) page());
-        flush_data((void *)root, sizeof(page));
-    }
-    TX_END
+    root = (char *)new (mgr->alloc_tree_root()) page();
+    flush_data((void *)root, sizeof(page));
     std::cout << "[FAST FAIR]\talloc root successfully\n";
 #else
     root = (char *)new page();
@@ -1963,15 +1816,7 @@ btree::btree() {
     std::cout << "test different component\n";
 
 #ifdef USE_PMDK
-
-#ifdef PMALLOC
-    std::cout << "atomic PMALLOC\n";
-#elif TXPMALLOC
-    std::cout << "tx+atomic pmalloc\n";
-#elif TRANSACTIONAL
-    std::cout << "transactional\n";
-#endif
-
+    std::cout << "using ACMA allocator\n";
 #else
     std::cout << "using DRAM allocator\n";
 #endif
@@ -2003,7 +1848,7 @@ key_item *btree::make_key_item(char *key, size_t key_len, bool flush) {
 }
 
 char *btree::btree_search(uint64_t key) {
-    ti->JoinEpoch();
+    EpochGuard NewEpoch;
     page *p = (page *)root;
 
     while (p->hdr.leftmost_ptr != nullptr) {
@@ -2018,12 +1863,11 @@ char *btree::btree_search(uint64_t key) {
         }
     }
 
-    ti->LeaveEpoch();
     return (char *)t;
 }
 
 char *btree::btree_search(char *key) {
-    ti->JoinEpoch();
+    EpochGuard NewEpoch;
     page *p = (page *)root;
 
     key_item *new_item = make_key_item(key, strlen(key) + 1, false);
@@ -2041,24 +1885,19 @@ char *btree::btree_search(char *key) {
         }
     }
 
-    ti->LeaveEpoch();
     return (char *)t;
 }
 
 void btree::btree_update(uint64_t key, char *right) {
-    ti->JoinEpoch();
+    EpochGuard NewEpoch;
     page *p = (page *)root;
 
     char *value = right;
 #ifdef USE_PMDK
-    TX_BEGIN(pmem_pool) {
-        pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
-        PMEMoid p = pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
-        value = (char *)pmemobj_direct(p);
-        memcpy(value, right, strlen(right) + 1);
-        flush_data(value, strlen(right) + 1);
-    }
-    TX_END
+    value = (char *)alloc_new_node_from_size(strlen(right));
+    memcpy(value, right, strlen(right));
+    flush_data(value, strlen(right));
+
 #else
     value = new char[strlen(right) + 1];
     memcpy(value, right, strlen(right) + 1);
@@ -2079,25 +1918,19 @@ void btree::btree_update(uint64_t key, char *right) {
 
     if (t != nullptr) {
     }
-    ti->LeaveEpoch();
 }
 
 void btree::btree_update(char *key, char *right) {
-    ti->JoinEpoch();
+    EpochGuard NewEpoch;
     page *p = (page *)root;
 
     key_item *new_item = make_key_item(key, strlen(key) + 1, false);
 
     char *value = right;
 #ifdef USE_PMDK
-    TX_BEGIN(pmem_pool) {
-        pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
-        PMEMoid p = pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
-        value = (char *)pmemobj_direct(p);
-        memcpy(value, right, strlen(right) + 1);
-        flush_data(value, strlen(right) + 1);
-    }
-    TX_END
+    value = (char *)alloc_new_node_from_size(strlen(right));
+    memcpy(value, right, strlen(right));
+    flush_data(value, strlen(right));
 #else
     value = new char[strlen(right) + 1];
     memcpy(value, right, strlen(right) + 1);
@@ -2116,27 +1949,19 @@ void btree::btree_update(char *key, char *right) {
             break;
         }
     }
-
-    ti->LeaveEpoch();
 }
 
 // insert the key in the leaf node
 void btree::btree_insert(uint64_t key, char *right,
                          bool persist = false) { // need to be string
-    ti->JoinEpoch();
+    EpochGuard NewEpoch;
     page *p = (page *)root;
     char *value = right;
     if (persist == false) {
 #ifdef USE_PMDK
-        TX_BEGIN(pmem_pool) {
-            pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
-            PMEMoid p =
-                pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
-            value = (char *)pmemobj_direct(p);
-            memcpy(value, right, strlen(right) + 1);
-            flush_data(value, strlen(right) + 1);
-        }
-        TX_END
+        value = (char *)alloc_new_node_from_size(strlen(right));
+        memcpy(value, right, strlen(right));
+        flush_data(value, strlen(right));
 #else
         char *value = new char[strlen(right) + 1];
         memcpy(value, right, strlen(right) + 1);
@@ -2151,29 +1976,22 @@ void btree::btree_insert(uint64_t key, char *right,
     if (p && !p->store(this, nullptr, key, value, true, true)) { // store
         btree_insert(key, value, true);
     }
-    ti->LeaveEpoch();
 }
 
 // insert the key in the leaf node
 void btree::btree_insert(char *key, char *right,
                          bool persist = false) { // need to be string
-                                                 //    std::cout<<strlen(right);
-    ti->JoinEpoch();
+    //    std::cout<<strlen(right);
+    EpochGuard NewEpoch;
     page *p = (page *)root;
 
     key_item *new_item = make_key_item(key, strlen(key) + 1, true);
     char *value = right;
     if (persist == false) {
 #ifdef USE_PMDK
-        TX_BEGIN(pmem_pool) {
-            pmemobj_tx_add_range_direct(&value, sizeof(uint64_t));
-            PMEMoid p =
-                pmemobj_tx_zalloc(strlen(right) + 1, TOID_TYPE_NUM(char));
-            value = (char *)pmemobj_direct(p);
-            memcpy(value, right, strlen(right) + 1);
-            flush_data(value, strlen(right) + 1);
-        }
-        TX_END
+        value = (char *)alloc_new_node_from_size(strlen(right));
+        memcpy(value, right, strlen(right));
+        flush_data(value, strlen(right));
 #else
         char *value = new char[strlen(right) + 1];
         memcpy(value, right, strlen(right) + 1);
@@ -2188,7 +2006,6 @@ void btree::btree_insert(char *key, char *right,
     if (p && !p->store(this, nullptr, new_item, value, true, true)) { // store
         btree_insert(key, value, true);
     }
-    ti->LeaveEpoch();
 }
 
 // store the integer key into the node at the given level
@@ -2224,7 +2041,7 @@ void btree::btree_insert_internal(char *left, key_item *key, char *right,
 }
 
 void btree::btree_delete(uint64_t key) {
-    ti->JoinEpoch();
+    EpochGuard NewEpoch;
     page *p = (page *)root;
 
     while (p->hdr.leftmost_ptr != nullptr) {
@@ -2245,12 +2062,11 @@ void btree::btree_delete(uint64_t key) {
     } else {
         printf("not found the key to delete %lu\n", key);
     }
-    ti->LeaveEpoch();
 }
 
 void btree::btree_delete(char *key) {
     //    std::cout<<key<<" "<<strlen(key)<<"\n";
-    ti->JoinEpoch();
+    EpochGuard NewEpoch;
     page *p = (page *)root;
 
     key_item *new_item = make_key_item(key, strlen(key) + 1, true);
@@ -2274,12 +2090,12 @@ void btree::btree_delete(char *key) {
     } else {
         printf("not found the key to delete %lu\n", key);
     }
-    ti->LeaveEpoch();
 }
 
 // Function to search integer keys from "min" to "max"
 void btree::btree_search_range(uint64_t min, uint64_t max, unsigned long *buf,
                                int num, int &off) {
+    EpochGuard NewEpoch;
     page *p = (page *)root;
 
     while (p) {
@@ -2298,6 +2114,7 @@ void btree::btree_search_range(uint64_t min, uint64_t max, unsigned long *buf,
 // Function to search string keys from "min" to "max"
 void btree::btree_search_range(char *min, char *max, unsigned long *buf,
                                int num, int &off, char *scan_value) {
+    EpochGuard NewEpoch;
     page *p = (page *)root;
     key_item *min_item = make_key_item(min, strlen(min) + 1, false);
     key_item *max_item = make_key_item(max, strlen(max) + 1, false);

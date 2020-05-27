@@ -54,6 +54,8 @@ struct Config {
     int throughput;
     bool latency_test;
 
+    bool instant_restart;
+
     void report() {
         printf("--- Config ---\n");
         printf(
@@ -108,7 +110,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     state.num_threads = 4;
     state.key_type = Integer;
     state.email = 0;
-    state.init_keys = 10000000;
+    state.init_keys = 20000000;
     state.time = 5;
     state.val_length = 8;
     state.share_memory = true;
@@ -120,11 +122,12 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     state.read_ratio = 50;
     state.throughput = 10000000;
     state.latency_test = false;
+    state.instant_restart = false;
 
     // Parse args
     while (1) {
         int idx = 0;
-        int c = getopt_long(argc, argv, "f:t:K:n:k:L:sd:b:w:S:l:r:T:e:", opts,
+        int c = getopt_long(argc, argv, "f:t:K:n:k:L:sd:b:w:S:l:r:T:e:i", opts,
                             &idx);
 
         if (c == -1)
@@ -180,10 +183,16 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
         case 'h':
             usage_exit(stdout);
             break;
+        case 'i':
+            state.instant_restart = true;
+            break;
         default:
             fprintf(stderr, "\nUnknown option: -%c-\n", c);
             usage_exit(stderr);
         }
+    }
+    if (state.instant_restart == true) {
+        std::cout << "----------test instant restart----------\n";
     }
     if (state.key_type == String) {
         std::cout << "value length: " << state.val_length << "\n";

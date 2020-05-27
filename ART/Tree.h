@@ -4,6 +4,7 @@
 #include "N256.h"
 #include "N4.h"
 #include "N48.h"
+#include <libpmemobj.h>
 #include <set>
 
 namespace PART_ns {
@@ -81,6 +82,7 @@ int get_count();
 #endif
 
 #else
+
 class Tree {
   public:
   private:
@@ -134,7 +136,8 @@ class Tree {
 
     ~Tree();
 
-    void rebuild(std::set<std::pair<uint64_t, size_t>> &rs);
+    void rebuild(std::vector<std::pair<uint64_t, size_t>> &rs,
+                 uint64_t start_addr, uint64_t end_addr, int thread_id);
 
     Leaf *lookup(const Key *k) const;
 
@@ -150,6 +153,15 @@ class Tree {
 
     Leaf *allocLeaf(const Key *k) const;
 } __attribute__((aligned(64)));
+
+#ifdef ARTPMDK
+void *allocate_size(size_t size);
+
+#endif
+
+#ifdef COUNT_ALLOC
+double getalloctime();
+#endif
 
 #ifdef CHECK_COUNT
 int get_count();

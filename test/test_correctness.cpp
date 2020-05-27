@@ -16,7 +16,7 @@
 //    std::cout << "[TEST]\tstart to test correctness\n";
 //    clear_data();
 //
-//    const int nthreads = 30;
+//    const int nthreads = 1;
 //    const int test_iter = 10000;
 //
 //    std::vector<std::string> key_vec;
@@ -59,8 +59,8 @@
 //        ASSERT_TRUE(ret);
 //        ASSERT_EQ(ret->key_len, key.size());
 //        ASSERT_EQ(ret->val_len, key.size());
-//        ASSERT_EQ(memcmp(ret->fkey, key.c_str(), key.size()), 0);
-//        ASSERT_EQ(memcmp(ret->value, key.c_str(), key.size()), 0);
+//        ASSERT_EQ(memcmp(ret->kv, key.c_str(), key.size()), 0);
+//        ASSERT_EQ(memcmp(ret->kv+key.size(), key.c_str(), key.size()), 0);
 //        //        std::cout<<(char *)ret<<"\n";
 //    }
 //
@@ -69,6 +69,7 @@
 //    for (int i = 0; i < nthreads; i++) {
 //        tid[i] = new std::thread(
 //            [&](int id) {
+//                std::cout<<"thread "<<id<<"\n";
 //                NVMMgr_ns::register_threadinfo();
 //                Key *str_key = new Key();
 //                Tree::OperationResults res;
@@ -82,8 +83,9 @@
 //                    ASSERT_TRUE(ret);
 //                    ASSERT_EQ(ret->key_len, kk.size());
 //                    ASSERT_EQ(ret->val_len, kk.size());
-//                    ASSERT_EQ(memcmp(ret->fkey, kk.c_str(), kk.size()), 0);
-//                    ASSERT_EQ(memcmp(ret->value, kk.c_str(), kk.size()), 0);
+//                    ASSERT_EQ(memcmp(ret->kv, kk.c_str(), kk.size()), 0);
+//                    ASSERT_EQ(memcmp(ret->kv+kk.size(), kk.c_str(),
+//                    kk.size()), 0);
 //
 //                    // update
 //                    std::string newval = "0" + kk + "0";
@@ -99,7 +101,7 @@
 //                    std::string old_ret(kk);
 //                    old_ret = "0" + old_ret + "0";
 //                    ASSERT_EQ(ret->val_len, old_ret.size());
-//                    ASSERT_EQ(memcmp(ret->value, old_ret.c_str(),
+//                    ASSERT_EQ(memcmp(ret->kv+kk.size(), old_ret.c_str(),
 //                    ret->val_len),
 //                              0);
 //                }
@@ -116,7 +118,7 @@
 //                    std::string old_ret(kk);
 //                    old_ret = "0" + old_ret + "0";
 //                    ASSERT_EQ(ret->val_len, old_ret.size());
-//                    ASSERT_EQ(memcmp(ret->value, old_ret.c_str(),
+//                    ASSERT_EQ(memcmp(ret->kv+kk.size(), old_ret.c_str(),
 //                    ret->val_len),
 //                              0);
 //
@@ -138,7 +140,7 @@
 //                    std::string old_ret(kk);
 //                    old_ret = "madsys" + old_ret + "aaa";
 //                    ASSERT_EQ(ret->val_len, old_ret.size());
-//                    ASSERT_EQ(memcmp(ret->value, old_ret.c_str(),
+//                    ASSERT_EQ(memcmp(ret->kv + kk.size(), old_ret.c_str(),
 //                    ret->val_len),
 //                              0);
 //                }
@@ -171,7 +173,7 @@
 //                    Leaf *ret = art->lookup(str_key);
 //                    ASSERT_TRUE(ret);
 //                    ASSERT_EQ(ret->val_len, kk.size());
-//                    ASSERT_EQ(memcmp(ret->value, (char *)kk.c_str(),
+//                    ASSERT_EQ(memcmp(ret->kv+kk.size(), (char *)kk.c_str(),
 //                    kk.size()),
 //                              0);
 //                }

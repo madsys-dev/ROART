@@ -53,4 +53,6 @@ class cpuCycleTimer {
     double duration() { // ns
         return total / CPU_FREQUENCY;
     }
+    double average() { return (double)total / CPU_FREQUENCY / count; }
+    long long Countnum() { return count; }
 };

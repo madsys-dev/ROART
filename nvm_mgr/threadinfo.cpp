@@ -1,6 +1,7 @@
 #include "threadinfo.h"
 #include "nvm_mgr.h"
 #include "pmalloc_wrap.h"
+#include "timer.h"
 #include <assert.h>
 #include <iostream>
 #include <list>
@@ -25,6 +26,27 @@ int tid = 0;
 
 // global Epoch_Mgr
 Epoch_Mgr *epoch_mgr = nullptr;
+
+#ifdef COUNT_ALLOC
+__thread cpuCycleTimer *dcmm_time = nullptr;
+double getdcmmalloctime() { return dcmm_time->duration(); }
+#endif
+
+#ifdef INSTANT_RESTART
+uint64_t thread_result[40][8];
+void init() { memset(thread_result, 0, sizeof(thread_result)); }
+void increase(int id) { thread_result[id][0]++; }
+uint64_t total(int thread_num) {
+    uint64_t ans = 0;
+    for (int i = 0; i < thread_num; i++) {
+        ans += thread_result[i][0];
+    }
+    return ans;
+}
+
+__thread uint64_t thread_generation = 0;
+uint64_t get_threadlocal_generation() { return thread_generation; }
+#endif
 
 size_t get_node_size(PART_ns::NTypes type) {
     switch (type) {
@@ -87,6 +109,7 @@ void buddy_allocator::insert_into_freelist(uint64_t addr, size_t size) {
     uint64_t curr_addr = addr;
     size_t curr_size = size;
     while (curr_size) {
+        //        std::cout<<"size is "<<curr_size <<"\n";
         for (int curr_id = free_list_number - 1; curr_id >= 0; curr_id--) {
             if (curr_addr % power_two[curr_id] == 0 &&
                 curr_size >= power_two[curr_id]) {
@@ -260,12 +283,33 @@ void thread_info::FreeEpochNode(void *node_p) {
 }
 
 void *alloc_new_node_from_type(PART_ns::NTypes type) {
+#ifdef COUNT_ALLOC
+    if (dcmm_time == nullptr)
+        dcmm_time = new cpuCycleTimer();
+    dcmm_time->start();
+#endif
+
     size_t node_size = size_align(get_node_size(type), 64);
-    return ti->free_list->alloc_node(node_size);
+    void *addr = ti->free_list->alloc_node(node_size);
+
+#ifdef COUNT_ALLOC
+    dcmm_time->end();
+#endif
+    return addr;
 }
 
 void *alloc_new_node_from_size(size_t size) {
-    return ti->free_list->alloc_node(size);
+#ifdef COUNT_ALLOC
+    if (dcmm_time == nullptr)
+        dcmm_time = new cpuCycleTimer();
+    dcmm_time->start();
+#endif
+
+    void *addr = ti->free_list->alloc_node(size);
+#ifdef COUNT_ALLOC
+    dcmm_time->end();
+#endif
+    return addr;
 }
 
 void free_node_from_type(uint64_t addr, PART_ns::NTypes type) {
@@ -280,6 +324,10 @@ void free_node_from_size(uint64_t addr, size_t size) {
 }
 
 void register_threadinfo() {
+#ifdef INSTANT_RESTART
+    NVMMgr *mgr = get_nvm_mgr();
+    thread_generation = mgr->get_generation_version();
+#endif
     std::lock_guard<std::mutex> lock_guard(ti_lock);
 
     if (pmblock == nullptr) {

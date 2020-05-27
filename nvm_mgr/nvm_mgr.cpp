@@ -1,9 +1,12 @@
 #include "nvm_mgr.h"
+#include "Tree.h"
 #include "threadinfo.h"
 #include <cassert>
 #include <iostream>
+#include <math.h>
 #include <mutex>
 #include <stdio.h>
+#include <vector>
 
 namespace NVMMgr_ns {
 
@@ -32,7 +35,6 @@ NVMMgr::NVMMgr() {
     // access 的返回结果， 0: 存在， 1: 不存在
     int initial = access(get_filename(), F_OK);
     first_created = false;
-    recovery_set.clear();
 
     if (initial) {
         int result = create_file(get_filename(), filesize);
@@ -76,9 +78,16 @@ NVMMgr::NVMMgr() {
         meta_data->status = magic_number;
         meta_data->threads = 0;
         meta_data->free_bit_offset = 0;
+        meta_data->generation_version = 0;
 
         flush_data((void *)meta_data, PGSIZE);
         printf("[NVM MGR]\tinitialize nvm file's head\n");
+    } else {
+        meta_data->generation_version++;
+        flush_data((void *)&meta_data->generation_version, sizeof(uint64_t));
+        printf("nvm mgr restart, the free offset is %lld, generation version "
+               "is %lld\n",
+               meta_data->free_bit_offset, meta_data->generation_version);
     }
 }
 
@@ -165,52 +174,78 @@ void *NVMMgr::alloc_block(int tid) {
 
 // mutiple threads to recovery free list for
 // threads using recovery_set
-void NVMMgr::recovery_free_memory() {
+void NVMMgr::recovery_free_memory(PART_ns::Tree *art, int forward_thread) {
+    int owner = 0;
+    for (int i = 0; i < meta_data->free_bit_offset; i++) {
+        meta_data->bitmap[i] = (owner++) % forward_thread;
+    }
+    std::cout << "finish set owner, all " << meta_data->free_bit_offset
+              << " pages\n";
+
     const size_t power_two[10] = {8,   16,  32,   64,   128,
                                   256, 512, 1024, 2048, 4096};
-    const int thread_num = 16;
+    const int thread_num = 36;
     std::thread *tid[thread_num];
     int per_thread_block = meta_data->free_bit_offset / thread_num;
     if (meta_data->free_bit_offset % thread_num != 0)
         per_thread_block++;
 
+    std::cout << "every thread needs to recover " << per_thread_block
+              << " pages\n";
+
     for (int i = 0; i < thread_num; i++) {
         tid[i] = new std::thread(
             [&](int id) {
                 // [start, end]
-                int start = id * per_thread_block;
-                int end = (id + 1) * per_thread_block;
-                for (int j = start;
-                     j < std::min(end, (int)meta_data->free_bit_offset); j++) {
-                    uint64_t start_addr = data_block_start + j * PGSIZE;
-                    uint64_t end_addr = start_addr + PGSIZE;
-                    int tid =
-                        meta_data
-                            ->bitmap[j]; // this block belong to which thread
-                    thread_info *the_ti = (thread_info *)get_thread_info(tid);
+                uint64_t start = id * per_thread_block;
+                uint64_t end = (id + 1) * per_thread_block;
+                //                std::cout << "start " << start
+                //                          << " end " << end<<"\n";
+                uint64_t start_addr = data_block_start + start * PGSIZE;
+                uint64_t end_addr = std::min(
+                    data_block_start + end * PGSIZE,
+                    data_block_start + meta_data->free_bit_offset * PGSIZE);
+                //                std::set<std::pair<uint64_t, size_t>>
+                //                    recovery_set; // used for memory recovery
+                std::vector<std::pair<uint64_t, size_t>> recovery_set;
 
-                    auto iter =
-                        recovery_set.upper_bound(std::make_pair(start_addr, 0));
-                    while (iter != recovery_set.end() &&
-                           iter->first < end_addr) {
-                        uint64_t this_addr = iter->first;
-                        uint64_t this_size = iter->second;
-                        for (int id = 0; id < 10; id++) {
-                            if (this_size <= power_two[id]) {
-                                this_size = power_two[id];
-                                break;
-                            }
-                        }
-                        the_ti->free_list->insert_into_freelist(
-                            start_addr, this_addr - start_addr);
-                        start_addr = this_addr + this_size;
-                        iter++;
-                    }
-                    if (end_addr - start_addr > 0) {
-                        the_ti->free_list->insert_into_freelist(
-                            start_addr, end_addr - start_addr);
-                    }
-                }
+                art->rebuild(recovery_set, start_addr, end_addr, id);
+#ifdef RECLAIM_MEMORY
+
+                std::sort(recovery_set.begin(), recovery_set.end());
+                std::cout << "start to reclaim\n";
+
+//                for (int i = 0; i < recovery_set.size(); i++) {
+//                    uint64_t this_addr = recovery_set[i].first;
+//                    uint64_t this_size = recovery_set[i].second;
+//                    for (int id = 0; id < 10; id++) {
+//                        if (this_size <= power_two[id]) {
+//                            this_size = power_two[id];
+//                            break;
+//                        }
+//                    }
+//
+//                    int j = start_addr / PGSIZE;
+//                    int tid =
+//                        meta_data
+//                            ->bitmap[j]; // this block belong to which thread
+//                    thread_info *the_ti = (thread_info *)get_thread_info(tid);
+//
+//                    the_ti->free_list->insert_into_freelist(
+//                        start_addr, this_addr - start_addr);
+//                    start_addr = this_addr + this_size;
+//                }
+//
+//                int j = start_addr / PGSIZE;
+//                int tid =
+//                    meta_data->bitmap[j]; // this block belong to which thread
+//                thread_info *the_ti = (thread_info *)get_thread_info(tid);
+//
+//                if (end_addr >= start_addr) {
+//                    the_ti->free_list->insert_into_freelist(
+//                        start_addr, end_addr - start_addr);
+//                }
+#endif
             },
             i);
     }

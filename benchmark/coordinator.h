@@ -6,9 +6,17 @@
 #include "Tree.h"
 #include "benchmarks.h"
 #include "config.h"
+#include <time.h>
+
+#ifdef ACMA
+#include "fast_fair_acma.h"
+#include "skiplist-acma.h"
+#else
 #include "fast_fair.h"
-#include "nvm_mgr.h"
 #include "skiplist.h"
+#endif
+
+#include "nvm_mgr.h"
 #include "threadinfo.h"
 #include "timer.h"
 #include "util.h"
@@ -32,9 +40,17 @@ template <typename K, typename V, int size> class Coordinator {
         double throughput;
         double update_latency_breaks[3];
         double find_latency_breaks[3];
+        double total;
+        long long count;
+        long long helpcount;
+        long long writecount;
 
         Result() {
             throughput = 0;
+            total = 0;
+            count = 0;
+            helpcount = 0;
+            writecount = 0;
             for (int i = 0; i < 3; i++) {
                 update_latency_breaks[i] = find_latency_breaks[i] = 0;
             }
@@ -42,6 +58,10 @@ template <typename K, typename V, int size> class Coordinator {
 
         void operator+=(Result &r) {
             this->throughput += r.throughput;
+            this->total += r.total;
+            this->count += r.count;
+            this->helpcount += r.helpcount;
+            this->writecount += r.writecount;
             for (int i = 0; i < 3; i++) {
                 this->update_latency_breaks[i] += r.update_latency_breaks[i];
                 this->find_latency_breaks[i] += r.find_latency_breaks[i];
@@ -136,6 +156,14 @@ template <typename K, typename V, int size> class Coordinator {
 
         char scan_value[val_len + 5];
 
+        int xcount = 0;
+        cpuCycleTimer t;
+        int write = 0;
+
+#ifdef COUNT_ALLOC
+        cpuCycleTimer writeop;
+#endif
+
         while (done == 0) {
 
             V result = 1;
@@ -148,7 +176,10 @@ template <typename K, typename V, int size> class Coordinator {
                 auto next_operation = benchmark->nextIntOperation();
                 op = next_operation.first;
                 d = next_operation.second;
-                k->Init(d, sizeof(uint64_t), d);
+                //                std::string s = std::to_string(d);
+                //                k->Init((char *)s.c_str(), s.size(), value,
+                //                val_len);
+                k->Init((char *)&d, sizeof(uint64_t), value, val_len);
             } else if (conf.key_type == String) {
                 auto next_operation = benchmark->nextStrOperation();
                 op = next_operation.first;
@@ -156,21 +187,35 @@ template <typename K, typename V, int size> class Coordinator {
                 k->Init((char *)s.c_str(), s.size(), value, val_len);
             }
 
-            cpuCycleTimer t;
-            if (conf.latency_test) {
-                t.start();
-            }
-
             PART_ns::Tree::OperationResults res;
             switch (op) {
             case UPDATE: {
                 //                std::cout<<"update key "<<s<<"\n";
+#ifdef COUNT_ALLOC
+                writeop.start();
+#endif
+
                 art->update(k);
+
+#ifdef COUNT_ALLOC
+                writeop.end();
+#endif
+                write++;
                 break;
             }
             case INSERT: {
                 // printf("[%d] start insert %lld\n", workerid, d);
+#ifdef COUNT_ALLOC
+                writeop.start();
+#endif
+
                 res = art->insert(k);
+
+#ifdef COUNT_ALLOC
+                writeop.end();
+#endif
+                if (res == PART_ns::Tree::OperationResults::Success)
+                    xcount++;
                 break;
             }
             case REMOVE: {
@@ -179,8 +224,14 @@ template <typename K, typename V, int size> class Coordinator {
                 break;
             }
             case GET: {
+                if (conf.latency_test) {
+                    t.start();
+                }
                 //                std::cout<<"lookup key "<<s<<"\n";
                 art->lookup(k);
+                if (conf.latency_test) {
+                    t.end();
+                }
                 break;
             }
             case SCAN: {
@@ -201,18 +252,29 @@ template <typename K, typename V, int size> class Coordinator {
                 exit(-1);
             }
             }
-            if (conf.latency_test) {
-                t.end();
-                while (t.duration() < submit_time) {
-                    t.start();
-                    t.end();
-                }
-            }
 
             tx++;
         }
         result->throughput = tx;
-        // printf("[%d] finish %d insert\n", workerid, count);
+        if (conf.latency_test) {
+            result->total = t.duration();
+            result->count = t.Countnum();
+        }
+        result->helpcount = PART_ns::gethelpcount();
+        result->writecount = write;
+
+        printf("[%d] finish %d insert\n", workerid, xcount);
+
+#ifdef COUNT_ALLOC
+#ifdef ARTPMDK
+        printf("[%d]\twrite latency %.3f, alloc time %.3f\n", workerid,
+               writeop.average(), PART_ns::getalloctime() / writeop.Countnum());
+#else
+        printf("[%d]\twrite latency %.3f, alloc time %.3f\n", workerid,
+               writeop.average(),
+               NVMMgr_ns::getdcmmalloctime() / writeop.Countnum());
+#endif
+#endif
 
 #ifdef PERF_LATENCY
         for (int i = 0; i < 3; i++) {
@@ -242,7 +304,11 @@ template <typename K, typename V, int size> class Coordinator {
         Benchmark *benchmark = getBenchmark(conf);
         printf("[WORKER]\thello, I am worker %d\n", workerid);
         stick_this_thread_to_core(workerid);
+#ifdef ACMA
+        NVMMgr_ns::register_threadinfo();
+#else
         fastfair::register_thread();
+#endif
         bar->wait();
 
         unsigned long tx = 0;
@@ -340,13 +406,14 @@ template <typename K, typename V, int size> class Coordinator {
                     bt->btree_insert((char *)s.c_str(), value);
                 }
 
-                if (conf.key_type == Integer) {
-                    //                    std::cout<<"delete key "<<d<<"\n";
-                    bt->btree_delete(d);
-                } else if (conf.key_type == String) {
-                    //                    std::cout<<"delete key "<<s<<"\n";
-                    bt->btree_delete((char *)s.c_str());
-                }
+                //                if (conf.key_type == Integer) {
+                //                    //                    std::cout<<"delete
+                //                    key "<<d<<"\n"; bt->btree_delete(d);
+                //                } else if (conf.key_type == String) {
+                //                    //                    std::cout<<"delete
+                //                    key "<<s<<"\n"; bt->btree_delete((char
+                //                    *)s.c_str());
+                //                }
 
                 break;
             }
@@ -391,12 +458,10 @@ template <typename K, typename V, int size> class Coordinator {
                 int resultFound = 0;
                 //                std::cout<<"ff scan "<<s<<"\n";
                 // TODO
-                //                bt->btree_search_range((char *)s.c_str(),
-                //                                       (char *)maxkey.c_str(),
-                //                                       (unsigned long *)buf,
-                //                                       conf.scan_length,
-                //                                       resultFound,
-                //                                       scan_value);
+                bt->btree_search_range((char *)s.c_str(),
+                                       (char *)maxkey.c_str(),
+                                       (unsigned long *)buf, conf.scan_length,
+                                       resultFound, scan_value);
 
                 //                std::cout<<"find "<<resultFound<<"\n";
                 break;
@@ -440,7 +505,11 @@ template <typename K, typename V, int size> class Coordinator {
         Benchmark *benchmark = getBenchmark(conf);
         printf("[WORKER]\thello, I am worker %d\n", workerid);
         stick_this_thread_to_core(workerid);
+#ifdef ACMA
+        NVMMgr_ns::register_threadinfo();
+#else
         skiplist::register_thread();
+#endif
         bar->wait();
 
         unsigned long tx = 0;
@@ -519,17 +588,17 @@ template <typename K, typename V, int size> class Coordinator {
 #ifdef VARIABLE_LENGTH
                 skiplist::skiplist_update(sl, (char *)s.c_str(), value);
 #else
-                skiplist::skiplist_update(sl, d,d);
+                skiplist::skiplist_update(sl, d, d);
 #endif
                 break;
             }
             case INSERT: {
 #ifdef VARIABLE_LENGTH
                 skiplist::skiplist_insert(sl, (char *)s.c_str(), value);
-                skiplist::skiplist_remove(sl, (char *)s.c_str());
+//                skiplist::skiplist_remove(sl, (char *)s.c_str());
 #else
                 skiplist::skiplist_insert(sl, d, d);
-                skiplist::skiplist_remove(sl, d);
+//                skiplist::skiplist_remove(sl, d);
 #endif
                 break;
             }
@@ -596,8 +665,154 @@ template <typename K, typename V, int size> class Coordinator {
         printf("[WORKER]\tworker %d finished\n", workerid);
     }
 
+#ifdef INSTANT_RESTART
+    void art_restart(PART_ns::Tree *art, int workerid, Benchmark *b) {
+        // Benchmark *benchmark = getBenchmark(conf);
+        Benchmark *benchmark = getBenchmark(conf);
+        printf("[WORKER]\thello, I am worker %d\n", workerid);
+        NVMMgr_ns::register_threadinfo();
+        stick_this_thread_to_core(workerid);
+        bar->wait();
+
+        unsigned long tx = 0;
+
+        int count = 0;
+        PART_ns::Key *k = new PART_ns::Key();
+
+        // variable value
+        const int val_len = conf.val_length;
+        char value[val_len + 5];
+        memset(value, 'a', val_len);
+        value[val_len] = 0;
+
+        int xcount = 0;
+        cpuCycleTimer t;
+        int write = 0;
+
+        while (done == 0) {
+
+            V result = 1;
+
+            OperationType op;
+            long long d;
+            std::string s;
+
+            if (conf.key_type == Integer) {
+                auto next_operation = benchmark->nextIntOperation();
+                op = next_operation.first;
+                d = next_operation.second;
+                //                std::string s = std::to_string(d);
+                //                k->Init((char *)s.c_str(), s.size(), value,
+                //                val_len);
+                k->Init((char *)&d, sizeof(uint64_t), value, val_len);
+            } else if (conf.key_type == String) {
+                auto next_operation = benchmark->nextStrOperation();
+                op = next_operation.first;
+                s = next_operation.second;
+                k->Init((char *)s.c_str(), s.size(), value, val_len);
+            }
+
+            PART_ns::Tree::OperationResults res;
+            switch (op) {
+            case UPDATE: {
+
+                art->update(k);
+
+                write++;
+                break;
+            }
+            case INSERT: {
+
+                res = art->insert(k);
+
+                if (res == PART_ns::Tree::OperationResults::Success)
+                    xcount++;
+                break;
+            }
+            case REMOVE: {
+                art->remove(k);
+                break;
+            }
+            case GET: {
+                art->lookup(k);
+                break;
+            }
+            case SCAN: {
+                break;
+            }
+            default: {
+                printf("not support such operation: %d\n", op);
+                exit(-1);
+            }
+            }
+            increase(workerid);
+        }
+
+        unregister_threadinfo();
+
+        printf("[WORKER]\tworker %d finished\n", workerid);
+    }
+
+    void monitor_work(int thread_num) {
+        bar->wait();
+
+        uint64_t preans = 0;
+        int second = 0;
+        timespec start, end;
+        while (done == 0) {
+            //            clock_gettime(CLOCK_REALTIME, &start);
+            usleep(conf.duration * 1000000);
+            //            clock_gettime(CLOCK_REALTIME, &end);
+
+            //            double duration = end.tv_sec - start.tv_sec +
+            //            (end.tv_nsec - start.tv_nsec) / 1000000000.0;
+
+            uint64_t nowans = total(thread_num);
+            printf("second %d the throughput is %.2f Mop/s\n", second,
+                   (nowans - preans) / 1000000.0);
+            preans = nowans;
+            second++;
+        }
+    }
+
+    void instant_restart() {
+        PART_ns::Tree *art = new PART_ns::Tree();
+        Benchmark *benchmark = getBenchmark(conf);
+
+        std::thread **pid = new std::thread *[conf.num_threads];
+        bar = new boost::barrier(conf.num_threads + 2);
+
+        for (int i = 0; i < conf.num_threads; i++) {
+            pid[i] = new std::thread(&Coordinator::art_restart, this, art, i,
+                                     benchmark);
+        }
+
+        std::thread *monitor =
+            new std::thread(&Coordinator::monitor_work, this, conf.num_threads);
+        bar->wait();
+        NVMMgr *mgr = get_nvm_mgr();
+        mgr->recovery_free_memory(art, conf.num_threads);
+
+        sleep(100);
+        for (int i = 0; i < conf.num_threads; i++) {
+            pid[i]->join();
+        }
+        monitor->join();
+
+        delete art;
+        delete[] pid;
+    }
+#endif
+
     void run() {
         printf("[COORDINATOR]\tStart benchmark..\n");
+#ifdef INSTANT_RESTART
+        if (conf.instant_restart == true) {
+            printf("test instant restart\n");
+            instant_restart();
+            return;
+        }
+#endif
 
         if (conf.type == PART) {
             // ART
@@ -622,8 +837,11 @@ template <typename K, typename V, int size> class Coordinator {
 
             for (unsigned long i = 0; i < conf.init_keys; i++) {
                 if (conf.key_type == Integer) {
-                    long kk = benchmark->nextInitIntKey();
-                    k->Init(kk, sizeof(uint64_t), kk);
+                    long long kk = benchmark->nextInitIntKey();
+                    //                    std::string s = std::to_string(kk);
+                    //                    k->Init((char *)s.c_str(), s.size(),
+                    //                    value, val_len);
+                    k->Init((char *)&kk, sizeof(long long), value, val_len);
                     art->insert(k);
                 } else if (conf.key_type == String) {
                     std::string s = benchmark->nextInitStrKey();
@@ -637,10 +855,7 @@ template <typename K, typename V, int size> class Coordinator {
 
                 timer t;
                 t.start();
-                art->rebuild(mgr->recovery_set);
-#ifdef RECLAIM_MEMORY
-//                mgr->recovery_free_memory();
-#endif
+                mgr->recovery_free_memory(art, 1);
                 t.end();
                 printf("rebuild takes time: %.2lf ms\n",
                        t.duration() / 1000000.0);
@@ -666,12 +881,16 @@ template <typename K, typename V, int size> class Coordinator {
 
             printf("[COORDINATOR]\tFinish benchmark..\n");
             printf("[RESULT]\ttotal throughput: %.3lf Mtps, %d threads, %s, "
-                   "%s, benchmark %d, zipfian %.2lf, rr is %d\n",
+                   "%s, benchmark %d, zipfian %.2lf, rr is %d, read latency is "
+                   "%.3lf ns， read op count is %d, help count is %d, "
+                   "writecount is %d\n",
                    (double)final_result.throughput / 1000000.0 / conf.duration,
                    conf.num_threads, (conf.type == PART) ? "ART" : "FF",
                    (conf.key_type == Integer) ? "Int" : "Str", conf.benchmark,
                    (conf.workload == RANDOM) ? 0 : conf.skewness,
-                   conf.read_ratio);
+                   conf.read_ratio, final_result.total / final_result.count,
+                   final_result.count, final_result.helpcount,
+                   final_result.writecount);
 
             delete art;
             delete[] pid;
@@ -680,11 +899,18 @@ template <typename K, typename V, int size> class Coordinator {
             // FAST_FAIR
             printf("test FAST_FAIR---------------------\n");
 #ifdef USE_PMDK
+
+#ifdef ACMA
+            fastfair::btree *bt = new fastfair::btree();
+            std::cout << "[FF]\tcreate fastfair with DCMM\n";
+#else
             fastfair::init_pmem();
             fastfair::btree *bt =
                 new (fastfair::allocate(sizeof(fastfair::btree)))
                     fastfair::btree();
             std::cout << "[FF]\tPM create tree\n";
+#endif
+
 #else
             fastfair::btree *bt = new fastfair::btree();
             std::cout << "[FF]\tmemory create tree\n";
@@ -745,7 +971,11 @@ template <typename K, typename V, int size> class Coordinator {
             delete[] results;
         } else if (conf.type == SKIPLIST) {
             printf("test skiplist\n");
+#ifdef ACMA
+#else
+
             skiplist::init_pmem();
+#endif
             skiplist::skiplist_t *sl = skiplist::new_skiplist();
             printf("skiplist create\n");
 
@@ -776,7 +1006,7 @@ template <typename K, typename V, int size> class Coordinator {
 #ifdef VARIABLE_LENGTH
                 skiplist::skiplist_insert(sl, (char *)s.c_str(), value);
 #else
-                skiplist::skiplist_insert(sl, kk,kk);
+                skiplist::skiplist_insert(sl, kk, kk);
 #endif
             }
             printf("init insert finished\n");

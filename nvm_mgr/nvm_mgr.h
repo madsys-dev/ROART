@@ -1,6 +1,7 @@
 #ifndef nvm_mgr_h
 #define nvm_mgr_h
 
+#include "Tree.h"
 #include "util.h"
 #include <fcntl.h>
 #include <list>
@@ -47,8 +48,8 @@ class NVMMgr {
     static const int magic_number = 12345;
     static const int max_threads = 64;
 
-    static const int PGSIZE = 256 * 1024;                   // 256K
-    static const long long filesize = 64LL * 1024 * PGSIZE; // 16GB
+    static const int PGSIZE = 256 * 1024;                     // 256K
+    static const long long filesize = 1024LL * 1024 * PGSIZE; // 256GB
 
     static const size_t start_addr = 0x50000000;
     static const size_t thread_local_start = start_addr + PGSIZE;
@@ -63,6 +64,7 @@ class NVMMgr {
     struct Head {
         // TODO: some other meta data for recovery
         char root[4096]; // for root
+        uint64_t generation_version;
         uint64_t free_bit_offset;
         int status;        // if equal to magic_number, it is reopen
         int threads;       // threads number
@@ -85,13 +87,14 @@ class NVMMgr {
 
     void *alloc_block(int tid);
 
-    void recovery_free_memory();
+    void recovery_free_memory(PART_ns::Tree *art, int forward_thread);
+
+    uint64_t get_generation_version() { return meta_data->generation_version; }
 
     // volatile metadata and rebuild when recovery
     int fd;
     bool first_created;
-    std::set<std::pair<uint64_t, size_t>>
-        recovery_set; // used for memory recovery
+
     // persist it as the head of nvm region
     Head *meta_data;
 } __attribute__((aligned(64)));

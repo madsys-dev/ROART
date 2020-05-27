@@ -42,6 +42,7 @@ class Benchmark {
     long long *x;
     Config _conf;
     DataSet *dataset;
+    RandomGenerator rdm;
 
     Benchmark(Config &conf) : init_key(0), _conf(conf) {
         dataset = new DataSet(conf.init_keys, conf.val_length, conf.email);
@@ -115,7 +116,10 @@ class InsertOnlyBench : public Benchmark {
     std::pair<OperationType, std::string> nextStrOperation() {
         long long next = workload->Next() % _conf.init_keys;
         std::string s = dataset->wl_str[next];
-        s = "msn" + s + "msn";
+        char c = rdm.randomInt() % 94 + 33;
+        char d = rdm.randomInt() % 94 + 33;
+        s = d + s;
+        s = c + s;
         return std::make_pair(INSERT, s);
     }
 
@@ -248,7 +252,9 @@ class YSCBA : public Benchmark {
     virtual std::pair<OperationType, long long> nextIntOperation() {
         int k = rdm.randomInt() % 100;
         if (k > read_ratio) {
-            return std::make_pair(UPDATE, workload->Next() % _conf.init_keys);
+            long long x = rdm.randomInt() % 128;
+            return std::make_pair(INSERT,
+                                  x * (workload->Next() % _conf.init_keys));
         } else {
             return std::make_pair(GET, workload->Next() % _conf.init_keys);
         }
@@ -259,7 +265,11 @@ class YSCBA : public Benchmark {
         long long next = workload->Next() % _conf.init_keys;
         std::string s = dataset->wl_str[next];
         if (k > read_ratio) {
-            return std::make_pair(UPDATE, s);
+            char c = rdm.randomInt() % 94 + 33;
+            char d = rdm.randomInt() % 94 + 33;
+            s = d + s;
+            s = c + s;
+            return std::make_pair(INSERT, s);
         } else {
             return std::make_pair(GET, s);
         }
@@ -280,7 +290,45 @@ class YSCBB : public Benchmark {
         if (k < read_ratio) {
             return std::make_pair(GET, workload->Next() % _conf.init_keys);
         } else {
-            return std::make_pair(UPDATE, workload->Next() % _conf.init_keys);
+            long long x = rdm.randomInt() % 128;
+            return std::make_pair(INSERT,
+                                  x * (workload->Next() % _conf.init_keys));
+        }
+    }
+
+    virtual std::pair<OperationType, std::string> nextStrOperation() {
+        int k = rdm.randomInt() % 100;
+        long long next = workload->Next() % _conf.init_keys;
+        std::string s = dataset->wl_str[next];
+        if (k > read_ratio) {
+            char c = rdm.randomInt() % 94 + 33;
+            char d = rdm.randomInt() % 94 + 33;
+            s = d + s;
+            s = c + s;
+            return std::make_pair(INSERT, s);
+        } else {
+            return std::make_pair(GET, s);
+        }
+    }
+} __attribute__((aligned(64)));
+
+// 50% read, 50% update
+class YSCBC : public Benchmark {
+  public:
+    //	readRate = 0.5;
+    //	writeRate = 0.5;
+    int read_ratio = 50;
+
+    RandomGenerator rdm;
+
+    YSCBC(Config &conf) : Benchmark(conf) {}
+
+    virtual std::pair<OperationType, long long> nextIntOperation() {
+        int k = rdm.randomInt() % 100;
+        if (k > read_ratio) {
+            return std::make_pair(UPDATE, (workload->Next() % _conf.init_keys));
+        } else {
+            return std::make_pair(GET, workload->Next() % _conf.init_keys);
         }
     }
 
@@ -293,21 +341,6 @@ class YSCBB : public Benchmark {
         } else {
             return std::make_pair(GET, s);
         }
-    }
-} __attribute__((aligned(64)));
-
-class YSCBC : public Benchmark {
-  public:
-    YSCBC(Config &conf) : Benchmark(conf) {}
-
-    virtual std::pair<OperationType, long long> nextIntOperation() {
-        return std::make_pair(GET, workload->Next() % _conf.init_keys);
-    }
-
-    virtual std::pair<OperationType, std::string> nextStrOperation() {
-        long long next = workload->Next() % _conf.init_keys;
-        std::string s = dataset->wl_str[next];
-        return std::make_pair(GET, s);
     }
 } __attribute__((aligned(64)));
 
@@ -326,7 +359,8 @@ class YSCBD : public Benchmark {
             return std::make_pair(GET, workload->Next() % _conf.init_keys);
         } else {
             int d = rdm.randomInt() % 128;
-            return std::make_pair(INSERT, workload->Next() * d);
+            return std::make_pair(INSERT,
+                                  (workload->Next() % _conf.init_keys) * d);
         }
     }
 
@@ -335,9 +369,10 @@ class YSCBD : public Benchmark {
         long long next = workload->Next() % _conf.init_keys;
         std::string s = dataset->wl_str[next];
         if (k > read_ratio) {
-            char p1 = rdm.randomInt() % 94 + 33;
-            char p2 = rdm.randomInt() % 94 + 33;
-            s = s + p2;
+            char c = rdm.randomInt() % 94 + 33;
+            char d = rdm.randomInt() % 94 + 33;
+            s = d + s;
+            s = c + s;
             return std::make_pair(INSERT, s);
         } else {
             return std::make_pair(GET, s);
@@ -359,7 +394,8 @@ class YSCBE : public Benchmark {
             return std::make_pair(SCAN, workload->Next() % _conf.init_keys);
         } else {
             int d = rdm.randomInt() % 128;
-            return std::make_pair(INSERT, workload->Next() * d);
+            return std::make_pair(INSERT,
+                                  (workload->Next() % _conf.init_keys) * d);
         }
     }
 
@@ -370,8 +406,10 @@ class YSCBE : public Benchmark {
         if (k < scan_ratio) {
             return std::make_pair(SCAN, s);
         } else {
-            char p2 = rdm.randomInt() % 94 + 33;
-            s = s + p2;
+            char c = rdm.randomInt() % 94 + 33;
+            char d = rdm.randomInt() % 94 + 33;
+            s = d + s;
+            s = c + s;
             return std::make_pair(INSERT, s);
         }
     }
