@@ -44,12 +44,13 @@ class RandomGenerator : public WorkloadGenerator {
     int randomInt() { return nrand48(seed) ^ nrand48(seed2); }
 
     std::string RandomStr() {
-        int len = randomInt() % 10 + 5; // len 8-16 // 5-15
-
+        int len = randomInt() % 10  + 5; // len 8-16 // 5-15
+//        int len = randomInt() % 125  + 4;
         std::string res = "";
         for (int i = 0; i < len; i++) {
             //            char c = randomInt() % 10 + '0'; // 0-9
             char c = randomInt() % 94 + 33;
+//            char c = randomInt() % 127 + 1;
             res += c;
         }
         return res;
