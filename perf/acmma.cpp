@@ -1,20 +1,20 @@
-#include <iostream>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <libpmemobj.h>
-#include <chrono>
 #include "nvm_mgr.h"
 #include "threadinfo.h"
 #include <boost/thread/barrier.hpp>
+#include <chrono>
+#include <iostream>
+#include <libpmemobj.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 using namespace std;
 
-void usage(){
-    cout<<"lack of parameters, please input ./acmma [t] [num]\n"\
-        <<"[t] is the type of test\n"\
-        <<"0: new/libvmmalloc, 1: pmemobj_alloc, 2: pmdk transactional allocator, 3: acmma\n"\
-        <<"[num] is the number of worker threads\n";
+void usage() {
+    cout << "lack of parameters, please input ./acmma [t] [num]\n"
+         << "[t] is the type of test\n"
+         << "0: pmemobj_alloc, 1: dcmm， 2: nvm_malloc\n"
+         << "[num] is the number of worker threads\n";
 }
 
 POBJ_LAYOUT_BEGIN(allocator);
@@ -29,17 +29,39 @@ struct my_root {
 const int max_addr = 1000000;
 uint64_t addr[max_addr + 5];
 
+const int thread_to_core[36] = {
+        0,  4,  8,  12, 16, 20, 24, 28, 32,
+        36, 40, 44, 48, 52, 56, 60, 64, 68, // numa node 0
+        1,  5,  9,  13, 17, 21, 25, 29, 33,
+        37, 41, 45, 49, 53, 57, 61, 65, 69 // numa node 1
+};
 
-int main(int argc, char **argv){
-    if(argc != 3){
+int stick_this_thread_to_core(int core_id) {
+    int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+    if (core_id < 0 || core_id >= num_cores)
+        return EINVAL;
+
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(thread_to_core[core_id], &cpuset);
+
+    pthread_t current_thread = pthread_self();
+    return pthread_setaffinity_np(current_thread, sizeof(cpu_set_t),
+                                  &cpuset);
+}
+
+
+int main(int argc, char **argv) {
+    if (argc != 3) {
         usage();
         return 0;
     }
     int type = atoi(argv[1]);
     int threads_num = atoi(argv[2]);
-    int nsize = 64;
 
     system("rm -rf /mnt/pmem0/matianmao/acmma.data");
+    system("rm -rf /mnt/pmem0/matianmao/part.data");
+
     const char *pool_name = "/mnt/pmem0/matianmao/acmma.data";
     const char *layout_name = "acmma";
     size_t pool_size = 64ull * 1024 * 1024 * 1024;
@@ -58,78 +80,76 @@ int main(int argc, char **argv){
     boost::barrier *bar = new boost::barrier(threads_num + 1);
     uint64_t result[threads_num];
 
-    if(type == 3){
+    int nsize = 64;
+    std::string name = "";
+    if (type == 2) {
+        // TODO: nvm_malloc
+        name = "nvm_malloc";
+    } else if (type == 1) {
         // acmma
-        std::cout<<"acmma\n";
+        name = "DCMM";
+        std::cout << "dcmm\n";
         NVMMgr_ns::init_nvm_mgr();
         NVMMgr_ns::NVMMgr *mgr = NVMMgr_ns::get_nvm_mgr();
-        for(int i = 0; i < threads_num; i++){
+        for (int i = 0; i < threads_num; i++) {
             result[i] = 0;
-            tid[i] = new std::thread([&](int id){
-                NVMMgr_ns::register_threadinfo();
-                bar->wait();
-                while((*done) == 0) {
-                    addr[result[id] % max_addr] = (uint64_t)NVMMgr_ns::alloc_new_node_from_size(nsize);
-                    result[id]++;
-                }
-                }, i);
-        }
-    }else if(type == 2){
-        std::cout<<"transactional pmdk\n";
-        for(int i = 0; i < threads_num; i++){
-            result[i] = 0;
-            tid[i] = new std::thread([&](int id){
-                bar->wait();
-                TOID(struct my_root) root = POBJ_ROOT(tmp_pool, struct my_root);
-                while((*done) == 0) {
-                    TX_BEGIN(tmp_pool) {
-                        TX_ADD(root);
-                        D_RW(root)->ptr = pmemobj_tx_alloc(nsize, TOID_TYPE_NUM(char));
-                        void *addr = (void *)pmemobj_direct(D_RW(root)->ptr);
+            tid[i] = new std::thread(
+                [&](int id) {
+                    stick_this_thread_to_core(id);
+                    NVMMgr_ns::register_threadinfo();
+//                    int s = 0;
+                    int tx = 0;
+                    bar->wait();
+                    while ((*done) == 0) {
+                        addr[result[id] % max_addr] =
+                            (uint64_t)NVMMgr_ns::alloc_new_node_from_size(
+                                nsize);
+                        tx++;
+//                        s++;
+//                        if (s >= 10)
+//                            s = 0;
                     }
-                    TX_END
-                    result[id]++;
-                }
-            }, i);
+                    result[id] = tx;
+                },
+                i);
         }
-    }else if(type == 1){
-        std::cout<<"pmalloc\n";
-        for(int i = 0; i < threads_num; i++){
+    } else if (type == 0) {
+        name = "PMDK";
+        std::cout << "pmalloc\n";
+        for (int i = 0; i < threads_num; i++) {
             result[i] = 0;
-            tid[i] = new std::thread([&](int id){
-                bar->wait();
-                PMEMoid ptr;
-                while((*done) == 0) {
-//                    std::cout<<"alloc\n";
-                    pmemobj_zalloc(tmp_pool, &ptr, nsize, TOID_TYPE_NUM(char));
-                    void *addr = (void *)pmemobj_direct(ptr);
-                    result[id]++;
-                }
-            }, i);
-        }
-    }else if(type == 0){
-        std::cout<<"libvmmalloc\n";
-        for(int i = 0; i < threads_num; i++){
-            result[i] = 0;
-            tid[i] = new std::thread([&](int id){
-                bar->wait();
-                while((*done) == 0) {
-                    addr[result[id] % max_addr] = (uint64_t)malloc(nsize);
-                    result[id]++;
-                }
-            }, i);
+            tid[i] = new std::thread(
+                [&](int id) {
+                    stick_this_thread_to_core(id);
+//                    int s = 0;
+                    int tx = 0;
+                    bar->wait();
+                    PMEMoid ptr;
+                    while ((*done) == 0) {
+                        //                    std::cout<<"alloc\n";
+                        pmemobj_zalloc(tmp_pool, &ptr, nsize,
+                                       TOID_TYPE_NUM(char));
+                        void *addr = (void *)pmemobj_direct(ptr);
+                        tx++;
+//                        s++;
+//                        if (s >= 10)
+//                            s = 0;
+                    }
+                    result[id] = tx;
+                },
+                i);
         }
     }
 
     bar->wait();
     std::this_thread::sleep_for(std::chrono::seconds(1));
     *done = 1;
-    uint64_t res= 0;
-    for(int i = 0; i < threads_num; i++){
+    uint64_t res = 0;
+    for (int i = 0; i < threads_num; i++) {
         tid[i]->join();
         res += result[i];
     }
 
-    std::cout<<"throughput "<<res<<" tps\n";
+    std::cout << name<< ", threads: "<< threads_num <<", throughput " << res/1000000.0 << " Mtps\n";
     return 0;
 }
