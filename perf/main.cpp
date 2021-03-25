@@ -5,9 +5,9 @@
 using namespace std;
 
 inline void clear_data() {
-    system("rm -rf /mnt/pmem0/matianmao/part.data");
-    system("rm -rf /mnt/pmem0/matianmao/fast_fair.data");
-    system("rm -rf /mnt/pmem0/matianmao/skiplist.data");
+    system("rm -rf /mnt/pmem0/jzc/part.data");
+    system("rm -rf /mnt/pmem0/jzc/fast_fair.data");
+    system("rm -rf /mnt/pmem0/jzc/skiplist.data");
 }
 
 int main(int argc, char **argv) {

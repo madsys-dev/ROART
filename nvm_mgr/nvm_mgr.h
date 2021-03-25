@@ -57,7 +57,7 @@ class NVMMgr {
         thread_local_start + PGSIZE * max_threads;
 
     static const char *get_filename() {
-        static const std::string filename = "/mnt/pmem0/matianmao/part.data";
+        static const std::string filename = "/mnt/pmem0/jzc/part.data";
         return filename.c_str();
     }
 
