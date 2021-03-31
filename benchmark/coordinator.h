@@ -825,7 +825,6 @@ template <typename K, typename V, int size> class Coordinator {
 
             std::thread **pid = new std::thread *[conf.num_threads];
             bar = new boost::barrier(conf.num_threads + 1);
-
             std::cout << "start\n";
             PART_ns::Key *k = new PART_ns::Key();
             printf("init keys: %d\n", (int)conf.init_keys);
@@ -895,7 +894,8 @@ template <typename K, typename V, int size> class Coordinator {
             delete art;
             delete[] pid;
             delete[] results;
-        } else if (conf.type == FAST_FAIR) {
+        }
+        else if (conf.type == FAST_FAIR) {
             // FAST_FAIR
             printf("test FAST_FAIR---------------------\n");
 #ifdef USE_PMDK
@@ -969,7 +969,8 @@ template <typename K, typename V, int size> class Coordinator {
 
             delete[] pid;
             delete[] results;
-        } else if (conf.type == SKIPLIST) {
+        }
+        else if (conf.type == SKIPLIST) {
             printf("test skiplist\n");
 #ifdef ACMA
 #else

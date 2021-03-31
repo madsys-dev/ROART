@@ -107,7 +107,7 @@ static void usage_exit(FILE *out) {
 static void parse_arguments(int argc, char *argv[], Config &state) {
     // Default Values
     state.type = PART;
-    state.num_threads = 4;
+    state.num_threads = 8;
     state.key_type = Integer;
     state.email = 0;
     state.init_keys = 20000000;

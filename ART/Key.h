@@ -13,7 +13,7 @@ struct Key {
     size_t key_len;
     size_t val_len;
     uint64_t key;
-    uint8_t *fkey;
+    uint8_t *fkey;// pointer to a far key
 
     Key() {}
 
