@@ -4,6 +4,7 @@
 #include "N256.h"
 #include "N4.h"
 #include "N48.h"
+#include "LeafArray.h"
 #include <libpmemobj.h>
 #include <set>
 

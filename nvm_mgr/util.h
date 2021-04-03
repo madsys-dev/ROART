@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
+
 #define MOR __ATOMIC_SEQ_CST
 #define ATM_GET(var) (var)
 #define ATM_LOAD(var, val) __atomic_load(&(var), &(val), MOR)

@@ -13,7 +13,11 @@
 
 using namespace NVMMgr_ns;
 
+
+
 inline void clear_data() { system("rm -rf /mnt/pmem0/matianmao/part.data"); }
+
+
 
 TEST(TestEpoch, Epoch_Mgr) {
     clear_data();

@@ -502,7 +502,7 @@ restart:
         uint8_t nonMatchingKey;
         Prefix remainingPrefix;
         switch (checkPrefixPessimistic(node, k, nextLevel, nonMatchingKey,
-                                       remainingPrefix)) { // increases level
+                                       remainingPrefix)) { // increases nextLevel
         case CheckPrefixPessimisticResult::SkippedLevel:
             goto restart;
         case CheckPrefixPessimisticResult::NoMatch: {
@@ -595,8 +595,7 @@ restart:
             // insert successfully
             uint32_t prefixLength = 0;
 #ifdef KEY_INLINE
-            while (level + prefixLength <
-                       std::min(k->getKeyLen(), key->getKeyLen()) &&
+            while (level + prefixLength <std::min(k->getKeyLen(), key->getKeyLen()) &&
                    key->kv[level + prefixLength] ==
                        k->fkey[level + prefixLength]) {
                 prefixLength++;
@@ -625,8 +624,7 @@ restart:
                    prefixLength); // not persist
 #else
             auto n4 = new (alloc_new_node_from_type(NTypes::N4))
-                N4(level + prefixLength, &k->fkey[level],
-                   prefixLength); // not persist
+                N4(level + prefixLength, &k->fkey[level],prefixLength); // not persist
 #endif
             Leaf *newLeaf = allocLeaf(k);
             //            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
@@ -651,7 +649,7 @@ restart:
     //    std::cout<<"ohfinish\n";
 }
 
-typename Tree::OperationResults Tree::remove(const Key *k)  {
+typename Tree::OperationResults Tree::remove(const Key *k) {
     EpochGuard NewEpoch;
 restart:
     bool needRestart = false;

@@ -13,7 +13,7 @@ struct Key {
     size_t key_len;
     size_t val_len;
     uint64_t key;
-    uint8_t *fkey;// pointer to a far key
+    uint8_t *fkey; // pointer to a far key
 
     Key() {}
 
@@ -45,6 +45,8 @@ struct Key {
     inline Key *make_leaf(uint64_t key, size_t key_len, uint64_t value);
 
     inline size_t getKeyLen() const;
+
+    uint16_t getFingerPrint();
 } __attribute__((aligned(64)));
 
 inline Key *Key::make_leaf(char *key, size_t key_len, uint64_t value) {
@@ -72,6 +74,13 @@ inline Key *Key::make_leaf(uint64_t key, size_t key_len, uint64_t value) {
 }
 
 inline size_t Key::getKeyLen() const { return key_len; }
+uint16_t Key::getFingerPrint() {
+    uint16_t re = 0;
+    for (int i = 0; i < key_len; i++) {
+        re = re * 131 + this->fkey[i];
+    }
+    return re;
+}
 } // namespace PART_ns
 
 #endif // ART_KEY_H

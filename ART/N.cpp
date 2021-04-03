@@ -197,13 +197,13 @@ void N::writeLockOrRestart(bool &needRestart) {
                                                              version + 0b10));
 }
 
+// true:  locked or obsolete or a different version
 void N::lockVersionOrRestart(uint64_t &version, bool &needRestart) {
     if (isLocked(version) || isObsolete(version)) {
         needRestart = true;
         return;
     }
-    if (type_version_lock_obsolete->compare_exchange_strong(version,
-                                                         version + 0b10)) {
+    if (type_version_lock_obsolete->compare_exchange_strong(version,version + 0b10)) {
         version = version + 0b10;
     } else {
         needRestart = true;
@@ -619,7 +619,8 @@ N *N::setLeaf(const Leaf *k) {
 
 Leaf *N::getLeaf(const N *n) {
     return reinterpret_cast<Leaf *>(reinterpret_cast<void *>(
-        (reinterpret_cast<uintptr_t>(n) & ~(1ULL << 0))));
+        (reinterpret_cast<uintptr_t>(n) & ~(1ULL << 0))
+        ));
 }
 
 // only invoke this in remove and N4

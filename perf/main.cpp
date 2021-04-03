@@ -1,13 +1,12 @@
 #include "config.h"
 #include "coordinator.h"
 #include <fstream>
-
 using namespace std;
 
 inline void clear_data() {
-    system("rm -rf /mnt/pmem0/jzc/part.data");
-    system("rm -rf /mnt/pmem0/jzc/fast_fair.data");
-    system("rm -rf /mnt/pmem0/jzc/skiplist.data");
+    system((std::string("rm -rf ") + nvm_dir + "part.data").c_str());
+    system((std::string("rm -rf ") + nvm_dir + "fast_fair.data").c_str());
+    system((std::string("rm -rf ") + nvm_dir + "skiplist.data").c_str());
 }
 
 int main(int argc, char **argv) {
