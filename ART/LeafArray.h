@@ -39,6 +39,12 @@ class LeafArray : public N {
 
     uint16_t getFingerPrint(size_t pos);
 
+
+    N *getChild(const uint8_t k);
+
+
+
 } __attribute__((aligned(64)));
 } // namespace PART_ns
 #endif // P_ART_LEAFARRAY_H
+

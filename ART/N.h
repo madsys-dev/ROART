@@ -84,7 +84,6 @@ class N : public BaseNode {
         : BaseNode(type), level(level) {
         type_version_lock_obsolete = new std::atomic<uint64_t>;
         type_version_lock_obsolete->store(0b100);
-        old_pointer.store(0, std::memory_order_seq_cst);
         recovery_latch.store(0, std::memory_order_seq_cst);
         setType(type);
         setPrefix(prefix, prefixLength, false);
@@ -94,7 +93,6 @@ class N : public BaseNode {
         : BaseNode(type), prefix(prefi), level(level) {
         type_version_lock_obsolete = new std::atomic<uint64_t>;
         type_version_lock_obsolete->store(0b100);
-        old_pointer.store(0, std::memory_order_seq_cst);
         recovery_latch.store(0, std::memory_order_seq_cst);
         setType(type);
     }
@@ -115,9 +113,6 @@ class N : public BaseNode {
     uint16_t count = 0;
     uint16_t compactCount = 0;
 
-    // new transient parameter(48 bits for old pointer, 8 bits for pointer id, 1
-    // bit for valid)
-    std::atomic<uint64_t> old_pointer;
     uint64_t generation_version = 0;
     std::atomic<uint64_t> recovery_latch;
 

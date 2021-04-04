@@ -38,17 +38,3 @@ TEST(TreeTest, tree_build) {
     auto art = new PART_ns::Tree();
     //    std::cout << "finish" << std::endl;
 }
-
-TEST(LeafArrayTest, bitmap_test) {
-    PART_ns::LeafArray *n = new PART_ns::LeafArray(1, {});
-
-    for (int i = 0; i < PART_ns::LeafArrayLength; i++) {
-        auto x = n->getRightmostSetBit();
-        //        std::cout << x << std::endl;
-        ASSERT_EQ(i, x);
-        n->setBit(x, false);
-    }
-    n->leaf[3].store(reinterpret_cast<PART_ns::N *>(~0));
-    //    std::cout << n->getFingerPrint(3) << std::endl;
-    ASSERT_EQ(n->getFingerPrint(3), (1 << 16) - 1);
-}

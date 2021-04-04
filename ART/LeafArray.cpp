@@ -3,6 +3,8 @@
 //
 
 #include "LeafArray.h"
+
+namespace PART_ns {
 size_t PART_ns::LeafArray::getRightmostSetBit() const {
     auto b = bitmap.load();
     auto pos = b._Find_first();
@@ -19,3 +21,6 @@ uint16_t PART_ns::LeafArray::getFingerPrint(size_t pos) {
     uint16_t re = x >> FingerPrintShift;
     return re;
 }
+N *LeafArray::getChild(const uint8_t k) { return nullptr; }
+
+} // namespace PART_ns

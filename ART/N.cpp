@@ -97,7 +97,6 @@ void N::check_generation() {
             type_version_lock_obsolete = new std::atomic<uint64_t>;
             type_version_lock_obsolete->store(convertTypeToVersion(type));
             type_version_lock_obsolete->fetch_add(0b100);
-            old_pointer.store(0);
 
             count = 0;
             compactCount = 0;

@@ -114,7 +114,7 @@ static void parse_arguments(int argc, char *argv[], Config &state) {
     state.email = 0;
     state.init_keys = 20000000;
     state.time = 5;
-    state.val_length = 8;
+    state.val_length = 4;
     state.share_memory = true;
     state.duration = 1;
     state.benchmark = READ_ONLY;
