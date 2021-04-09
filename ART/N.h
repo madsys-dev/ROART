@@ -12,7 +12,14 @@ namespace PART_ns {
 
 int gethelpcount();
 
-enum class NTypes : uint8_t { N4 = 1, N16 = 2, N48 = 3, N256 = 4, Leaf = 5 };
+enum class NTypes : uint8_t {
+    N4 = 1,
+    N16 = 2,
+    N48 = 3,
+    N256 = 4,
+    Leaf = 5,
+    LeafArray = 6
+};
 
 class BaseNode {
   public:
@@ -69,6 +76,8 @@ class Leaf : public BaseNode {
         return value;
 #endif
     }
+
+    uint16_t getFingerPrint();
 } __attribute__((aligned(64)));
 
 static constexpr uint32_t maxStoredPrefixLength = 4;

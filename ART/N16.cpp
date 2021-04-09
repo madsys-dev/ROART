@@ -14,15 +14,9 @@ bool N16::insert(uint8_t key, N *n, bool flush) {
     if (flush)
         flush_data((void *)&keys[compactCount], sizeof(std::atomic<uint8_t>));
 
-    if (flush) {
-        uint64_t oldp = (1ull << 56) | ((uint64_t)compactCount << 48);
-    }
-
     children[compactCount].store(n, std::memory_order_seq_cst);
-
-    if (flush) {
+    if (flush)
         flush_data((void *)&children[compactCount], sizeof(std::atomic<N *>));
-    }
 
     compactCount++;
     count++;
@@ -77,9 +71,6 @@ bool N16::remove(uint8_t k, bool force, bool flush) {
     }
     auto leafPlace = getChildPos(k);
     assert(leafPlace != -1);
-
-    uint64_t oldp = (1ull << 56) | ((uint64_t)leafPlace << 48) |
-                    ((uint64_t)children[leafPlace].load() & ((1ull << 48) - 1));
 
     children[leafPlace].store(nullptr, std::memory_order_seq_cst);
     flush_data((void *)&children[leafPlace], sizeof(std::atomic<N *>));

@@ -109,12 +109,12 @@ static void usage_exit(FILE *out) {
 static void parse_arguments(int argc, char *argv[], Config &state) {
     // Default Values
     state.type = PART;
-    state.num_threads = 8;
+    state.num_threads = 4;
     state.key_type = Integer;
     state.email = 0;
     state.init_keys = 20000000;
     state.time = 5;
-    state.val_length = 4;
+    state.val_length = 8;
     state.share_memory = true;
     state.duration = 1;
     state.benchmark = READ_ONLY;

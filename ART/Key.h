@@ -46,7 +46,7 @@ struct Key {
 
     inline size_t getKeyLen() const;
 
-    uint16_t getFingerPrint();
+    inline uint16_t getFingerPrint() const;
 } __attribute__((aligned(64)));
 
 inline Key *Key::make_leaf(char *key, size_t key_len, uint64_t value) {
@@ -77,7 +77,7 @@ inline size_t Key::getKeyLen() const {
     return key_len;
 }
 
-inline uint16_t Key::getFingerPrint() {
+inline uint16_t Key::getFingerPrint() const {
     uint16_t re = 0;
     for (int i = 0; i < key_len; i++) {
         re = re * 131 + this->fkey[i];

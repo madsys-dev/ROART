@@ -15,19 +15,20 @@ const size_t FingerPrintShift = 48;
 
 class LeafArray : public N {
   public:
-    std::atomic<N *> leaf[LeafArrayLength];
-    std::atomic<std::bitset<LeafArrayLength>> bitmap;
+    std::atomic<uintptr_t> leaf[LeafArrayLength];
+    std::atomic<std::bitset<LeafArrayLength>>
+        bitmap; // 0 means used slot; 1 means empty slot
 
   public:
     LeafArray(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
-        : N(NTypes::N256, level, prefix, prefixLength) {
-        bitmap.store(std::bitset<LeafArrayLength>{}.set());
+        : N(NTypes::LeafArray, level, prefix, prefixLength) {
+        bitmap.store(std::bitset<LeafArrayLength>{}.reset());
         memset(leaf, 0, sizeof(leaf));
     }
 
     LeafArray(uint32_t level, const Prefix &prefi)
-        : N(NTypes::N256, level, prefi) {
-        bitmap.store(std::bitset<LeafArrayLength>{}.set());
+        : N(NTypes::LeafArray, level, prefi) {
+        bitmap.store(std::bitset<LeafArrayLength>{}.reset());
         memset(leaf, 0, sizeof(leaf));
     }
 
@@ -37,14 +38,16 @@ class LeafArray : public N {
 
     void setBit(size_t bit_pos, bool to = true);
 
-    uint16_t getFingerPrint(size_t pos);
+    uint16_t getFingerPrint(size_t pos) const;
 
+    Leaf *lookup(const Key *k) const;
 
-    N *getChild(const uint8_t k);
+    bool insert(Leaf *l, bool flush);
 
+    bool remove(const Key *k);
 
+    void reload();
 
 } __attribute__((aligned(64)));
 } // namespace PART_ns
 #endif // P_ART_LEAFARRAY_H
-

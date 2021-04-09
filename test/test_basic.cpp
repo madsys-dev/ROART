@@ -31,6 +31,19 @@ TEST(BasicTest, test_z) {
         << sizeof(
                std::pair<std::atomic<uint16_t>, std::atomic<std::bitset<48>>>)
         << std::endl;
+
+    std::cout << "Int value of nullptr: "
+              << reinterpret_cast<uintptr_t>(nullptr) << std::endl;
+
+    int a = 432;
+    auto pa = &a;
+    std::cout << "The address of a(pa): " << std::hex
+              << reinterpret_cast<uintptr_t>(pa)
+              << ", deref it and get: " << std::dec << *pa << std::endl;
+    pa = reinterpret_cast<int *>(reinterpret_cast<uintptr_t>(pa) ^
+                                 (0xffffLL << 48));
+    std::cout << "The modified address of a(pa): " << std::hex
+              << reinterpret_cast<uintptr_t>(pa) << std::endl;
 }
 
 TEST(TreeTest, tree_build) {

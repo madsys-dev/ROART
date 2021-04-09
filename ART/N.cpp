@@ -54,6 +54,14 @@ Leaf::Leaf(uint8_t *key_, size_t key_len_, char *value_, size_t val_len_)
     flush_data((void *)value, val_len);
 #endif
 }
+uint16_t Leaf::getFingerPrint() {
+    uint16_t re = 0;
+    auto k = GetKey();
+    for (int i = 0; i < key_len; i++) {
+        re = re * 131 + k[i];
+    }
+    return re;
+}
 
 void N::helpFlush(std::atomic<N *> *n) {
     if (n == nullptr)
@@ -147,6 +155,11 @@ void N::check_generation() {
                 }
                 break;
             }
+            case NTypes::LeafArray: {
+                auto n = static_cast<LeafArray *>(this);
+                n->reload();
+                break;
+            }
             default: {
                 std::cout << "[Recovery]\twrong type " << (int)type << "\n";
                 assert(0);
@@ -192,8 +205,8 @@ void N::writeLockOrRestart(bool &needRestart) {
             needRestart = true;
             return;
         }
-    } while (!type_version_lock_obsolete->compare_exchange_weak(version,
-                                                             version + 0b10));
+    } while (!type_version_lock_obsolete->compare_exchange_weak(
+        version, version + 0b10));
 }
 
 // true:  locked or obsolete or a different version
@@ -202,7 +215,8 @@ void N::lockVersionOrRestart(uint64_t &version, bool &needRestart) {
         needRestart = true;
         return;
     }
-    if (type_version_lock_obsolete->compare_exchange_strong(version,version + 0b10)) {
+    if (type_version_lock_obsolete->compare_exchange_strong(version,
+                                                            version + 0b10)) {
         version = version + 0b10;
     } else {
         needRestart = true;
@@ -618,8 +632,7 @@ N *N::setLeaf(const Leaf *k) {
 
 Leaf *N::getLeaf(const N *n) {
     return reinterpret_cast<Leaf *>(reinterpret_cast<void *>(
-        (reinterpret_cast<uintptr_t>(n) & ~(1ULL << 0))
-        ));
+        (reinterpret_cast<uintptr_t>(n) & ~(1ULL << 0))));
 }
 
 // only invoke this in remove and N4

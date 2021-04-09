@@ -74,7 +74,6 @@ N *N4::getAnyChild() const {
     N *anyChild = nullptr;
     for (uint32_t i = 0; i < 4; ++i) {
         N *child = children[i].load();
-
         if (child != nullptr) {
             if (N::isLeaf(child)) {
                 return child;
