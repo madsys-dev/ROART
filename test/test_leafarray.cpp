@@ -13,7 +13,7 @@ inline void clear_data() {
 }
 
 TEST(LeafArrayTest, bitmap_test) {
-    PART_ns::LeafArray *n = new PART_ns::LeafArray(1, {});
+    PART_ns::LeafArray *n = new PART_ns::LeafArray(1);
     for (int i = 0; i < PART_ns::LeafArrayLength; i++) {
         auto x = n->getRightmostSetBit();
         //        std::cout << x << std::endl;

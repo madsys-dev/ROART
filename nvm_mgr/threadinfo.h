@@ -7,6 +7,7 @@
 #include "N256.h"
 #include "N4.h"
 #include "N48.h"
+#include "LeafArray.h"
 #include "pmalloc_wrap.h"
 #include "tbb/concurrent_queue.h"
 #include <list>

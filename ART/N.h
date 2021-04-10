@@ -22,6 +22,8 @@ enum class NTypes : uint8_t {
     LeafArray = 6
 };
 
+class LeafArray;
+
 class BaseNode {
   public:
     NTypes type;
@@ -117,9 +119,8 @@ class N : public BaseNode {
     virtual ~N() {}
 
     // 3b type 59b version 1b lock 1b obsolete
-    //    std::atomic<uint64_t> type_version_lock_obsolete{0b100};
+    // obsolete means this node has been deleted
     std::atomic<uint64_t> *type_version_lock_obsolete;
-    // version 1, unlocked, not obsolete
 
     alignas(64) std::atomic<Prefix> prefix;
     const uint32_t level;
@@ -204,6 +205,12 @@ class N : public BaseNode {
     static bool isLeaf(const N *n);
 
     static N *setLeaf(const Leaf *k);
+
+    static LeafArray *getLeafArray(const N *n);
+
+    static bool isLeafArray(const N *n);
+
+    static N *setLeafArray(const LeafArray *la);
 
     static N *getAnyChild(N *n);
 

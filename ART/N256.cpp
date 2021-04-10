@@ -1,4 +1,5 @@
 #include "N256.h"
+#include "LeafArray.h"
 #include "N.h"
 #include <algorithm>
 #include <assert.h>
@@ -114,18 +115,22 @@ void N256::graphviz_debug(std::ofstream &f) {
                 addr = reinterpret_cast<uintptr_t>(getLeaf(p));
             }
             sprintf(buf + strlen(buf), "%lx -- %lx [label=\"%u\"]\n",
-                    reinterpret_cast<uintptr_t>(this),
-                    addr, x);
+                    reinterpret_cast<uintptr_t>(this), addr, x);
         }
     }
     f << buf;
 
-    for (auto & i : children) {
+    for (auto &i : children) {
         auto p = i.load();
         if (p != nullptr) {
             if (isLeaf(p)) {
+#ifdef LEAF_ARRAY
+                auto la = getLeafArray(p);
+                la->graphviz_debug(f);
+#else
                 auto l = getLeaf(p);
                 l->graphviz_debug(f);
+#endif
             } else {
                 N::graphviz_debug(f, p);
             }

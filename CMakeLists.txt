@@ -27,6 +27,8 @@ add_definitions(-DKEY_INLINE)
 #add_definitions(-DCHECK_COUNT)
 add_definitions(-DINSTANT_RESTART)
 
+add_definitions(-DLEAF_ARRAY)
+
 #malloc
 #add_definitions(-DPMALLOC)
 #add_definitions(-DTXPMALLOC)

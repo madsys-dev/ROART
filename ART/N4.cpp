@@ -1,5 +1,6 @@
 #include "N4.h"
 #include "N.h"
+#include "LeafArray.h"
 #include <algorithm>
 #include <assert.h>
 
@@ -162,8 +163,13 @@ void N4::graphviz_debug(std::ofstream &f) {
         auto p = children[i].load();
         if (p != nullptr) {
             if (isLeaf(p)) {
+#ifdef LEAF_ARRAY
+                auto la = getLeafArray(p);
+                la->graphviz_debug(f);
+#else
                 auto l = getLeaf(p);
                 l->graphviz_debug(f);
+#endif
             } else {
                 N::graphviz_debug(f, p);
             }

@@ -82,7 +82,7 @@ void Leaf::graphviz_debug(std::ofstream &f) {
 
     f << buf;
 
-//    printf("leaf!");
+    //    printf("leaf!");
 }
 
 void N::helpFlush(std::atomic<N *> *n) {
@@ -215,6 +215,7 @@ NTypes N::getType() const {
 
 uint32_t N::getLevel() const { return level; }
 
+// wait to get lock, restart if obsolete
 void N::writeLockOrRestart(bool &needRestart) {
     uint64_t version;
     do {
@@ -231,7 +232,7 @@ void N::writeLockOrRestart(bool &needRestart) {
         version, version + 0b10));
 }
 
-// true:  locked or obsolete or a different version
+// restart if locked or obsolete or a different version
 void N::lockVersionOrRestart(uint64_t &version, bool &needRestart) {
     if (isLocked(version) || isObsolete(version)) {
         needRestart = true;
@@ -655,6 +656,20 @@ N *N::setLeaf(const Leaf *k) {
 Leaf *N::getLeaf(const N *n) {
     return reinterpret_cast<Leaf *>(reinterpret_cast<void *>(
         (reinterpret_cast<uintptr_t>(n) & ~(1ULL << 0))));
+}
+
+bool N::isLeafArray(const N *n) {
+    return (reinterpret_cast<uintptr_t>(n) & (1ULL << 0)) == 1;
+}
+
+LeafArray *N::getLeafArray(const N *n) {
+    return reinterpret_cast<LeafArray *>(
+        (reinterpret_cast<uintptr_t>(n) & ~(1ULL << 0)));
+}
+
+N *N::setLeafArray(const LeafArray *la) {
+    return reinterpret_cast<N *>(
+        (reinterpret_cast<uintptr_t>(la) | (1ULL << 0)));
 }
 
 // only invoke this in remove and N4

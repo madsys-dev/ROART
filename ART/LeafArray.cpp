@@ -38,9 +38,11 @@ Leaf *LeafArray::lookup(const Key *k) const {
         }
         i = b._Find_next(i);
     }
+
     return nullptr;
 }
 bool LeafArray::insert(Leaf *l, bool flush) {
+
     auto b = bitmap.load();
     b.flip();
     auto pos = b._Find_first();
@@ -54,8 +56,7 @@ bool LeafArray::insert(Leaf *l, bool flush) {
         leaf[pos].store(s);
         if (flush)
             flush_data((void *)&leaf[pos], sizeof(leaf[pos]));
-        count++;
-        compactCount++;
+
         return true;
     } else {
         return false;
@@ -94,6 +95,48 @@ void LeafArray::reload() {
         }
     }
     bitmap.store(b);
+}
+void LeafArray::graphviz_debug(std::ofstream &f) {
+    char buf[1000] = {};
+    sprintf(buf + strlen(buf), "%lx [label=\"",
+            reinterpret_cast<uintptr_t>(this));
+    sprintf(buf + strlen(buf), "LeafArray\n");
+    sprintf(buf + strlen(buf), "count: %zu\n", bitmap.load().count());
+    sprintf(buf + strlen(buf), "\"]\n");
+
+    auto b = bitmap.load();
+    auto i = b[0] ? 0 : 1;
+    while (i < LeafArrayLength) {
+        auto fingerprint_ptr = this->leaf[i].load();
+        if (fingerprint_ptr != 0) {
+            uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+            auto ptr = reinterpret_cast<Leaf *>(
+                fingerprint_ptr ^
+                (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+
+            sprintf(buf + strlen(buf), "%lx -- %lx \n",
+                    reinterpret_cast<uintptr_t>(this),
+                    reinterpret_cast<uintptr_t>(ptr));
+        }
+        i = b._Find_next(i);
+    }
+
+    f << buf;
+
+    b = bitmap.load();
+    i = b[0] ? 0 : 1;
+    while (i < LeafArrayLength) {
+        auto fingerprint_ptr = this->leaf[i].load();
+        if (fingerprint_ptr != 0) {
+            uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+            auto ptr = reinterpret_cast<Leaf *>(
+                fingerprint_ptr ^
+                (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+
+            ptr->graphviz_debug(f);
+        }
+        i = b._Find_next(i);
+    }
 }
 
 } // namespace PART_ns

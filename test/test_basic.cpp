@@ -46,17 +46,43 @@ TEST(BasicTest, test_z) {
               << reinterpret_cast<uintptr_t>(pa) << std::endl;
 }
 
-TEST(TreeTest, tree_build) {
+TEST(TreeTest, graph_viz) {
     clear_data();
     auto art = new PART_ns::Tree();
     auto *k = new PART_ns::Key();
-    std::vector<std::string> keys = {"111aaa", "111aab", "111aac",
-                                     "111aad", "111aae", "111aaf",
-                                     "111aba", "112aaa", "113aaa"};
+    std::vector<std::string> keys = {"1",    "12",    "123",
+                                     "1234", "12345", "123456"};
     for (auto &s : keys) {
         k->Init(const_cast<char *>(s.c_str()), s.length(), "123", 3);
         art->insert(k);
     }
     art->graphviz_debug();
-    std::cout << "finish2" << std::endl;
+    std::cout << "finish3 " << std::endl;
+}
+
+TEST(TreeTest, test_insert_and_lookup) {
+    clear_data();
+    auto art = new PART_ns::Tree();
+    auto *k = new PART_ns::Key();
+    std::vector<std::string> keys = {"111", "123", "211", "222"};
+
+    for (auto &s : keys) {
+        k->Init(const_cast<char *>(s.c_str()), s.length(),
+                const_cast<char *>(s.c_str()), s.length());
+        std::cout << s << std::endl;
+
+        art->insert(k);
+    }
+    std::cout << "insertok" << std::endl;
+    art->graphviz_debug();
+    for (auto &s : keys) {
+        k->Init(const_cast<char *>(s.c_str()), s.length(),
+                const_cast<char *>(s.c_str()), s.length());
+        auto l = art->lookup(k);
+
+        std::cout << std::string(l->GetKey()) << std::endl;
+        ASSERT_TRUE(l->checkKey(k));
+    }
+
+    std::cout << "finish2 " << std::endl;
 }

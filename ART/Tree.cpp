@@ -172,6 +172,13 @@ Leaf *Tree::lookup(const Key *k) const {
             if (node == nullptr) {
                 return nullptr;
             }
+#ifdef LEAF_ARRAY
+            if (N::isLeafArray(node)) {
+                auto la = N::getLeafArray(node);
+                auto ret = la->lookup(k);
+                return ret;
+            }
+#else
             if (N::isLeaf(node)) {
                 Leaf *ret = N::getLeaf(node);
                 if (level < k->getKeyLen() - 1 || optimisticPrefixMatch) {
@@ -187,6 +194,7 @@ Leaf *Tree::lookup(const Key *k) const {
                     return ret;
                 }
             }
+#endif
         }
         }
         level++;
@@ -525,21 +533,33 @@ restart:
 #endif
 
             // 2)  add node and (tid, *k) as children
-            Leaf *newLeaf = allocLeaf(k);
 
-            // not persist
+            auto *newLeaf = allocLeaf(k);
+
+#ifdef LEAF_ARRAY
+            auto newLeafArray =
+                new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
+            newLeafArray->insert(newLeaf, true);
+            newNode->insert(k->fkey[nextLevel], N::setLeafArray(newLeafArray),
+                            false);
+#else
             newNode->insert(k->fkey[nextLevel], N::setLeaf(newLeaf), false);
+#endif
+            // not persist
             newNode->insert(nonMatchingKey, node, false);
             // persist the new node
             flush_data((void *)newNode, sizeof(N4));
-            //            N::clflush((char *)newNode, sizeof(N4), true, true);
 
             // 3) lockVersionOrRestart, update parentNode to point to the
             // new node, unlock
             parentNode->writeLockOrRestart(needRestart);
             if (needRestart) {
                 EpochGuard::DeleteNode((void *)newNode);
+#ifdef LEAF_ARRAY
+                EpochGuard::DeleteNode(newLeafArray);
+#endif
                 EpochGuard::DeleteNode((void *)newLeaf);
+
                 node->writeUnlock();
                 goto restart;
             }
@@ -563,6 +583,7 @@ restart:
         assert(nextLevel < k->getKeyLen()); // prevent duplicate key
         // TODO: maybe one string is substring of another, so it fkey[level]
         // will be 0 solve problem of substring
+
         level = nextLevel;
         nodeKey = k->fkey[level];
 
@@ -572,48 +593,75 @@ restart:
             node->lockVersionOrRestart(v, needRestart);
             if (needRestart)
                 goto restart;
-
             Leaf *newLeaf = allocLeaf(k);
 
+#ifdef LEAF_ARRAY
+            auto newLeafArray =
+                new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
+            newLeafArray->insert(newLeaf, true);
+            N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
+                               N::setLeafArray(newLeafArray), needRestart);
+#else
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeaf(newLeaf), needRestart);
+#endif
             if (needRestart)
                 goto restart;
             //            std::cout<<"insert success\n";
             return OperationResults::Success;
         }
+#ifdef LEAF_ARRAY
+        if (N::isLeafArray(nextNode)) {
+
+            auto leaf_array = N::getLeafArray(nextNode);
+            v = leaf_array->getVersion();
+            leaf_array->lockVersionOrRestart(v, needRestart);
+            if (needRestart) {
+                goto restart;
+            }
+            if (leaf_array->lookup(k) != nullptr) {
+                return OperationResults::Existed;
+            } else {
+                auto leaf = allocLeaf(k);
+                leaf_array->insert(leaf, true);
+            }
+
+            leaf_array->writeUnlock();
+            return OperationResults::Success;
+        }
+#else
         if (N::isLeaf(nextNode)) {
             node->lockVersionOrRestart(v, needRestart);
             if (needRestart)
                 goto restart;
-            Leaf *key = N::getLeaf(nextNode);
+            Leaf *leaf = N::getLeaf(nextNode);
 
             level++;
-            // assert(level < key->getKeyLen());
+            // assert(level < leaf->getKeyLen());
             // prevent inserting when
-            // prefix of key exists already
-            // but if I want to insert a prefix of this key, i also need to
+            // prefix of leaf exists already
+            // but if I want to insert a prefix of this leaf, i also need to
             // insert successfully
             uint32_t prefixLength = 0;
 #ifdef KEY_INLINE
             while (level + prefixLength <
-                       std::min(k->getKeyLen(), key->getKeyLen()) &&
-                   key->kv[level + prefixLength] ==
+                       std::min(k->getKeyLen(), leaf->getKeyLen()) &&
+                   leaf->kv[level + prefixLength] ==
                        k->fkey[level + prefixLength]) {
                 prefixLength++;
             }
 #else
             while (level + prefixLength <
-                       std::min(k->getKeyLen(), key->getKeyLen()) &&
-                   key->fkey[level + prefixLength] ==
+                       std::min(k->getKeyLen(), leaf->getKeyLen()) &&
+                   leaf->fkey[level + prefixLength] ==
                        k->fkey[level + prefixLength]) {
                 prefixLength++;
             }
 #endif
             // equal
-            if (k->getKeyLen() == key->getKeyLen() &&
+            if (k->getKeyLen() == leaf->getKeyLen() &&
                 level + prefixLength == k->getKeyLen()) {
-                // duplicate key
+                // duplicate leaf
                 node->writeUnlock();
                 //                std::cout<<"ohfinish\n";
                 return OperationResults::Existed;
@@ -630,23 +678,20 @@ restart:
                    prefixLength); // not persist
 #endif
             Leaf *newLeaf = allocLeaf(k);
-            //            N::clflush((char *)newLeaf, sizeof(Leaf), true, true);
-
             n4->insert(k->fkey[level + prefixLength], N::setLeaf(newLeaf),
                        false);
 #ifdef KEY_INLINE
-            n4->insert(key->kv[level + prefixLength], nextNode, false);
+            n4->insert(leaf->kv[level + prefixLength], nextNode, false);
 #else
-            n4->insert(key->fkey[level + prefixLength], nextNode, false);
+            n4->insert(leaf->fkey[level + prefixLength], nextNode, false);
 #endif
             flush_data((void *)n4, sizeof(N4));
-            //            N::clflush((char *)n4, sizeof(N4), true, true);
 
             N::change(node, k->fkey[level - 1], n4);
             node->writeUnlock();
-            //            std::cout<<"insert success\n";
             return OperationResults::Success;
         }
+#endif
         level++;
     }
     //    std::cout<<"ohfinish\n";
@@ -987,7 +1032,7 @@ void Tree::graphviz_debug() {
     N::graphviz_debug(f, root);
     f << "}";
     f.close();
-//    printf("ok2\n");
+    //    printf("ok2\n");
 }
 
 } // namespace PART_ns

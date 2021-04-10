@@ -7,6 +7,7 @@
 #include "N.h"
 #include <atomic>
 #include <bitset>
+#include <functional>
 
 namespace PART_ns {
 
@@ -20,14 +21,7 @@ class LeafArray : public N {
         bitmap; // 0 means used slot; 1 means empty slot
 
   public:
-    LeafArray(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
-        : N(NTypes::LeafArray, level, prefix, prefixLength) {
-        bitmap.store(std::bitset<LeafArrayLength>{}.reset());
-        memset(leaf, 0, sizeof(leaf));
-    }
-
-    LeafArray(uint32_t level, const Prefix &prefi)
-        : N(NTypes::LeafArray, level, prefi) {
+    LeafArray(uint32_t level = -1) : N(NTypes::LeafArray, level, {}, 0) {
         bitmap.store(std::bitset<LeafArrayLength>{}.reset());
         memset(leaf, 0, sizeof(leaf));
     }
@@ -47,6 +41,9 @@ class LeafArray : public N {
     bool remove(const Key *k);
 
     void reload();
+
+    void graphviz_debug(std::ofstream &f);
+
 
 } __attribute__((aligned(64)));
 } // namespace PART_ns
