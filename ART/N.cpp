@@ -62,6 +62,28 @@ uint16_t Leaf::getFingerPrint() {
     }
     return re;
 }
+void Leaf::graphviz_debug(std::ofstream &f) {
+    char buf[1000] = {};
+    sprintf(buf + strlen(buf), "%lx [label=\"",
+            reinterpret_cast<uintptr_t>(this));
+    sprintf(buf + strlen(buf), "Leaf\n");
+    sprintf(buf + strlen(buf), "Key Len: %d\n", this->key_len);
+    for (int i = 0; i < this->key_len; i++) {
+        sprintf(buf + strlen(buf), "%u ", this->kv[i]);
+    }
+    sprintf(buf + strlen(buf), "\n");
+
+    sprintf(buf + strlen(buf), "Val Len: %d\n", this->val_len);
+    for (int i = 0; i < this->val_len; i++) {
+        sprintf(buf + strlen(buf), "%u ", this->kv[key_len + i]);
+    }
+    sprintf(buf + strlen(buf), "\n");
+    sprintf(buf + strlen(buf), "\"]\n");
+
+    f << buf;
+
+//    printf("leaf!");
+}
 
 void N::helpFlush(std::atomic<N *> *n) {
     if (n == nullptr)
@@ -850,5 +872,35 @@ void N::rebuild_node(N *node, std::vector<std::pair<uint64_t, size_t>> &rs,
         //        rs.push_back(std::make_pair(0,0));
     }
 #endif
+}
+void N::graphviz_debug(std::ofstream &f, N *node) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
+    switch (node->getType()) {
+    case NTypes::N4: {
+        auto n = static_cast<N4 *>(node);
+        n->graphviz_debug(f);
+        return;
+    }
+    case NTypes::N16: {
+        auto n = static_cast<N16 *>(node);
+        n->graphviz_debug(f);
+        return;
+    }
+    case NTypes::N48: {
+        auto n = static_cast<N48 *>(node);
+        n->graphviz_debug(f);
+        return;
+    }
+    case NTypes::N256: {
+        auto n = static_cast<N256 *>(node);
+        n->graphviz_debug(f);
+        return;
+    }
+    default: {
+        assert(false);
+    }
+    }
 }
 } // namespace PART_ns

@@ -47,7 +47,16 @@ TEST(BasicTest, test_z) {
 }
 
 TEST(TreeTest, tree_build) {
-    //    clear_data();
+    clear_data();
     auto art = new PART_ns::Tree();
-    //    std::cout << "finish" << std::endl;
+    auto *k = new PART_ns::Key();
+    std::vector<std::string> keys = {"111aaa", "111aab", "111aac",
+                                     "111aad", "111aae", "111aaf",
+                                     "111aba", "112aaa", "113aaa"};
+    for (auto &s : keys) {
+        k->Init(const_cast<char *>(s.c_str()), s.length(), "123", 3);
+        art->insert(k);
+    }
+    art->graphviz_debug();
+    std::cout << "finish2" << std::endl;
 }

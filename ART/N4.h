@@ -25,8 +25,7 @@ class N4 : public N {
 
     bool insert(uint8_t key, N *n, bool flush);
 
-    template <class NODE>
-    void copyTo(NODE *n) const {
+    template <class NODE> void copyTo(NODE *n) const {
         for (uint32_t i = 0; i < compactCount; ++i) {
             N *child = children[i].load();
             if (child != nullptr) {
@@ -53,6 +52,8 @@ class N4 : public N {
                      uint32_t &childrenCount);
 
     uint32_t getCount() const;
+
+    void graphviz_debug(std::ofstream &f);
 } __attribute__((aligned(64)));
 
 } // namespace PART_ns

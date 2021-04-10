@@ -4,6 +4,7 @@
 #include "Key.h"
 #include "util.h"
 #include <atomic>
+#include <fstream>
 #include <set>
 #include <stdint.h>
 #include <string.h>
@@ -78,6 +79,9 @@ class Leaf : public BaseNode {
     }
 
     uint16_t getFingerPrint();
+
+    void graphviz_debug(std::ofstream &f);
+
 } __attribute__((aligned(64)));
 
 static constexpr uint32_t maxStoredPrefixLength = 4;
@@ -232,6 +236,8 @@ class N : public BaseNode {
                              std::vector<std::pair<uint64_t, size_t>> &rs,
                              uint64_t start_addr, uint64_t end_addr,
                              int thread_id);
+
+    static void graphviz_debug(std::ofstream &f, N *node);
 
 } __attribute__((aligned(64)));
 

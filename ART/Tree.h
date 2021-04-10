@@ -79,6 +79,8 @@ class Tree {
     OperationResults remove(const Key *k);
 
     Leaf *allocLeaf(const Key *k) const;
+
+    void graphviz_debug();
 } __attribute__((aligned(64)));
 
 #ifdef ARTPMDK

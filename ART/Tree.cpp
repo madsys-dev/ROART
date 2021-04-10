@@ -976,5 +976,18 @@ typename Tree::PCEqualsResults Tree::checkPrefixEquals(const N *n,
     }
     return PCEqualsResults::BothMatch;
 }
+void Tree::graphviz_debug() {
+    std::ofstream f("../dot/tree-view.dot");
+
+    f << "graph tree\n"
+         "{\n"
+         "    graph[dpi = 400];\n"
+         "    label=\"Tree View\"\n"
+         "    node []\n";
+    N::graphviz_debug(f, root);
+    f << "}";
+    f.close();
+//    printf("ok2\n");
+}
 
 } // namespace PART_ns

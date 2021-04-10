@@ -47,6 +47,8 @@ class N256 : public N {
                      uint32_t &childrenCount);
 
     uint32_t getCount() const;
+
+    void graphviz_debug(std::ofstream &f);
 } __attribute__((aligned(64)));
 
 } // namespace PART_ns

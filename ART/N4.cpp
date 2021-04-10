@@ -128,4 +128,46 @@ uint32_t N4::getCount() const {
     }
     return cnt;
 }
+void N4::graphviz_debug(std::ofstream &f) {
+    char buf[1000] = {};
+    sprintf(buf + strlen(buf), "%lx [label=\"",
+            reinterpret_cast<uintptr_t>(this));
+    sprintf(buf + strlen(buf), "N4\n");
+    auto pre = this->getPrefi();
+    sprintf(buf + strlen(buf), "Prefix Len: %d\n", pre.prefixCount);
+    sprintf(buf + strlen(buf), "Prefix: ");
+    for (int i = 0; i < std::min(pre.prefixCount, maxStoredPrefixLength); i++) {
+        sprintf(buf + strlen(buf), "%u ", pre.prefix[i]);
+    }
+    sprintf(buf + strlen(buf), "\n");
+    sprintf(buf + strlen(buf), "count: %d\n", count);
+    sprintf(buf + strlen(buf), "compact: %d\n", compactCount);
+    sprintf(buf + strlen(buf), "\"]\n");
+
+    for (int i = 0; i < compactCount; i++) {
+        auto p = children[i].load();
+        if (p != nullptr) {
+            auto x = keys[i].load();
+            auto addr = reinterpret_cast<uintptr_t>(p);
+            if (isLeaf(p)) {
+                addr = reinterpret_cast<uintptr_t>(getLeaf(p));
+            }
+            sprintf(buf + strlen(buf), "%lx -- %lx [label=\"%u\"]\n",
+                    reinterpret_cast<uintptr_t>(this), addr, x);
+        }
+    }
+    f << buf;
+
+    for (int i = 0; i < compactCount; i++) {
+        auto p = children[i].load();
+        if (p != nullptr) {
+            if (isLeaf(p)) {
+                auto l = getLeaf(p);
+                l->graphviz_debug(f);
+            } else {
+                N::graphviz_debug(f, p);
+            }
+        }
+    }
+}
 } // namespace PART_ns
