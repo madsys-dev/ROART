@@ -223,13 +223,15 @@ class N : public BaseNode {
     static std::tuple<N *, uint8_t> getSecondChild(N *node, const uint8_t k);
 
     template <typename curN, typename biggerN>
-    static void tryInsertOrGrowAndUnlock(curN *n, N *parentNode, uint8_t keyParent,
-                           uint8_t key, N *val, NTypes type, bool &needRestart);
+    static void tryInsertOrGrowAndUnlock(curN *n, N *parentNode,
+                                         uint8_t keyParent, uint8_t key, N *val,
+                                         NTypes type, bool &needRestart);
 
     template <typename curN>
-    static void compactAndInsertAndUnlock(curN *n, N *parentNode, uint8_t keyParent,
-                              uint8_t key, N *val, NTypes type,
-                              bool &needRestart);
+    static void compactAndInsertAndUnlock(curN *n, N *parentNode,
+                                          uint8_t keyParent, uint8_t key,
+                                          N *val, NTypes type,
+                                          bool &needRestart);
 
     template <typename curN, typename smallerN>
     static void removeAndShrink(curN *n, N *parentNode, uint8_t keyParent,
@@ -249,6 +251,14 @@ class N : public BaseNode {
     // do insert without checking anything
     static void unchecked_insert(N *node, uint8_t key_byte, N *child,
                                  bool flush);
+
+    static bool key_keylen_lt(const char *a, const int alen, const char *b,
+                              const int blen);
+
+    static bool leaf_lt(const Leaf *a, const Leaf *b);
+    static bool leaf_key_lt(const Leaf *a, const Key *b);
+    static bool key_leaf_lt(const Key *a, const Leaf *b);
+    static bool key_key_lt(const Key *a, const Key *b);
 
 } __attribute__((aligned(64)));
 

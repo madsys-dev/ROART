@@ -44,13 +44,17 @@ class LeafArray : public N {
 
     void reload();
 
-    uint32_t getCount()const;
+    uint32_t getCount() const;
 
     bool isFull() const;
 
     void splitAndUnlock(N *parentNode, uint8_t parentKey, bool &need_restart);
 
+    std::vector<Leaf *> getSortedLeaf(const Key *start, const Key *end);
+
     void graphviz_debug(std::ofstream &f);
+
+
 
 } __attribute__((aligned(64)));
 } // namespace PART_ns

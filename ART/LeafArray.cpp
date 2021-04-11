@@ -26,7 +26,10 @@ uint16_t PART_ns::LeafArray::getFingerPrint(size_t pos) const {
 }
 Leaf *LeafArray::lookup(const Key *k) const {
     uint16_t finger_print = k->getFingerPrint();
+
     auto b = bitmap.load();
+
+#ifdef FIND_FIRST
     auto i = b[0] ? 0 : 1;
     while (i < LeafArrayLength) {
         auto fingerprint_ptr = this->leaf[i].load();
@@ -41,6 +44,22 @@ Leaf *LeafArray::lookup(const Key *k) const {
         }
         i = b._Find_next(i);
     }
+#else
+    for (int i = 0; i < LeafArrayLength; i++) {
+        if (b[i] == false)
+            continue;
+        auto fingerprint_ptr = this->leaf[i].load();
+        if (fingerprint_ptr != 0) {
+            uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+            auto ptr = reinterpret_cast<Leaf *>(
+                fingerprint_ptr ^
+                (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+            if (finger_print == thisfp && ptr->checkKey(k)) {
+                return ptr;
+            }
+        }
+    }
+#endif
 
     return nullptr;
 }
@@ -158,7 +177,7 @@ void LeafArray::splitAndUnlock(N *parentNode, uint8_t parentKey,
     //    char **keys = new char *[leaf_count];
     std::vector<int> lens;
     //    int *lens = new int[leaf_count];
-    int cnt = 0;
+
     auto i = b[0] ? 0 : 1;
     while (i < LeafArrayLength) {
         auto fingerprint_ptr = this->leaf[i].load();
@@ -168,28 +187,26 @@ void LeafArray::splitAndUnlock(N *parentNode, uint8_t parentKey,
                 fingerprint_ptr ^
                 (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
             keys.push_back(ptr->GetKey());
-            //            keys[cnt] = ptr->GetKey();
             lens.push_back(ptr->key_len);
-            //            lens[cnt] = ptr->key_len;
-            cnt++;
         }
         i = b._Find_next(i);
     }
-//    printf("spliting\n");
+    //    printf("spliting\n");
 
     std::vector<char> common_prefix;
-    cnt = parentNode->getLevel() + 1;
+    int level = 0;
+    level = parentNode->getLevel() + 1;
     // assume keys are not substring of another key
 
     // todo: get common prefix can be optimized by binary search
     while (true) {
         bool out = false;
         for (i = 0; i < leaf_count; i++) {
-            if (cnt < lens[i]) {
+            if (level < lens[i]) {
                 if (i == 0) {
-                    common_prefix.push_back(keys[i][cnt]);
+                    common_prefix.push_back(keys[i][level]);
                 } else {
-                    if (keys[i][cnt] != common_prefix.back()) {
+                    if (keys[i][level] != common_prefix.back()) {
 
                         common_prefix.pop_back();
 
@@ -204,15 +221,16 @@ void LeafArray::splitAndUnlock(N *parentNode, uint8_t parentKey,
         }
         if (out)
             break;
-        cnt++;
+        level++;
     }
     std::map<char, LeafArray *> split_array;
     for (i = 0; i < leaf_count; i++) {
-        if (split_array.count(keys[i][cnt]) == 0) {
-            split_array[keys[i][cnt]] =
-                new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
+        if (split_array.count(keys[i][level]) == 0) {
+            split_array[keys[i][level]] =
+                new (alloc_new_node_from_type(NTypes::LeafArray))
+                    LeafArray(level);
         }
-        split_array.at(keys[i][cnt])->insert(getLeafAt(i), false);
+        split_array.at(keys[i][level])->insert(getLeafAt(i), false);
     }
 
     N *n;
@@ -221,16 +239,16 @@ void LeafArray::splitAndUnlock(N *parentNode, uint8_t parentKey,
     auto leaf_array_count = split_array.size();
     if (leaf_array_count <= 4) {
         n = new (alloc_new_node_from_type(NTypes::N4))
-            N4(cnt, prefix_start, prefix_len);
+            N4(level, prefix_start, prefix_len);
     } else if (leaf_array_count > 4 && leaf_array_count <= 16) {
         n = new (alloc_new_node_from_type(NTypes::N16))
-            N16(cnt, prefix_start, prefix_len);
+            N16(level, prefix_start, prefix_len);
     } else if (leaf_array_count > 16 && leaf_array_count <= 48) {
         n = new (alloc_new_node_from_type(NTypes::N48))
-            N48(cnt, prefix_start, prefix_len);
+            N48(level, prefix_start, prefix_len);
     } else if (leaf_array_count > 48 && leaf_array_count <= 256) {
         n = new (alloc_new_node_from_type(NTypes::N256))
-            N256(cnt, prefix_start, prefix_len);
+            N256(level, prefix_start, prefix_len);
     } else {
         assert(0);
     }
@@ -252,5 +270,20 @@ Leaf *LeafArray::getLeafAt(size_t pos) {
 }
 uint32_t LeafArray::getCount() const { return bitmap.load().count(); }
 bool LeafArray::isFull() const { return getCount() == LeafArrayLength; }
+std::vector<Leaf *> LeafArray::getSortedLeaf(const Key *start, const Key *end) {
+    std::vector<Leaf *> leaves;
+    auto b = bitmap.load();
+    auto i = b[0] ? 0 : 1;
+    while (i < LeafArrayLength) {
+        auto ptr = getLeafAt(i);
+        // start <= ptr < end
+        if (!leaf_key_lt(ptr, start) && leaf_key_lt(ptr, end))
+            leaves.push_back(ptr);
+        i = b._Find_next(i);
+    }
+    std::sort(leaves.begin(), leaves.end(), leaf_lt);
+
+    return leaves;
+}
 
 } // namespace PART_ns
