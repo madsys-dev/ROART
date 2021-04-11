@@ -50,21 +50,37 @@ TEST(TreeTest, graph_viz) {
     clear_data();
     auto art = new PART_ns::Tree();
     auto *k = new PART_ns::Key();
-    std::vector<std::string> keys = {"1",    "12",    "123",
-                                     "1234", "12345", "123456"};
+    std::vector<std::string> keys = {
+        "1121",
+        "1131",
+        "1132",
+        "1142",
+        "1141",
+        "1122",
+        "1123",
+        "1124",
+        "121",
+    };
     for (auto &s : keys) {
         k->Init(const_cast<char *>(s.c_str()), s.length(), "123", 3);
         art->insert(k);
     }
+
     art->graphviz_debug();
-    std::cout << "finish3 " << std::endl;
+
+    for (auto &s : keys) {
+        k->Init(const_cast<char *>(s.c_str()), s.length(), "123", 3);
+        auto re = art->lookup(k);
+        std::cout << std::string(re->GetKey()) << std::endl;
+    }
+    std::cout << "finish3 "<<PART_ns::LeafArrayLength << std::endl;
 }
 
 TEST(TreeTest, test_insert_and_lookup) {
     clear_data();
     auto art = new PART_ns::Tree();
     auto *k = new PART_ns::Key();
-    std::vector<std::string> keys = {"111", "123", "211", "222"};
+    std::vector<std::string> keys = {"111", "123", "211"};
 
     for (auto &s : keys) {
         k->Init(const_cast<char *>(s.c_str()), s.length(),

@@ -223,11 +223,11 @@ class N : public BaseNode {
     static std::tuple<N *, uint8_t> getSecondChild(N *node, const uint8_t k);
 
     template <typename curN, typename biggerN>
-    static void insertGrow(curN *n, N *parentNode, uint8_t keyParent,
+    static void tryInsertOrGrowAndUnlock(curN *n, N *parentNode, uint8_t keyParent,
                            uint8_t key, N *val, NTypes type, bool &needRestart);
 
     template <typename curN>
-    static void insertCompact(curN *n, N *parentNode, uint8_t keyParent,
+    static void compactAndInsertAndUnlock(curN *n, N *parentNode, uint8_t keyParent,
                               uint8_t key, N *val, NTypes type,
                               bool &needRestart);
 
@@ -245,6 +245,10 @@ class N : public BaseNode {
                              int thread_id);
 
     static void graphviz_debug(std::ofstream &f, N *node);
+
+    // do insert without checking anything
+    static void unchecked_insert(N *node, uint8_t key_byte, N *child,
+                                 bool flush);
 
 } __attribute__((aligned(64)));
 

@@ -131,14 +131,14 @@ uint32_t N4::getCount() const {
 }
 void N4::graphviz_debug(std::ofstream &f) {
     char buf[1000] = {};
-    sprintf(buf + strlen(buf), "%lx [label=\"",
+    sprintf(buf + strlen(buf), "node%lx [label=\"",
             reinterpret_cast<uintptr_t>(this));
-    sprintf(buf + strlen(buf), "N4\n");
+    sprintf(buf + strlen(buf), "N4 %d\n",level);
     auto pre = this->getPrefi();
     sprintf(buf + strlen(buf), "Prefix Len: %d\n", pre.prefixCount);
     sprintf(buf + strlen(buf), "Prefix: ");
     for (int i = 0; i < std::min(pre.prefixCount, maxStoredPrefixLength); i++) {
-        sprintf(buf + strlen(buf), "%u ", pre.prefix[i]);
+        sprintf(buf + strlen(buf), "%c ", pre.prefix[i]);
     }
     sprintf(buf + strlen(buf), "\n");
     sprintf(buf + strlen(buf), "count: %d\n", count);
@@ -153,7 +153,7 @@ void N4::graphviz_debug(std::ofstream &f) {
             if (isLeaf(p)) {
                 addr = reinterpret_cast<uintptr_t>(getLeaf(p));
             }
-            sprintf(buf + strlen(buf), "%lx -- %lx [label=\"%u\"]\n",
+            sprintf(buf + strlen(buf), "node%lx -- node%lx [label=\"%c\"]\n",
                     reinterpret_cast<uintptr_t>(this), addr, x);
         }
     }

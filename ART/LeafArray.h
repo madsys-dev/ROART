@@ -34,6 +34,8 @@ class LeafArray : public N {
 
     uint16_t getFingerPrint(size_t pos) const;
 
+    Leaf *getLeafAt(size_t pos);
+
     Leaf *lookup(const Key *k) const;
 
     bool insert(Leaf *l, bool flush);
@@ -42,8 +44,13 @@ class LeafArray : public N {
 
     void reload();
 
-    void graphviz_debug(std::ofstream &f);
+    uint32_t getCount()const;
 
+    bool isFull() const;
+
+    void splitAndUnlock(N *parentNode, uint8_t parentKey, bool &need_restart);
+
+    void graphviz_debug(std::ofstream &f);
 
 } __attribute__((aligned(64)));
 } // namespace PART_ns

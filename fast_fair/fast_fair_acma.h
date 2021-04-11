@@ -731,11 +731,11 @@ class page {
                 }
             }
 
-            // Set a new root or insert the split key to the parent
+            // Set a new root or insert the splitAndUnlock key to the parent
             if (bt->root ==
                 (char *)this) { // only one node can update the root ptr
 #ifdef USE_PMDK
-                //                printf("split root\n");
+                //                printf("splitAndUnlock root\n");
                 page *new_root;
                 new_root = new (alloc_new_node_from_size(PAGESIZE))
                     page((page *)this, split_key, sibling, hdr.level + 1);
@@ -949,7 +949,7 @@ class page {
                 }
             }
 
-            // Set a new root or insert the split key to the parent
+            // Set a new root or insert the splitAndUnlock key to the parent
             if (bt->root ==
                 (char *)this) { // only one node can update the root ptr
 

@@ -594,7 +594,6 @@ restart:
             if (needRestart)
                 goto restart;
             Leaf *newLeaf = allocLeaf(k);
-
 #ifdef LEAF_ARRAY
             auto newLeafArray =
                 new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
@@ -607,27 +606,33 @@ restart:
 #endif
             if (needRestart)
                 goto restart;
-            //            std::cout<<"insert success\n";
             return OperationResults::Success;
         }
 #ifdef LEAF_ARRAY
         if (N::isLeafArray(nextNode)) {
-
             auto leaf_array = N::getLeafArray(nextNode);
-            v = leaf_array->getVersion();
-            leaf_array->lockVersionOrRestart(v, needRestart);
-            if (needRestart) {
-                goto restart;
-            }
             if (leaf_array->lookup(k) != nullptr) {
                 return OperationResults::Existed;
             } else {
-                auto leaf = allocLeaf(k);
-                leaf_array->insert(leaf, true);
+                auto lav = leaf_array->getVersion();
+                leaf_array->lockVersionOrRestart(lav, needRestart);
+                if (needRestart) {
+                    goto restart;
+                }
+                if (leaf_array->isFull()) {
+                    leaf_array->splitAndUnlock(node, nodeKey, needRestart);
+                    if (needRestart) {
+                        goto restart;
+                    }
+                    nextNode = N::getChild(nodeKey, node);
+                    // insert at the next iteration
+                } else {
+                    auto leaf = allocLeaf(k);
+                    leaf_array->insert(leaf, true);
+                    leaf_array->writeUnlock();
+                    return OperationResults::Success;
+                }
             }
-
-            leaf_array->writeUnlock();
-            return OperationResults::Success;
         }
 #else
         if (N::isLeaf(nextNode)) {
@@ -858,9 +863,9 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
                              Prefix &nonMatchingPrefix) {
     Prefix p = n->getPrefi();
     if (p.prefixCount + level != n->getLevel()) {
-        // Intermediate or inconsistent state from path compression "split" or
-        // "merge" is detected Inconsistent path compressed prefix should be
-        // recovered in here
+        // Intermediate or inconsistent state from path compression
+        // "splitAndUnlock" or "merge" is detected Inconsistent path compressed
+        // prefix should be recovered in here
         bool needRecover = false;
         auto v = n->getVersion();
         n->lockVersionOrRestart(v, needRecover);
@@ -888,8 +893,8 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
         }
 
         // path compression merge is in progress --> restart from root
-        // path compression split is in progress --> skipping an intermediate
-        // compressed prefix by using level (invariant)
+        // path compression splitAndUnlock is in progress --> skipping an
+        // intermediate compressed prefix by using level (invariant)
         if (p.prefixCount + level < n->getLevel()) {
             return CheckPrefixPessimisticResult::SkippedLevel;
         }

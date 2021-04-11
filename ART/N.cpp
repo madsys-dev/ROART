@@ -1,5 +1,6 @@
 #include "N.h"
 #include "EpochGuard.h"
+#include "LeafArray.h"
 #include "N16.h"
 #include "N256.h"
 #include "N4.h"
@@ -64,18 +65,18 @@ uint16_t Leaf::getFingerPrint() {
 }
 void Leaf::graphviz_debug(std::ofstream &f) {
     char buf[1000] = {};
-    sprintf(buf + strlen(buf), "%lx [label=\"",
+    sprintf(buf + strlen(buf), "node%lx [label=\"",
             reinterpret_cast<uintptr_t>(this));
     sprintf(buf + strlen(buf), "Leaf\n");
     sprintf(buf + strlen(buf), "Key Len: %d\n", this->key_len);
     for (int i = 0; i < this->key_len; i++) {
-        sprintf(buf + strlen(buf), "%u ", this->kv[i]);
+        sprintf(buf + strlen(buf), "%c ", this->kv[i]);
     }
     sprintf(buf + strlen(buf), "\n");
 
     sprintf(buf + strlen(buf), "Val Len: %d\n", this->val_len);
     for (int i = 0; i < this->val_len; i++) {
-        sprintf(buf + strlen(buf), "%u ", this->kv[key_len + i]);
+        sprintf(buf + strlen(buf), "%c ", this->kv[key_len + i]);
     }
     sprintf(buf + strlen(buf), "\n");
     sprintf(buf + strlen(buf), "\"]\n");
@@ -308,8 +309,9 @@ void N::change(N *node, uint8_t key, N *val) {
 }
 
 template <typename curN, typename biggerN>
-void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
-                   N *val, NTypes type, bool &needRestart) {
+void N::tryInsertOrGrowAndUnlock(curN *n, N *parentNode, uint8_t keyParent,
+                                 uint8_t key, N *val, NTypes type,
+                                 bool &needRestart) {
     if (n->insert(key, val, true)) {
         n->writeUnlock();
         return;
@@ -345,8 +347,9 @@ void N::insertGrow(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
 }
 
 template <typename curN>
-void N::insertCompact(curN *n, N *parentNode, uint8_t keyParent, uint8_t key,
-                      N *val, NTypes type, bool &needRestart) {
+void N::compactAndInsertAndUnlock(curN *n, N *parentNode, uint8_t keyParent,
+                                  uint8_t key, N *val, NTypes type,
+                                  bool &needRestart) {
     // compact and lock parent
     parentNode->writeLockOrRestart(needRestart);
     if (needRestart) {
@@ -385,34 +388,34 @@ void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
         if (n->compactCount == 4 && n->count <= 3) {
-            insertCompact<N4>(n, parentNode, keyParent, key, val, NTypes::N4,
-                              needRestart);
+            compactAndInsertAndUnlock<N4>(n, parentNode, keyParent, key, val,
+                                          NTypes::N4, needRestart);
             break;
         }
-        insertGrow<N4, N16>(n, parentNode, keyParent, key, val, NTypes::N16,
-                            needRestart);
+        tryInsertOrGrowAndUnlock<N4, N16>(n, parentNode, keyParent, key, val,
+                                          NTypes::N16, needRestart);
         break;
     }
     case NTypes::N16: {
         auto n = static_cast<N16 *>(node);
         if (n->compactCount == 16 && n->count <= 14) {
-            insertCompact<N16>(n, parentNode, keyParent, key, val, NTypes::N16,
-                               needRestart);
+            compactAndInsertAndUnlock<N16>(n, parentNode, keyParent, key, val,
+                                           NTypes::N16, needRestart);
             break;
         }
-        insertGrow<N16, N48>(n, parentNode, keyParent, key, val, NTypes::N48,
-                             needRestart);
+        tryInsertOrGrowAndUnlock<N16, N48>(n, parentNode, keyParent, key, val,
+                                           NTypes::N48, needRestart);
         break;
     }
     case NTypes::N48: {
         auto n = static_cast<N48 *>(node);
         if (n->compactCount == 48 && n->count != 48) {
-            insertCompact<N48>(n, parentNode, keyParent, key, val, NTypes::N48,
-                               needRestart);
+            compactAndInsertAndUnlock<N48>(n, parentNode, keyParent, key, val,
+                                           NTypes::N48, needRestart);
             break;
         }
-        insertGrow<N48, N256>(n, parentNode, keyParent, key, val, NTypes::N256,
-                              needRestart);
+        tryInsertOrGrowAndUnlock<N48, N256>(n, parentNode, keyParent, key, val,
+                                            NTypes::N256, needRestart);
         break;
     }
     case NTypes::N256: {
@@ -602,6 +605,10 @@ uint32_t N::getCount(N *node) {
     }
     case NTypes::N256: {
         auto n = static_cast<const N256 *>(node);
+        return n->getCount();
+    }
+    case NTypes::LeafArray: {
+        auto n = static_cast<const LeafArray *>(node);
         return n->getCount();
     }
     default: {
@@ -911,6 +918,41 @@ void N::graphviz_debug(std::ofstream &f, N *node) {
     case NTypes::N256: {
         auto n = static_cast<N256 *>(node);
         n->graphviz_debug(f);
+        return;
+    }
+    default: {
+        assert(false);
+    }
+    }
+}
+
+void N::unchecked_insert(N *node, uint8_t key_byte, N *child, bool flush) {
+#ifdef INSTANT_RESTART
+    node->check_generation();
+#endif
+    switch (node->getType()) {
+    case NTypes::N4: {
+        auto n = static_cast<N4 *>(node);
+        auto re = n->insert(key_byte, child, flush);
+        assert(re);
+        return;
+    }
+    case NTypes::N16: {
+        auto n = static_cast<N16 *>(node);
+        auto re = n->insert(key_byte, child, flush);
+        assert(re);
+        return;
+    }
+    case NTypes::N48: {
+        auto n = static_cast<N48 *>(node);
+        auto re = n->insert(key_byte, child, flush);
+        assert(re);
+        return;
+    }
+    case NTypes::N256: {
+        auto n = static_cast<N256 *>(node);
+        auto re = n->insert(key_byte, child, flush);
+        assert(re);
         return;
     }
     default: {

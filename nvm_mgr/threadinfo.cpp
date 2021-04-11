@@ -61,7 +61,6 @@ size_t get_node_size(PART_ns::NTypes type) {
     case PART_ns::NTypes::Leaf:
         return sizeof(PART_ns::Leaf);
     case PART_ns::NTypes::LeafArray:
-        printf("alloc leaf array %lu\n",sizeof(PART_ns::LeafArray));
         return sizeof(PART_ns::LeafArray);
     default:
         std::cout << "[ALLOC NODE]\twrong type\n";
@@ -146,7 +145,7 @@ uint64_t buddy_allocator::get_addr(int id) {
         return addr;
     } else { // empty
         addr = get_addr(id + 1);
-        // get a bigger page and split half into free_list
+        // get a bigger page and splitAndUnlock half into free_list
         free_list[id].push(addr + power_two[id]);
         return addr;
     }
