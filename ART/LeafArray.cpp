@@ -98,6 +98,7 @@ bool LeafArray::remove(const Key *k) {
             if (finger_print == thisfp && ptr->checkKey(k)) {
                 leaf[i].store(0);
                 flush_data(&leaf[i], sizeof(std::atomic<uintptr_t>));
+                EpochGuard::DeleteNode(ptr);
                 b[i] = false;
                 bitmap.store(b);
                 return true;
@@ -257,7 +258,7 @@ void LeafArray::splitAndUnlock(N *parentNode, uint8_t parentKey,
         flush_data(p.second, sizeof(LeafArray));
     }
 
-    change(parentNode, parentKey, n);
+    N::change(parentNode, parentKey, n);
     parentNode->writeUnlock();
 
     this->writeUnlockObsolete();
@@ -284,6 +285,54 @@ std::vector<Leaf *> LeafArray::getSortedLeaf(const Key *start, const Key *end) {
     std::sort(leaves.begin(), leaves.end(), leaf_lt);
 
     return leaves;
+}
+bool LeafArray::update(const Key *k, Leaf *l) {
+    uint16_t finger_print = k->getFingerPrint();
+    auto b = bitmap.load();
+
+#ifdef FIND_FIRST
+    auto i = b[0] ? 0 : 1;
+    while (i < LeafArrayLength) {
+        auto fingerprint_ptr = this->leaf[i].load();
+        if (fingerprint_ptr != 0) {
+            uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+            auto ptr = reinterpret_cast<Leaf *>(
+                fingerprint_ptr ^
+                (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+            if (finger_print == thisfp && ptr->checkKey(k)) {
+                auto news = fingerPrintLeaf(finger_print, l);
+                leaf[i].store(news);
+                flush_data(&leaf[i], sizeof(std::atomic<uintptr_t>));
+                return true;
+            }
+        }
+        i = b._Find_next(i);
+    }
+#else
+    for (int i = 0; i < LeafArrayLength; i++) {
+        if (b[i] == false)
+            continue;
+        auto fingerprint_ptr = this->leaf[i].load();
+        if (fingerprint_ptr != 0) {
+            uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+            auto ptr = reinterpret_cast<Leaf *>(
+                fingerprint_ptr ^
+                (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+            if (finger_print == thisfp && ptr->checkKey(k)) {
+                auto news = fingerPrintLeaf(finger_print, l);
+                leaf[i].store(news);
+                flush_data(&leaf[i], sizeof(std::atomic<uintptr_t>));
+                return true;
+            }
+        }
+    }
+#endif
+    return false;
+}
+uintptr_t LeafArray::fingerPrintLeaf(uint16_t fingerPrint, Leaf *l) {
+    uintptr_t mask = (1LL << FingerPrintShift) - 1;
+    auto f = uintptr_t(fingerPrint);
+    return (reinterpret_cast<uintptr_t>(l) & mask) | (f << FingerPrintShift);
 }
 
 } // namespace PART_ns

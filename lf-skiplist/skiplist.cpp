@@ -466,7 +466,7 @@
 //        // write_data_wait((void*)node_to_delete, CACHE_LINES_PER_NV_NODE);
 //        // no need for the above; we either make sure the bottom unlink is
 //        // already visible, or it is already in the flushbuffer, which will be
-//        // emptied when the epoch change occurs at the latest
+//        // emptied when the epoch update occurs at the latest
 //        result = node_to_delete->value;
 //        sl_search(sl, key, nullptr, nullptr);
 //

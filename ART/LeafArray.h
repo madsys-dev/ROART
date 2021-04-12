@@ -36,7 +36,11 @@ class LeafArray : public N {
 
     Leaf *getLeafAt(size_t pos);
 
+    static uintptr_t fingerPrintLeaf(uint16_t fingerPrint, Leaf *l);
+
     Leaf *lookup(const Key *k) const;
+
+    bool update(const Key *k, Leaf *l);
 
     bool insert(Leaf *l, bool flush);
 
@@ -53,8 +57,6 @@ class LeafArray : public N {
     std::vector<Leaf *> getSortedLeaf(const Key *start, const Key *end);
 
     void graphviz_debug(std::ofstream &f);
-
-
 
 } __attribute__((aligned(64)));
 } // namespace PART_ns

@@ -961,8 +961,7 @@ void N::unchecked_insert(N *node, uint8_t key_byte, N *child, bool flush) {
     }
 }
 
-bool N::key_keylen_lt(const char *a, const int alen, const char *b,
-                      const int blen) {
+bool N::key_keylen_lt(char *a, const int alen, char *b, const int blen) {
     for (int i = 0; i < std::min(alen, blen); i++) {
         if (a[i] != b[i]) {
             return a[i] < b[i];
@@ -970,14 +969,14 @@ bool N::key_keylen_lt(const char *a, const int alen, const char *b,
     }
     return alen < blen;
 }
-bool N::leaf_lt(const Leaf *a, const Leaf *b) {
+bool N::leaf_lt(Leaf *a, Leaf *b) {
     return key_keylen_lt(a->GetKey(), a->key_len, b->GetKey(), b->key_len);
 }
-bool N::leaf_key_lt(const Leaf *a, const Key *b) {
+bool N::leaf_key_lt(Leaf *a, const Key *b) {
     return key_keylen_lt(a->GetKey(), a->key_len,
                          reinterpret_cast<char *>(b->fkey), b->key_len);
 }
-bool N::key_leaf_lt(const Key *a, const Leaf *b) {
+bool N::key_leaf_lt(const Key *a, Leaf *b) {
     return key_keylen_lt(reinterpret_cast<char *>(a->fkey), a->key_len,
                          b->GetKey(), b->key_len);
 }

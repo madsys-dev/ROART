@@ -252,12 +252,12 @@ class N : public BaseNode {
     static void unchecked_insert(N *node, uint8_t key_byte, N *child,
                                  bool flush);
 
-    static bool key_keylen_lt(const char *a, const int alen, const char *b,
+    static bool key_keylen_lt(char *a, const int alen, char *b,
                               const int blen);
 
-    static bool leaf_lt(const Leaf *a, const Leaf *b);
-    static bool leaf_key_lt(const Leaf *a, const Key *b);
-    static bool key_leaf_lt(const Key *a, const Leaf *b);
+    static bool leaf_lt(Leaf *a, Leaf *b);
+    static bool leaf_key_lt(Leaf *a, const Key *b);
+    static bool key_leaf_lt(const Key *a, Leaf *b);
     static bool key_key_lt(const Key *a, const Key *b);
 
 } __attribute__((aligned(64)));

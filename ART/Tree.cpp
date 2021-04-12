@@ -248,6 +248,26 @@ restart:
                 }
                 return OperationResults::NotFound;
             }
+#ifdef LEAF_ARRAY
+            if (N::isLeafArray(nextNode)) {
+                node->lockVersionOrRestart(v, needRestart);
+                if (needRestart) {
+                    //                        std::cout<<"retry\n";
+                    goto restart;
+                }
+
+                auto *leaf_array = N::getLeafArray(nextNode);
+                auto leaf = allocLeaf(k);
+                auto result = leaf_array->update(k, leaf);
+                node->writeUnlock();
+                if (!result) {
+                    EpochGuard::DeleteNode(leaf);
+                    return OperationResults::NotFound;
+                } else {
+                    return OperationResults::Success;
+                }
+            }
+#else
             if (N::isLeaf(nextNode)) {
                 node->lockVersionOrRestart(v, needRestart);
                 if (needRestart) {
@@ -263,10 +283,11 @@ restart:
                 //
                 Leaf *newleaf = allocLeaf(k);
                 //
-                N::change(node, nodeKey, N::setLeaf(newleaf));
+                N::update(node, nodeKey, N::setLeaf(newleaf));
                 node->writeUnlock();
                 return OperationResults::Success;
             }
+#endif
             level++;
         }
         }
@@ -363,7 +384,7 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
         [&copy, &end, &toContinue, &restart, &findEnd, this](N *node,
                                                              uint32_t level) {
             if (N::isLeafArray(node)) {
-                //there might be some leaves less than end
+                // there might be some leaves less than end
                 copy(node);
                 return;
             }
@@ -899,7 +920,7 @@ restart:
 #endif
             flush_data((void *)n4, sizeof(N4));
 
-            N::change(node, k->fkey[level - 1], n4);
+            N::update(node, k->fkey[level - 1], n4);
             node->writeUnlock();
             return OperationResults::Success;
         }
@@ -954,6 +975,22 @@ restart:
                 }
                 return OperationResults::NotFound;
             }
+#ifdef LEAF_ARRAY
+            if (N::isLeafArray(nextNode)) {
+                node->lockVersionOrRestart(v, needRestart);
+                if (needRestart)
+                    goto restart;
+
+                auto *leaf_array = N::getLeafArray(nextNode);
+                auto result = leaf_array->remove(k);
+                node->writeUnlock();
+                if (!result) {
+                    return OperationResults::NotFound;
+                } else {
+                    return OperationResults::Success;
+                }
+            }
+#else
             if (N::isLeaf(nextNode)) {
                 node->lockVersionOrRestart(v, needRestart);
                 if (needRestart)
@@ -1024,6 +1061,7 @@ restart:
 
                 return OperationResults::Success;
             }
+#endif
             level++;
         }
         }
