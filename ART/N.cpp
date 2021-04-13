@@ -173,11 +173,20 @@ void N::check_generation() {
             case NTypes::N48: {
                 auto n = static_cast<N48 *>(this);
                 for (int i = 0; i < 48; i++) {
+#ifdef ZENTRY
+                    auto p = getZentryKeyPtr(n->zens[i]);
+                    if (p.second != nullptr) {
+                        n->childIndex[p.first] = i;
+                        count++;
+                        compactCount = i;
+                    }
+#else
                     N *child = n->children[i].load();
                     if (child != nullptr) {
                         count++;
                         compactCount = i;
                     }
+#endif
                 }
                 break;
             }
@@ -882,7 +891,11 @@ void N::rebuild_node(N *node, std::vector<std::pair<uint64_t, size_t>> &rs,
     case NTypes::N48: {
         auto n = static_cast<N48 *>(node);
         for (int i = 0; i < 48; i++) {
+#ifdef ZENTRY
+            N *child = getZentryPtr(n->zens[i]);
+#else
             N *child = n->children[i].load();
+#endif
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
