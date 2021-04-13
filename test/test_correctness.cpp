@@ -18,7 +18,7 @@ TEST(TestCorrectness, PM_ART) {
     std::cout << "[TEST]\tstart to test correctness\n";
     clear_data();
 
-    const int nthreads = 4;
+    const int nthreads = 20;
     const int test_iter = 100000;
     const int total_key_cnt = nthreads * test_iter;
     const int scan_iter = 100;
@@ -29,9 +29,10 @@ TEST(TestCorrectness, PM_ART) {
     Tree *art = new Tree();
     std::thread *tid[nthreads];
 
+    srand(time(nullptr));
     RandomGenerator rdm;
     std::vector<unsigned short> s1 = {1, 2, 3}, s2 = {4, 5, 6};
-    rdm.setSeed(s1.data(), s2.data());
+    //    rdm.setSeed(s1.data(), s2.data());
     // Generate keys
     std::cout << "[TEST]\tstart to build tree\n";
     for (int i = 0; i < nthreads * test_iter; i++) {
@@ -79,7 +80,7 @@ TEST(TestCorrectness, PM_ART) {
     }
 
     std::cout << "initialization finish.....\n";
-
+    std::cout << key_vec[123] << std::endl;
     auto *bar = new boost::barrier(nthreads);
     // single thread scan
     int end_limit_cnt = 0, size_limit_cnt = 0;
@@ -150,7 +151,7 @@ TEST(TestCorrectness, PM_ART) {
     std::cout << size_limit_cnt << " scans end for size limit" << std::endl
               << end_limit_cnt << " scans end for end limit" << std::endl;
     std::cout << "single thread scan finish......" << std::endl;
-//    return;
+    //    return;
 
     for (int i = 0; i < nthreads; i++) {
         tid[i] = new std::thread(
