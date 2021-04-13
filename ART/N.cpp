@@ -573,10 +573,10 @@ uint64_t N::getVersion() const { return type_version_lock_obsolete->load(); }
 bool N::isObsolete(uint64_t version) { return (version & 1) == 1; }
 
 bool N::checkOrRestart(uint64_t startRead) const {
-    return readUnlockOrRestart(startRead);
+    return readVersionOrRestart(startRead);
 }
 
-bool N::readUnlockOrRestart(uint64_t startRead) const {
+bool N::readVersionOrRestart(uint64_t startRead) const {
     return startRead == type_version_lock_obsolete->load();
 }
 
@@ -961,27 +961,29 @@ void N::unchecked_insert(N *node, uint8_t key_byte, N *child, bool flush) {
     }
 }
 
-bool N::key_keylen_lt(char *a, const int alen, char *b, const int blen) {
-    for (int i = 0; i < std::min(alen, blen); i++) {
+bool N::key_keylen_lt(char *a, const int alen, char *b, const int blen,
+                      const int compare_level) {
+    for (int i = compare_level; i < std::min(alen, blen); i++) {
         if (a[i] != b[i]) {
             return a[i] < b[i];
         }
     }
     return alen < blen;
 }
-bool N::leaf_lt(Leaf *a, Leaf *b) {
-    return key_keylen_lt(a->GetKey(), a->key_len, b->GetKey(), b->key_len);
+bool N::leaf_lt(Leaf *a, Leaf *b, int compare_level) {
+    return key_keylen_lt(a->GetKey(), a->key_len, b->GetKey(), b->key_len,
+                         compare_level);
 }
-bool N::leaf_key_lt(Leaf *a, const Key *b) {
+bool N::leaf_key_lt(Leaf *a, const Key *b, const int compare_level) {
     return key_keylen_lt(a->GetKey(), a->key_len,
-                         reinterpret_cast<char *>(b->fkey), b->key_len);
+                         reinterpret_cast<char *>(b->fkey), b->key_len, compare_level);
 }
-bool N::key_leaf_lt(const Key *a, Leaf *b) {
+bool N::key_leaf_lt(const Key *a, Leaf *b, const int compare_level) {
     return key_keylen_lt(reinterpret_cast<char *>(a->fkey), a->key_len,
-                         b->GetKey(), b->key_len);
+                         b->GetKey(), b->key_len, compare_level);
 }
 bool N::key_key_lt(const Key *a, const Key *b) {
     return key_keylen_lt(reinterpret_cast<char *>(a->fkey), a->key_len,
-                         reinterpret_cast<char *>(b->fkey), b->key_len);
+                         reinterpret_cast<char *>(b->fkey), b->key_len, 0);
 } // namespace PART_ns
 } // namespace PART_ns

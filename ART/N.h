@@ -175,7 +175,7 @@ class N : public BaseNode {
      * returns true if node hasn't been changed in between
      */
     bool checkOrRestart(uint64_t startRead) const;
-    bool readUnlockOrRestart(uint64_t startRead) const;
+    bool readVersionOrRestart(uint64_t startRead) const;
 
     static bool isObsolete(uint64_t version);
 
@@ -252,12 +252,12 @@ class N : public BaseNode {
     static void unchecked_insert(N *node, uint8_t key_byte, N *child,
                                  bool flush);
 
-    static bool key_keylen_lt(char *a, const int alen, char *b,
-                              const int blen);
+    static bool key_keylen_lt(char *a, const int alen, char *b, const int blen,
+                              const int compare_level);
 
-    static bool leaf_lt(Leaf *a, Leaf *b);
-    static bool leaf_key_lt(Leaf *a, const Key *b);
-    static bool key_leaf_lt(const Key *a, Leaf *b);
+    static bool leaf_lt(Leaf *a, Leaf *b, int compare_level);
+    static bool leaf_key_lt(Leaf *a, const Key *b, const int compare_level);
+    static bool key_leaf_lt(const Key *a, Leaf *b, const int compare_level);
     static bool key_key_lt(const Key *a, const Key *b);
 
 } __attribute__((aligned(64)));

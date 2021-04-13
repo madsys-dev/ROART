@@ -64,7 +64,6 @@ Leaf *LeafArray::lookup(const Key *k) const {
     return nullptr;
 }
 bool LeafArray::insert(Leaf *l, bool flush) {
-
     auto b = bitmap.load();
     b.flip();
     auto pos = b._Find_first();
@@ -271,18 +270,37 @@ Leaf *LeafArray::getLeafAt(size_t pos) {
 }
 uint32_t LeafArray::getCount() const { return bitmap.load().count(); }
 bool LeafArray::isFull() const { return getCount() == LeafArrayLength; }
-std::vector<Leaf *> LeafArray::getSortedLeaf(const Key *start, const Key *end) {
+std::vector<Leaf *> LeafArray::getSortedLeaf(const Key *start, const Key *end,
+                                             int start_level,
+                                             bool compare_start,
+                                             bool compare_end) {
     std::vector<Leaf *> leaves;
     auto b = bitmap.load();
     auto i = b[0] ? 0 : 1;
+
     while (i < LeafArrayLength) {
         auto ptr = getLeafAt(i);
-        // start <= ptr < end
-        if (!leaf_key_lt(ptr, start) && leaf_key_lt(ptr, end))
-            leaves.push_back(ptr);
         i = b._Find_next(i);
+        // start <= ptr < end
+        if (compare_start) {
+            auto lt_start = leaf_key_lt(ptr, start, start_level);
+            if (lt_start == true) {
+                continue;
+            }
+        }
+        if (compare_end) {
+            auto lt_end = leaf_key_lt(ptr, end, start_level);
+            if (lt_end == false) {
+                continue;
+            }
+        }
+        leaves.push_back(ptr);
     }
-    std::sort(leaves.begin(), leaves.end(), leaf_lt);
+
+    std::sort(leaves.begin(), leaves.end(),
+              [start_level](Leaf *a, Leaf *b) -> bool {
+                  leaf_lt(a, b, start_level);
+              });
 
     return leaves;
 }

@@ -48,8 +48,8 @@ class RandomGenerator : public WorkloadGenerator {
         //        int len = randomInt() % 125  + 4;
         std::string res = "";
         for (int i = 0; i < len; i++) {
-            //            char c = randomInt() % 10 + '0'; // 0-9
-            char c = randomInt() % 94 + 33;
+            char c = randomInt() % 10 + '0'; // 0-9
+            //            char c = randomInt() % 94 + 33;
             //            char c = randomInt() % 127 + 1;
             res += c;
         }
@@ -57,8 +57,11 @@ class RandomGenerator : public WorkloadGenerator {
     }
 
     double randomDouble() { return erand48(seed) * erand48(seed2); }
-    void setSeed(unsigned short newseed[3]) {
+    void setSeed(unsigned short newseed[3], unsigned short newseed2[3]) {
         memcpy(seed, newseed, sizeof(unsigned short) * 3);
+        memcpy(inital, newseed, sizeof(unsigned short) * 3);
+        memcpy(seed2, newseed2, sizeof(unsigned short) * 3);
+        memcpy(inital2, newseed, sizeof(unsigned short) * 3);
     }
     void reset() {
         memcpy(seed, inital, sizeof(unsigned short) * 3);

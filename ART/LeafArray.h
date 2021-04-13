@@ -54,7 +54,9 @@ class LeafArray : public N {
 
     void splitAndUnlock(N *parentNode, uint8_t parentKey, bool &need_restart);
 
-    std::vector<Leaf *> getSortedLeaf(const Key *start, const Key *end);
+    std::vector<Leaf *> getSortedLeaf(const Key *start, const Key *end,
+                                      int start_level, bool compare_start,
+                                      bool compare_end);
 
     void graphviz_debug(std::ofstream &f);
 

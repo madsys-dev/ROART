@@ -1,6 +1,7 @@
 #include "Tree.h"
 #include "generator.h"
 #include "threadinfo.h"
+#include <boost/thread/barrier.hpp>
 #include <gtest/gtest.h>
 #include <iostream>
 #include <stdio.h>
@@ -13,11 +14,14 @@ using namespace PART_ns;
 inline void clear_data() { system("rm -rf /mnt/pmem0/jzc/part.data"); }
 
 TEST(TestCorrectness, PM_ART) {
+
     std::cout << "[TEST]\tstart to test correctness\n";
     clear_data();
 
-    const int nthreads = 1;
-    const int test_iter = 1000000;
+    const int nthreads = 4;
+    const int test_iter = 100000;
+    const int total_key_cnt = nthreads * test_iter;
+    const int scan_iter = 100;
 
     std::vector<std::string> key_vec;
     std::set<std::string> key_set;
@@ -26,7 +30,8 @@ TEST(TestCorrectness, PM_ART) {
     std::thread *tid[nthreads];
 
     RandomGenerator rdm;
-
+    std::vector<unsigned short> s1 = {1, 2, 3}, s2 = {4, 5, 6};
+    rdm.setSeed(s1.data(), s2.data());
     // Generate keys
     std::cout << "[TEST]\tstart to build tree\n";
     for (int i = 0; i < nthreads * test_iter; i++) {
@@ -74,6 +79,78 @@ TEST(TestCorrectness, PM_ART) {
     }
 
     std::cout << "initialization finish.....\n";
+
+    auto *bar = new boost::barrier(nthreads);
+    // single thread scan
+    int end_limit_cnt = 0, size_limit_cnt = 0;
+    for (int i = 0; i < scan_iter; i++) {
+        int scan_length = (rdm.randomInt() % total_key_cnt / 4) + 1;
+        auto start_key = new Key(), end_key = new Key();
+        std::string start_string = rdm.RandomStr();
+        start_string = "msn" + start_string + "msn";
+        start_key->Init((char *)start_string.c_str(), start_string.size(),
+                        (char *)start_string.c_str(), start_string.size());
+        std::string end_string = rdm.RandomStr();
+        end_string = "msn" + end_string + "msn";
+        end_key->Init((char *)end_string.c_str(), end_string.size(),
+                      (char *)end_string.c_str(), end_string.size());
+
+        Key *toContinue = nullptr;
+        std::vector<Leaf *> result(scan_length);
+        //        Leaf *result[scan_length];
+        size_t result_count = 0;
+        auto re = art->lookupRange(start_key, end_key, toContinue,
+                                   result.data(), scan_length, result_count);
+        if (start_string < end_string == false) {
+            ASSERT_EQ(re, false);
+            i--;
+            continue;
+        } else {
+            int cnt = 0;
+            //            for (auto iterator =
+            //            key_set.lower_bound(start_string);
+            //                 iterator != key_set.lower_bound(end_string) &&
+            //                 cnt < scan_length;
+            //                 iterator++) {
+            //                std::cout << "right:\t" << *iterator << std::endl
+            //                          << "art:\t"
+            //                          << std::string(result[cnt]->GetKey(),
+            //                                         result[cnt]->key_len)
+            //                          << std::endl<<std::endl;
+            //
+            //                cnt++;
+            //            }
+
+            cnt = 0;
+
+            for (auto iterator = key_set.lower_bound(start_string);
+                 iterator != key_set.lower_bound(end_string) &&
+                 cnt < scan_length;
+                 iterator++) {
+                ASSERT_EQ(memcmp(iterator->c_str(), result[cnt]->GetKey(),
+                                 iterator->size()),
+                          0)
+                    << "test-iter:" << i << " cnt:" << cnt << std::endl
+                    << "right:\t" << *iterator << std::endl
+                    << "art:\t"
+                    << std::string(result[cnt]->GetKey(), result[cnt]->key_len)
+                    << std::endl
+                    << "start:\t" << start_string << std::endl
+                    << "end:\t" << end_string << std::endl;
+                cnt++;
+            }
+            ASSERT_EQ(cnt, result_count);
+            if (result_count == scan_length) {
+                size_limit_cnt++;
+            } else {
+                end_limit_cnt++;
+            }
+        }
+    }
+    std::cout << size_limit_cnt << " scans end for size limit" << std::endl
+              << end_limit_cnt << " scans end for end limit" << std::endl;
+    std::cout << "single thread scan finish......" << std::endl;
+//    return;
 
     for (int i = 0; i < nthreads; i++) {
         tid[i] = new std::thread(
@@ -171,6 +248,8 @@ TEST(TestCorrectness, PM_ART) {
                     ASSERT_FALSE(ret);
                 }
                 std::cout << "finish remove read\n";
+                //                if (id % 2 == 1)
+                //                bar->wait();
 
                 // insert read
                 for (int j = 0; j < test_iter; j++) {
@@ -183,13 +262,16 @@ TEST(TestCorrectness, PM_ART) {
                     ASSERT_EQ(res, Tree::OperationResults::Success);
 
                     Leaf *ret = art->lookup(str_key);
-                    ASSERT_TRUE(ret);
+                    ASSERT_TRUE(ret) << "thread: " << id << std::endl
+                                     << "j: " << j << std::endl
+                                     << "inserted:\t" << kk << std::endl;
                     ASSERT_EQ(ret->val_len, kk.size());
                     ASSERT_EQ(memcmp(ret->kv + kk.size(), (char *)kk.c_str(),
                                      kk.size()),
                               0);
                 }
                 std::cout << "finish insert read\n";
+
                 NVMMgr_ns::unregister_threadinfo();
             },
             i);
@@ -199,6 +281,88 @@ TEST(TestCorrectness, PM_ART) {
         tid[i]->join();
     }
 
+    std::cout << "passed test.....\n";
+
+    delete art;
+}
+
+TEST(TestCorrectness, PM_ART_INSERT_AND_READ) {
+
+    std::cout << "[TEST]\tstart to test correctness\n";
+    clear_data();
+
+    const int nthreads = 4;
+    const int test_iter = 5;
+    const int total_key_cnt = nthreads * test_iter;
+
+    std::vector<std::string> key_vec;
+    std::set<std::string> key_set;
+
+    Tree *art = new Tree();
+    std::thread *tid[nthreads];
+
+    RandomGenerator rdm;
+    std::vector<unsigned short> s1 = {1, 2, 3}, s2 = {4, 5, 6};
+    rdm.setSeed(s1.data(), s2.data());
+    // Generate keys
+    std::cout << "[TEST]\tstart to build tree\n";
+    for (int i = 0; i < nthreads * test_iter; i++) {
+        std::string key = rdm.RandomStr();
+        key = "msn" + key + "msn";
+        Key *k = new Key();
+        k->Init((char *)key.c_str(), key.size(), (char *)key.c_str(),
+                key.size());
+        if (key_set.count(key)) {
+            i--;
+        } else {
+            key_set.insert(key);
+            key_vec.push_back(key);
+        }
+    }
+    std::sort(key_vec.begin(), key_vec.end());
+    for (auto s : key_vec) {
+        std::cout << s << std::endl;
+    }
+    auto *bar = new boost::barrier(nthreads);
+
+    for (int i = 0; i < nthreads; i++) {
+        tid[i] = new std::thread(
+            [&](int id) {
+                std::cout << "thread " << id << "\n";
+                NVMMgr_ns::register_threadinfo();
+                Key *str_key = new Key();
+                Tree::OperationResults res;
+
+                // insert read
+                for (int j = 0; j < test_iter; j++) {
+                    // insert
+                    std::string kk = key_vec[j * nthreads + id];
+
+                    str_key->Init((char *)kk.c_str(), kk.size(),
+                                  (char *)kk.c_str(), kk.size());
+                    res = art->insert(str_key);
+                    ASSERT_EQ(res, Tree::OperationResults::Success);
+
+                    Leaf *ret = art->lookup(str_key);
+                    ASSERT_TRUE(ret) << "thread: " << id << std::endl
+                                     << "j: " << j << std::endl
+                                     << "inserted:\t" << kk << std::endl;
+                    ASSERT_EQ(ret->val_len, kk.size());
+                    ASSERT_EQ(memcmp(ret->kv + kk.size(), (char *)kk.c_str(),
+                                     kk.size()),
+                              0);
+                }
+                std::cout << "finish insert read\n";
+
+                NVMMgr_ns::unregister_threadinfo();
+            },
+            i);
+    }
+
+    for (int i = 0; i < nthreads; i++) {
+        tid[i]->join();
+    }
+    //        art->graphviz_debug();
     std::cout << "passed test.....\n";
 
     delete art;

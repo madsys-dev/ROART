@@ -135,7 +135,69 @@ Leaf *Tree::allocLeaf(const Key *k) const {
     return newLeaf;
 #endif
 }
+#ifdef LEAF_ARRAY
+Leaf *Tree::lookup(const Key *k) const {
+    // enter a new epoch
+    EpochGuard NewEpoch;
+    bool need_restart;
+    int restart_cnt = 0;
+restart:
+    need_restart = false;
+    N *node = root;
 
+    uint32_t level = 0;
+    bool optimisticPrefixMatch = false;
+
+    while (true) {
+#ifdef INSTANT_RESTART
+        node->check_generation();
+#endif
+
+#ifdef CHECK_COUNT
+        int pre = level;
+#endif
+        switch (checkPrefix(node, k, level)) { // increases level
+        case CheckPrefixResult::NoMatch:
+            return nullptr;
+        case CheckPrefixResult::OptimisticMatch:
+            optimisticPrefixMatch = true;
+            // fallthrough
+        case CheckPrefixResult::Match: {
+            if (k->getKeyLen() <= level) {
+                return nullptr;
+            }
+            node = N::getChild(k->fkey[level], node);
+
+#ifdef CHECK_COUNT
+            checkcount += std::min(4, (int)level - pre);
+#endif
+
+            if (node == nullptr) {
+                return nullptr;
+            }
+
+            if (N::isLeafArray(node)) {
+
+                auto la = N::getLeafArray(node);
+                //                auto v = la->getVersion();
+                auto ret = la->lookup(k);
+                //                if (la->isObsolete(v) ||
+                //                !la->readVersionOrRestart(v)) {
+                //                    printf("read restart\n");
+                //                    goto restart;
+                //                }
+                if (ret == nullptr && restart_cnt < 0) {
+                    restart_cnt++;
+                    goto restart;
+                }
+                return ret;
+            }
+        }
+        }
+        level++;
+    }
+}
+#else
 Leaf *Tree::lookup(const Key *k) const {
     // enter a new epoch
     EpochGuard NewEpoch;
@@ -172,13 +234,6 @@ Leaf *Tree::lookup(const Key *k) const {
             if (node == nullptr) {
                 return nullptr;
             }
-#ifdef LEAF_ARRAY
-            if (N::isLeafArray(node)) {
-                auto la = N::getLeafArray(node);
-                auto ret = la->lookup(k);
-                return ret;
-            }
-#else
             if (N::isLeaf(node)) {
                 Leaf *ret = N::getLeaf(node);
                 if (level < k->getKeyLen() - 1 || optimisticPrefixMatch) {
@@ -194,13 +249,12 @@ Leaf *Tree::lookup(const Key *k) const {
                     return ret;
                 }
             }
-#endif
         }
         }
         level++;
     }
 }
-
+#endif
 #ifdef CHECK_COUNT
 int get_count() { return checkcount; }
 #endif
@@ -225,7 +279,7 @@ restart:
 
         switch (checkPrefix(node, k, level)) { // increases level
         case CheckPrefixResult::NoMatch:
-            if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
+            if (N::isObsolete(v) || !node->readVersionOrRestart(v)) {
                 goto restart;
             }
             return OperationResults::NotFound;
@@ -242,7 +296,7 @@ restart:
             nextNode = N::getChild(nodeKey, node);
 
             if (nextNode == nullptr) {
-                if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
+                if (N::isObsolete(v) || !node->readVersionOrRestart(v)) {
                     //                        std::cout<<"retry\n";
                     goto restart;
                 }
@@ -283,7 +337,7 @@ restart:
                 //
                 Leaf *newleaf = allocLeaf(k);
                 //
-                N::update(node, nodeKey, N::setLeaf(newleaf));
+                N::change(node, nodeKey, N::setLeaf(newleaf));
                 node->writeUnlock();
                 return OperationResults::Success;
             }
@@ -297,52 +351,63 @@ restart:
 bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                        Leaf *result[], std::size_t resultSize,
                        std::size_t &resultsFound) const {
-    for (uint32_t i = 0; i < std::min(start->getKeyLen(), end->getKeyLen());
-         ++i) {
-        if (start->fkey[i] > end->fkey[i]) {
-            resultsFound = 0;
-            return false;
-        } else if (start->fkey[i] < end->fkey[i]) {
-            break;
-        }
+    if (!N::key_key_lt(start, end)) {
+        resultsFound = 0;
+        return false;
     }
+    //    for (uint32_t i = 0; i < std::min(start->getKeyLen(),
+    //    end->getKeyLen());
+    //         ++i) {
+    //        if (start->fkey[i] > end->fkey[i]) {
+    //            resultsFound = 0;
+    //            return false;
+    //        } else if (start->fkey[i] < end->fkey[i]) {
+    //            break;
+    //        }
+    //    }
     char scan_value[100];
     EpochGuard NewEpoch;
 
     Leaf *toContinue = nullptr;
     bool restart;
-    std::function<void(N *)> copy = [&result, &resultSize, &resultsFound,
-                                     &toContinue, &copy, &scan_value, &start,
-                                     &end](N *node) {
-        if (N::isLeafArray(node)) {
-            auto la = N::getLeafArray(node);
-            auto leaves = la->getSortedLeaf(start, end);
-            for (auto leaf : leaves) {
-                if (resultsFound == resultSize) {
-                    toContinue = N::getLeaf(node);
-                    return;
+    std::function<void(N *, int, bool, bool)> copy =
+        [&result, &resultSize, &resultsFound, &toContinue, &copy, &scan_value,
+         &start, &end](N *node, int compare_level, bool compare_start,
+                       bool compare_end) {
+            if (N::isLeafArray(node)) {
+
+                auto la = N::getLeafArray(node);
+
+                auto leaves = la->getSortedLeaf(start, end, compare_level,
+                                                compare_start, compare_end);
+
+                for (auto leaf : leaves) {
+                    if (resultsFound == resultSize) {
+                        toContinue = N::getLeaf(node);
+                        return;
+                    }
+
+                    result[resultsFound] = leaf;
+                    resultsFound++;
                 }
-                result[resultsFound] = leaf;
-                resultsFound++;
-            }
-        } else {
-            std::tuple<uint8_t, N *> children[256];
-            uint32_t childrenCount = 0;
-            N::getChildren(node, 0u, 255u, children, childrenCount);
-            for (uint32_t i = 0; i < childrenCount; ++i) {
-                N *n = std::get<1>(children[i]);
-                copy(n);
-                if (toContinue != nullptr) {
-                    break;
+            } else {
+                std::tuple<uint8_t, N *> children[256];
+                uint32_t childrenCount = 0;
+                N::getChildren(node, 0u, 255u, children, childrenCount);
+                for (uint32_t i = 0; i < childrenCount; ++i) {
+                    N *n = std::get<1>(children[i]);
+                    copy(n, node->getLevel() + 1, compare_start, compare_end);
+                    if (toContinue != nullptr) {
+                        break;
+                    }
                 }
             }
-        }
-    };
+        };
     std::function<void(N *, uint32_t)> findStart =
         [&copy, &start, &findStart, &toContinue, &restart,
          this](N *node, uint32_t level) {
             if (N::isLeafArray(node)) {
-                copy(node);
+                copy(node, level, true, false);
                 return;
             }
 
@@ -350,7 +415,7 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
             prefixResult = checkPrefixCompare(node, start, level);
             switch (prefixResult) {
             case PCCompareResults::Bigger:
-                copy(node);
+                copy(node, level, false, false);
                 break;
             case PCCompareResults::Equal: {
                 uint8_t startLevel = (start->getKeyLen() > level)
@@ -365,7 +430,7 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                     if (k == startLevel) {
                         findStart(n, level + 1);
                     } else if (k > startLevel) {
-                        copy(n);
+                        copy(n, level + 1, false, false);
                     }
                     if (toContinue != nullptr || restart) {
                         break;
@@ -385,7 +450,7 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                                                              uint32_t level) {
             if (N::isLeafArray(node)) {
                 // there might be some leaves less than end
-                copy(node);
+                copy(node, level, false, true);
                 return;
             }
 
@@ -394,7 +459,7 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
 
             switch (prefixResult) {
             case PCCompareResults::Smaller:
-                copy(node);
+                copy(node, level, false, false);
                 break;
             case PCCompareResults::Equal: {
                 uint8_t endLevel = (end->getKeyLen() > level) ? end->fkey[level]
@@ -408,7 +473,7 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                     if (k == endLevel) {
                         findEnd(n, level + 1);
                     } else if (k < endLevel) {
-                        copy(n);
+                        copy(n, level + 1, false, false);
                     }
                     if (toContinue != nullptr || restart) {
                         break;
@@ -435,6 +500,11 @@ restart:
     while (true) {
         if (!(node = nextNode) || toContinue)
             break;
+        if (N::isLeafArray(node)) {
+            copy(node, level, true, true);
+            break;
+        }
+
         PCEqualsResults prefixResult;
         prefixResult = checkPrefixEquals(node, level, start, end);
         switch (prefixResult) {
@@ -444,7 +514,7 @@ restart:
             return false;
         }
         case PCEqualsResults::Contained: {
-            copy(node);
+            copy(node, level + 1, false, false);
             break;
         }
         case PCEqualsResults::BothMatch: {
@@ -460,10 +530,11 @@ restart:
                 for (uint32_t i = 0; i < childrenCount; ++i) {
                     const uint8_t k = std::get<0>(children[i]);
                     N *n = std::get<1>(children[i]);
+
                     if (k == startLevel) {
                         findStart(n, level + 1);
                     } else if (k > startLevel && k < endLevel) {
-                        copy(n);
+                        copy(n, level + 1, false, false);
                     } else if (k == endLevel) {
                         findEnd(n, level + 1);
                     }
@@ -523,13 +594,15 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
     Leaf *toContinue = nullptr;
     bool restart;
     std::function<void(N *)> copy = [&result, &resultSize, &resultsFound,
-                                     &toContinue, &copy, &scan_value](N *node) {
+                                     &toContinue, &copy, &scan_value,
+                                     start](N *node) {
         if (N::isLeaf(node)) {
             if (resultsFound == resultSize) {
                 toContinue = N::getLeaf(node);
                 return;
             }
             Leaf *leaf = N::getLeaf(node);
+            assert(!N::leaf_key_lt(leaf, start, 0));
             result[resultsFound] = N::getLeaf(node);
             resultsFound++;
         } else {
@@ -549,7 +622,10 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
         [&copy, &start, &findStart, &toContinue, &restart,
          this](N *node, uint32_t level) {
             if (N::isLeaf(node)) {
-                copy(node);
+                // correct the bug
+                if (N::leaf_key_lt(N::getLeaf(node), start, level) == false) {
+                    copy(node);
+                }
                 return;
             }
 
@@ -920,7 +996,7 @@ restart:
 #endif
             flush_data((void *)n4, sizeof(N4));
 
-            N::update(node, k->fkey[level - 1], n4);
+            N::change(node, k->fkey[level - 1], n4);
             node->writeUnlock();
             return OperationResults::Success;
         }
@@ -953,7 +1029,7 @@ restart:
 
         switch (checkPrefix(node, k, level)) { // increases level
         case CheckPrefixResult::NoMatch:
-            if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) {
+            if (N::isObsolete(v) || !node->readVersionOrRestart(v)) {
                 goto restart;
             }
             return OperationResults::NotFound;
@@ -970,20 +1046,22 @@ restart:
             nextNode = N::getChild(nodeKey, node);
 
             if (nextNode == nullptr) {
-                if (N::isObsolete(v) || !node->readUnlockOrRestart(v)) { // TODO
+                if (N::isObsolete(v) ||
+                    !node->readVersionOrRestart(v)) { // TODO
                     goto restart;
                 }
                 return OperationResults::NotFound;
             }
 #ifdef LEAF_ARRAY
             if (N::isLeafArray(nextNode)) {
-                node->lockVersionOrRestart(v, needRestart);
-                if (needRestart)
-                    goto restart;
-
                 auto *leaf_array = N::getLeafArray(nextNode);
+                auto lav = leaf_array->getVersion();
+                leaf_array->lockVersionOrRestart(lav, needRestart);
+                if (needRestart) {
+                    goto restart;
+                }
                 auto result = leaf_array->remove(k);
-                node->writeUnlock();
+                leaf_array->writeUnlock();
                 if (!result) {
                     return OperationResults::NotFound;
                 } else {
