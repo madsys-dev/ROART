@@ -578,15 +578,20 @@ restart:
 bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                        Leaf *result[], std::size_t resultSize,
                        std::size_t &resultsFound) const {
-    for (uint32_t i = 0; i < std::min(start->getKeyLen(), end->getKeyLen());
-         ++i) {
-        if (start->fkey[i] > end->fkey[i]) {
-            resultsFound = 0;
-            return false;
-        } else if (start->fkey[i] < end->fkey[i]) {
-            break;
-        }
+    if (!N::key_key_lt(start, end)) {
+        resultsFound = 0;
+        return false;
     }
+    //    for (uint32_t i = 0; i < std::min(start->getKeyLen(),
+    //    end->getKeyLen());
+    //         ++i) {
+    //        if (start->fkey[i] > end->fkey[i]) {
+    //            resultsFound = 0;
+    //            return false;
+    //        } else if (start->fkey[i] < end->fkey[i]) {
+    //            break;
+    //        }
+    //    }
     char scan_value[100];
     // enter a new epoch
     EpochGuard NewEpoch;
@@ -602,7 +607,6 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                 return;
             }
             Leaf *leaf = N::getLeaf(node);
-            assert(!N::leaf_key_lt(leaf, start, 0));
             result[resultsFound] = N::getLeaf(node);
             resultsFound++;
         } else {
@@ -667,6 +671,9 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
         [&copy, &end, &toContinue, &restart, &findEnd, this](N *node,
                                                              uint32_t level) {
             if (N::isLeaf(node)) {
+                if (N::leaf_key_lt(N::getLeaf(node), end, level)) {
+                    copy(node);
+                }
                 return;
             }
 

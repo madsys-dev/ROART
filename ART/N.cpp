@@ -976,7 +976,8 @@ bool N::leaf_lt(Leaf *a, Leaf *b, int compare_level) {
 }
 bool N::leaf_key_lt(Leaf *a, const Key *b, const int compare_level) {
     return key_keylen_lt(a->GetKey(), a->key_len,
-                         reinterpret_cast<char *>(b->fkey), b->key_len, compare_level);
+                         reinterpret_cast<char *>(b->fkey), b->key_len,
+                         compare_level);
 }
 bool N::key_leaf_lt(const Key *a, Leaf *b, const int compare_level) {
     return key_keylen_lt(reinterpret_cast<char *>(a->fkey), a->key_len,
@@ -985,5 +986,21 @@ bool N::key_leaf_lt(const Key *a, Leaf *b, const int compare_level) {
 bool N::key_key_lt(const Key *a, const Key *b) {
     return key_keylen_lt(reinterpret_cast<char *>(a->fkey), a->key_len,
                          reinterpret_cast<char *>(b->fkey), b->key_len, 0);
-} // namespace PART_ns
+}
+uint8_t N::getZentryKey(uintptr_t zentry) {
+    return uint8_t(zentry >> ZentryKeyShift);
+}
+
+N *N::getZentryPtr(uintptr_t zentry) {
+    const uintptr_t mask = (1LL << ZentryKeyShift) - 1;
+    return reinterpret_cast<N *>(zentry & mask);
+}
+std::pair<uint8_t, N *> N::getZentryKeyPtr(uintptr_t zentry) {
+    return {getZentryKey(zentry), getZentryPtr(zentry)};
+}
+uintptr_t N::makeZentry(uint8_t key, N *node) {
+    return (uintptr_t(key) << ZentryKeyShift) |
+           reinterpret_cast<uintptr_t>(node);
+}
+// namespace PART_ns
 } // namespace PART_ns

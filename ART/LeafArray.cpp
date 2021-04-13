@@ -296,12 +296,12 @@ std::vector<Leaf *> LeafArray::getSortedLeaf(const Key *start, const Key *end,
         }
         leaves.push_back(ptr);
     }
-
+#ifdef SORT_LEAVES
     std::sort(leaves.begin(), leaves.end(),
               [start_level](Leaf *a, Leaf *b) -> bool {
                   leaf_lt(a, b, start_level);
               });
-
+#endif
     return leaves;
 }
 bool LeafArray::update(const Key *k, Leaf *l) {

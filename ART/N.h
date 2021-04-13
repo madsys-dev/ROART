@@ -260,6 +260,12 @@ class N : public BaseNode {
     static bool key_leaf_lt(const Key *a, Leaf *b, const int compare_level);
     static bool key_key_lt(const Key *a, const Key *b);
 
+    static const int ZentryKeyShift = 48;
+    static uint8_t getZentryKey(uintptr_t zentry);
+    static N *getZentryPtr(uintptr_t zentry);
+    static std::pair<uint8_t, N *> getZentryKeyPtr(uintptr_t zentry);
+    static uintptr_t makeZentry(uint8_t key,N* node);
+
 } __attribute__((aligned(64)));
 
 } // namespace PART_ns

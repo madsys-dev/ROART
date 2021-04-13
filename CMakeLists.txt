@@ -29,6 +29,10 @@ add_definitions(-DINSTANT_RESTART)
 
 add_definitions(-DLEAF_ARRAY)
 add_definitions(-DFIND_FIRST)
+add_definitions(-DSORT_LEAVES)
+
+#add_definitions(-DENTRY_COMPACTION)
+
 #malloc
 #add_definitions(-DPMALLOC)
 #add_definitions(-DTXPMALLOC)

@@ -18,8 +18,8 @@ TEST(TestCorrectness, PM_ART) {
     std::cout << "[TEST]\tstart to test correctness\n";
     clear_data();
 
-    const int nthreads = 20;
-    const int test_iter = 100000;
+    const int nthreads = 4;
+    const int test_iter = 10000;
     const int total_key_cnt = nthreads * test_iter;
     const int scan_iter = 100;
 
@@ -32,7 +32,7 @@ TEST(TestCorrectness, PM_ART) {
     srand(time(nullptr));
     RandomGenerator rdm;
     std::vector<unsigned short> s1 = {1, 2, 3}, s2 = {4, 5, 6};
-    //    rdm.setSeed(s1.data(), s2.data());
+    rdm.setSeed(s1.data(), s2.data());
     // Generate keys
     std::cout << "[TEST]\tstart to build tree\n";
     for (int i = 0; i < nthreads * test_iter; i++) {
@@ -113,21 +113,25 @@ TEST(TestCorrectness, PM_ART) {
             //                 iterator != key_set.lower_bound(end_string) &&
             //                 cnt < scan_length;
             //                 iterator++) {
-            //                std::cout << "right:\t" << *iterator << std::endl
-            //                          << "art:\t"
-            //                          << std::string(result[cnt]->GetKey(),
-            //                                         result[cnt]->key_len)
-            //                          << std::endl<<std::endl;
-            //
+            //                std::cout << "right:\t" << *iterator << std::endl;
+            //                if (cnt < result_count) {
+            //                    std::cout << "art:\t"
+            //                              <<
+            //                              std::string(result[cnt]->GetKey(),
+            //                                             result[cnt]->key_len)
+            //                              << std::endl
+            //                              << std::endl;
+            //                }
             //                cnt++;
             //            }
-
-            cnt = 0;
+            //            std::cout << cnt << std::endl;
+            //            cnt = 0;
 
             for (auto iterator = key_set.lower_bound(start_string);
                  iterator != key_set.lower_bound(end_string) &&
                  cnt < scan_length;
                  iterator++) {
+                //                ASSERT_TRUE(cnt < result_count);
                 ASSERT_EQ(memcmp(iterator->c_str(), result[cnt]->GetKey(),
                                  iterator->size()),
                           0)
@@ -138,6 +142,7 @@ TEST(TestCorrectness, PM_ART) {
                     << std::endl
                     << "start:\t" << start_string << std::endl
                     << "end:\t" << end_string << std::endl;
+
                 cnt++;
             }
             ASSERT_EQ(cnt, result_count);
@@ -151,7 +156,7 @@ TEST(TestCorrectness, PM_ART) {
     std::cout << size_limit_cnt << " scans end for size limit" << std::endl
               << end_limit_cnt << " scans end for end limit" << std::endl;
     std::cout << "single thread scan finish......" << std::endl;
-    //    return;
+//    return;
 
     for (int i = 0; i < nthreads; i++) {
         tid[i] = new std::thread(
