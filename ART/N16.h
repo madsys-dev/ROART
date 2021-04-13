@@ -6,9 +6,12 @@ namespace PART_ns {
 
 class N16 : public N {
   public:
+#ifdef ZENTRY
+    std::atomic<uintptr_t> zens[16];
+#else
     std::atomic<uint8_t> keys[16];
     std::atomic<N *> children[16];
-
+#endif
     static uint8_t flipSign(uint8_t keyByte) {
         // Flip the sign bit, enables signed SSE comparison of unsigned values,
         // used by Node16
@@ -43,13 +46,22 @@ class N16 : public N {
   public:
     N16(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : N(NTypes::N16, level, prefix, prefixLength) {
+
+#ifdef ZENTRY
+        memset(zens, 0, sizeof(zens));
+#else
         memset(keys, 0, sizeof(keys));
         memset(children, 0, sizeof(children));
+#endif
     }
 
     N16(uint32_t level, const Prefix &prefi) : N(NTypes::N16, level, prefi) {
+#ifdef ZENTRY
+        memset(zens, 0, sizeof(zens));
+#else
         memset(keys, 0, sizeof(keys));
         memset(children, 0, sizeof(children));
+#endif
     }
 
     virtual ~N16() {}
@@ -58,11 +70,21 @@ class N16 : public N {
 
     template <class NODE> void copyTo(NODE *n) const {
         for (unsigned i = 0; i < compactCount; i++) {
+
+#ifdef ZENTRY
+            auto z = zens[i].load();
+            N *child = getZentryPtr(z);
+            if (child != nullptr) {
+                // not flush
+                n->insert(flipSign(getZentryKey(z)), child, false);
+            }
+#else
             N *child = children[i].load();
             if (child != nullptr) {
                 // not flush
                 n->insert(flipSign(keys[i].load()), child, false);
             }
+#endif
         }
     }
 

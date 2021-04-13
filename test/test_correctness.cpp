@@ -19,7 +19,7 @@ TEST(TestCorrectness, PM_ART) {
     clear_data();
 
     const int nthreads = 4;
-    const int test_iter = 10000;
+    const int test_iter = 100000;
     const int total_key_cnt = nthreads * test_iter;
     const int scan_iter = 100;
 
@@ -51,9 +51,12 @@ TEST(TestCorrectness, PM_ART) {
 
             Tree::OperationResults res = art->insert(k);
             ASSERT_EQ(res, Tree::OperationResults::Success);
-
+//            art->graphviz_debug();
             Leaf *ret = art->lookup(k);
-            ASSERT_TRUE(ret);
+//            assert(ret != nullptr);
+//            if (i == 3)
+//                return;
+            ASSERT_TRUE(ret) << "i: " << i << " key: " << key << std::endl;
             ASSERT_EQ(ret->key_len, key.size());
             ASSERT_EQ(ret->val_len, key.size());
 
@@ -156,7 +159,7 @@ TEST(TestCorrectness, PM_ART) {
     std::cout << size_limit_cnt << " scans end for size limit" << std::endl
               << end_limit_cnt << " scans end for end limit" << std::endl;
     std::cout << "single thread scan finish......" << std::endl;
-//    return;
+    //    return;
 
     for (int i = 0; i < nthreads; i++) {
         tid[i] = new std::thread(

@@ -263,7 +263,7 @@ void LeafArray::splitAndUnlock(N *parentNode, uint8_t parentKey,
     this->writeUnlockObsolete();
     EpochGuard::DeleteNode(this);
 }
-Leaf *LeafArray::getLeafAt(size_t pos) {
+Leaf *LeafArray::getLeafAt(size_t pos) const {
     auto t = reinterpret_cast<uintptr_t>(this->leaf[pos].load());
     t = (t << 16) >> 16;
     return reinterpret_cast<Leaf *>(t);
@@ -351,6 +351,15 @@ uintptr_t LeafArray::fingerPrintLeaf(uint16_t fingerPrint, Leaf *l) {
     uintptr_t mask = (1LL << FingerPrintShift) - 1;
     auto f = uintptr_t(fingerPrint);
     return (reinterpret_cast<uintptr_t>(l) & mask) | (f << FingerPrintShift);
+}
+N *LeafArray::getAnyChild() const {
+    auto b = bitmap.load();
+    auto i = b._Find_first();
+    if (i == LeafArrayLength) {
+        return nullptr;
+    } else {
+        return N::setLeaf(getLeafAt(i));
+    }
 }
 
 } // namespace PART_ns

@@ -6,19 +6,30 @@ namespace PART_ns {
 
 class N4 : public N {
   public:
+#ifdef ZENTRY
+    std::atomic<uintptr_t> zens[4];
+#else
     std::atomic<uint8_t> keys[4];
     std::atomic<N *> children[4];
-
+#endif
   public:
     N4(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : N(NTypes::N4, level, prefix, prefixLength) {
+#ifdef ZENTRY
+        memset(zens, 0, sizeof(zens));
+#else
         memset(keys, 0, sizeof(keys));
         memset(children, 0, sizeof(children));
+#endif
     }
 
     N4(uint32_t level, const Prefix &prefi) : N(NTypes::N4, level, prefi) {
+#ifdef ZENTRY
+        memset(zens, 0, sizeof(zens));
+#else
         memset(keys, 0, sizeof(keys));
         memset(children, 0, sizeof(children));
+#endif
     }
 
     virtual ~N4() {}
@@ -27,11 +38,20 @@ class N4 : public N {
 
     template <class NODE> void copyTo(NODE *n) const {
         for (uint32_t i = 0; i < compactCount; ++i) {
+#ifdef ZENTRY
+            auto z = zens[i].load();
+            N *child = getZentryPtr(z);
+            if (child != nullptr) {
+                // not flush
+                n->insert(getZentryKey(z), child, false);
+            }
+#else
             N *child = children[i].load();
             if (child != nullptr) {
                 // not flush
                 n->insert(keys[i].load(), child, false);
             }
+#endif
         }
     }
 

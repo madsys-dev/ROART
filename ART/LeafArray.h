@@ -34,7 +34,9 @@ class LeafArray : public N {
 
     uint16_t getFingerPrint(size_t pos) const;
 
-    Leaf *getLeafAt(size_t pos);
+    Leaf *getLeafAt(size_t pos) const;
+
+    N *getAnyChild() const;
 
     static uintptr_t fingerPrintLeaf(uint16_t fingerPrint, Leaf *l);
 

@@ -917,6 +917,7 @@ restart:
 #endif
             if (needRestart)
                 goto restart;
+
             return OperationResults::Success;
         }
 #ifdef LEAF_ARRAY

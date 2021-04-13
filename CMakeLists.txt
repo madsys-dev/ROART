@@ -31,7 +31,7 @@ add_definitions(-DLEAF_ARRAY)
 add_definitions(-DFIND_FIRST)
 add_definitions(-DSORT_LEAVES)
 
-#add_definitions(-DENTRY_COMPACTION)
+add_definitions(-DZENTRY)
 
 #malloc
 #add_definitions(-DPMALLOC)

@@ -137,22 +137,36 @@ void N::check_generation() {
             case NTypes::N4: {
                 auto n = static_cast<N4 *>(this);
                 for (int i = 0; i < 4; i++) {
+#ifdef ZENTRY
+                    if (n->zens[i].load() != 0) {
+                        count++;
+                        compactCount = i;
+                    }
+#else
                     N *child = n->children[i].load();
                     if (child != nullptr) {
                         count++;
                         compactCount = i;
                     }
+#endif
                 }
                 break;
             }
             case NTypes::N16: {
                 auto n = static_cast<N16 *>(this);
                 for (int i = 0; i < 16; i++) {
+#ifdef ZENTRY
+                    if (n->zens[i].load() != 0) {
+                        count++;
+                        compactCount = i;
+                    }
+#else
                     N *child = n->children[i].load();
                     if (child != nullptr) {
                         count++;
                         compactCount = i;
                     }
+#endif
                 }
                 break;
             }
@@ -268,6 +282,10 @@ N *N::getAnyChild(N *node) {
     }
     case NTypes::N256: {
         auto n = static_cast<const N256 *>(node);
+        return n->getAnyChild();
+    }
+    case NTypes::LeafArray: {
+        auto n = static_cast<const LeafArray *>(node);
         return n->getAnyChild();
     }
     default: {
@@ -832,7 +850,11 @@ void N::rebuild_node(N *node, std::vector<std::pair<uint64_t, size_t>> &rs,
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
         for (int i = 0; i < 4; i++) {
+#ifdef ZENTRY
+            N *child = getZentryPtr(n->zens[i]);
+#else
             N *child = n->children[i].load();
+#endif
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
@@ -844,7 +866,11 @@ void N::rebuild_node(N *node, std::vector<std::pair<uint64_t, size_t>> &rs,
     case NTypes::N16: {
         auto n = static_cast<N16 *>(node);
         for (int i = 0; i < 16; i++) {
+#ifdef ZENTRY
+            N *child = getZentryPtr(n->zens[i]);
+#else
             N *child = n->children[i].load();
+#endif
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
