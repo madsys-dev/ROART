@@ -19,7 +19,7 @@ TEST(TestCorrectness, PM_ART) {
     clear_data();
 
     const int nthreads = 4;
-    const int test_iter = 100000;
+    const int test_iter = 1000;
     const int total_key_cnt = nthreads * test_iter;
     const int scan_iter = 100;
 
@@ -51,11 +51,11 @@ TEST(TestCorrectness, PM_ART) {
 
             Tree::OperationResults res = art->insert(k);
             ASSERT_EQ(res, Tree::OperationResults::Success);
-//            art->graphviz_debug();
+            //            art->graphviz_debug();
             Leaf *ret = art->lookup(k);
-//            assert(ret != nullptr);
-//            if (i == 3)
-//                return;
+            //            assert(ret != nullptr);
+            //            if (i == 3)
+            //                return;
             ASSERT_TRUE(ret) << "i: " << i << " key: " << key << std::endl;
             ASSERT_EQ(ret->key_len, key.size());
             ASSERT_EQ(ret->val_len, key.size());
@@ -111,6 +111,7 @@ TEST(TestCorrectness, PM_ART) {
             continue;
         } else {
             int cnt = 0;
+#ifdef SORT_LEAVES
             //            for (auto iterator =
             //            key_set.lower_bound(start_string);
             //                 iterator != key_set.lower_bound(end_string) &&
@@ -148,6 +149,16 @@ TEST(TestCorrectness, PM_ART) {
 
                 cnt++;
             }
+#else
+
+            for (cnt = 0; cnt < result_count; cnt++) {
+                ASSERT_TRUE(N::leaf_key_lt(result[cnt], end_key, 0));
+                ASSERT_FALSE(N::leaf_key_lt(result[cnt], start_key, 0))
+                    << "start key:\t" << start_string << std::endl
+                    << "art found:\t"
+                    << std::string(result[cnt]->GetKey(), result[cnt]->key_len);
+            }
+#endif
             ASSERT_EQ(cnt, result_count);
             if (result_count == scan_length) {
                 size_limit_cnt++;
