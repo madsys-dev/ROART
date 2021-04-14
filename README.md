@@ -20,9 +20,5 @@ $ make -j
 #### Run
 
 ```
-$ ./art_simple_bench 10000 4
-
-usage: ./example [n] [nthreads]
-n: number of keys (integer)
-nthreads: number of threads (integer)
+$ ./benchmark
 ```
