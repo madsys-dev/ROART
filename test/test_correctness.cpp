@@ -1,4 +1,3 @@
-#include "Tree.h"
 #include "generator.h"
 #include "threadinfo.h"
 #include <boost/thread/barrier.hpp>
@@ -39,7 +38,7 @@ TEST(TestCorrectness, PM_ART) {
         //        std::string key = std::to_string(i);
         ////        key = key + "x";
         std::string key = rdm.RandomStr();
-        key = "msn" + key + "msn";
+        key = "ebc" + key + "ebc";
         Key *k = new Key();
         k->Init((char *)key.c_str(), key.size(), (char *)key.c_str(),
                 key.size());
@@ -91,11 +90,11 @@ TEST(TestCorrectness, PM_ART) {
         int scan_length = (rdm.randomInt() % total_key_cnt / 4) + 1;
         auto start_key = new Key(), end_key = new Key();
         std::string start_string = rdm.RandomStr();
-        start_string = "msn" + start_string + "msn";
+        start_string = "ebc" + start_string + "ebc";
         start_key->Init((char *)start_string.c_str(), start_string.size(),
                         (char *)start_string.c_str(), start_string.size());
         std::string end_string = rdm.RandomStr();
-        end_string = "msn" + end_string + "msn";
+        end_string = "ebc" + end_string + "ebc";
         end_key->Init((char *)end_string.c_str(), end_string.size(),
                       (char *)end_string.c_str(), end_string.size());
 
@@ -328,7 +327,7 @@ TEST(TestCorrectness, PM_ART_INSERT_AND_READ) {
     std::cout << "[TEST]\tstart to build tree\n";
     for (int i = 0; i < nthreads * test_iter; i++) {
         std::string key = rdm.RandomStr();
-        key = "msn" + key + "msn";
+        key = "ebc" + key + "ebc";
         Key *k = new Key();
         k->Init((char *)key.c_str(), key.size(), (char *)key.c_str(),
                 key.size());

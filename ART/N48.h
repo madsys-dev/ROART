@@ -42,7 +42,7 @@ class N48 : public N {
         for (unsigned i = 0; i < 256; i++) {
             uint8_t index = childIndex[i].load();
 #ifdef ZENTRY
-            auto child = getZentryPtr(zens[i].load());
+            auto child = getZentryPtr(zens[index].load());
             if (index != emptyMarker && child != nullptr) {
                 // not flush
                 n->insert(i, child, false);
