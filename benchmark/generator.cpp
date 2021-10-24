@@ -115,6 +115,7 @@ DataSet::DataSet(int size, int key_length, int email)
         fstr.open(fn_str, std::ios::in);
         for (int i = 0; i < data_size; i++) {
             fstr >> wl_str[i];
+            assert(wl_str[i].length()>0);
         }
         fstr.close();
         dataset_mtx.unlock();

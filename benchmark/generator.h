@@ -48,8 +48,8 @@ class RandomGenerator : public WorkloadGenerator {
         //        int len = randomInt() % 125  + 4;
         std::string res = "";
         for (int i = 0; i < len; i++) {
-                        char c = randomInt() % 10 + '0'; // 0-9
-//            char c = randomInt() % 94 + 33;
+            //            char c = randomInt() % 10 + '0'; // 0-9
+            char c = randomInt() % 94 + 33;
             //            char c = randomInt() % 127 + 1;
             res += c;
         }
