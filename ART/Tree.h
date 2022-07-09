@@ -1,3 +1,7 @@
+//
+// Created by 潘许飞 on 2022/5.
+//
+
 #pragma once
 #include "N.h"
 #include "N16.h"
@@ -10,16 +14,24 @@
 
 namespace PART_ns {
 
+// 类Tree定义整个Radix Tree的操作
 class Tree {
   public:
   private:
-    N *root;
+    N *root;    //根节点root
+#ifdef LEAF_ARRAY
+    // 添加LeafArray链表的头尾指针
+    N * head;
+    N * tail;
+    long long leafArrayCount;
+#endif
 
     bool checkKey(const Key *ret, const Key *k) const;
 
   public:
+    // 用于判断前缀是否匹配的枚举类型：匹配、不匹配、乐观匹配
     enum class CheckPrefixResult : uint8_t { Match, NoMatch, OptimisticMatch };
-
+    // 用于判断前缀是否匹配的枚举类型：匹配、不匹配、跳过层级
     enum class CheckPrefixPessimisticResult : uint8_t {
         Match,
         NoMatch,

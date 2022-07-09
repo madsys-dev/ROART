@@ -1,3 +1,7 @@
+//
+// Created by 潘许飞 on 2022/5.
+//
+
 #pragma once
 
 #include "N.h"
@@ -6,6 +10,7 @@ namespace PART_ns {
 
 class N16 : public N {
   public:
+    std::atomic<uint8_t> meta[2];//用于记录最大元素与最小元素的位置
 #ifdef ZENTRY
     std::atomic<uintptr_t> zens[16];
 #else

@@ -1,3 +1,7 @@
+//
+// Created by 潘许飞 on 2022/5.
+//
+
 #include "N.h"
 #include "EpochGuard.h"
 #include "LeafArray.h"
@@ -14,19 +18,22 @@
 using namespace NVMMgr_ns;
 
 namespace PART_ns {
-__thread int helpcount = 0;
+__thread int helpcount = 0;     // _thread作用如同thread_local关键字。表面该变量生命周期为 线程存储期。
 
 int gethelpcount() { return helpcount; }
 
+// 叶子节点的构造函数
 Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
     key_len = k->key_len;
     val_len = k->val_len;
 #ifdef KEY_INLINE
     // have allocate the memory for kv
+    // 存储在内存DRAM中
     memcpy(kv, k->fkey, key_len);
     memcpy(kv + key_len, (void *)k->value, val_len);
 #else
     // allocate from NVM for variable key
+    // 存储在NVM中
     fkey = new (alloc_new_node_from_size(key_len)) uint8_t[key_len];
     value = new (alloc_new_node_from_size(val_len)) char[val_len];
     memcpy(fkey, k->fkey, key_len);
@@ -37,6 +44,7 @@ Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
     // persist the key, without persist the link to leaf
     // no one can see the key
     // if crash without link the leaf, key can be reclaimed safely
+    // 当使用叶节点时，则不存在上述情况
 #endif
 }
 
@@ -63,6 +71,7 @@ uint16_t Leaf::getFingerPrint() {
     }
     return re;
 }
+// 调试与Debug
 void Leaf::graphviz_debug(std::ofstream &f) {
     char buf[1000] = {};
     sprintf(buf + strlen(buf), "node%lx [label=\"",
@@ -86,6 +95,7 @@ void Leaf::graphviz_debug(std::ofstream &f) {
     //    printf("leaf!");
 }
 
+// 将参数中的节点指针进行刷新
 void N::helpFlush(std::atomic<N *> *n) {
     if (n == nullptr)
         return;
@@ -100,6 +110,7 @@ void N::helpFlush(std::atomic<N *> *n) {
     }
 }
 
+// 将generation_version设置为 全局NVM管理器nvm_mgr中存储的meta_data->generation_version
 void N::set_generation() {
     NVMMgr *mgr = get_nvm_mgr();
     generation_version = mgr->get_generation_version();
@@ -224,19 +235,23 @@ void N::check_generation() {
 }
 #endif
 
+// 设置数据类型
 void N::setType(NTypes type) {
     type_version_lock_obsolete->fetch_add(convertTypeToVersion(type));
 }
 
+// 将NTypes类型转化为自己的表示方法
 uint64_t N::convertTypeToVersion(NTypes type) {
     return (static_cast<uint64_t>(type) << 60);
 }
 
+// 获取节点的类型
 NTypes N::getType() const {
     return static_cast<NTypes>(
         type_version_lock_obsolete->load(std::memory_order_relaxed) >> 60);
 }
 
+// 获取节点层级Level
 uint32_t N::getLevel() const { return level; }
 
 // wait to get lock, restart if obsolete

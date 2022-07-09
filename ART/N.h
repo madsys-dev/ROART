@@ -1,3 +1,7 @@
+//
+// Created by 潘许飞 on 2022/5.
+//
+
 #pragma once
 
 #include "Epoch.h"
@@ -13,6 +17,7 @@ namespace PART_ns {
 
 int gethelpcount();
 
+// 记录节点的类型
 enum class NTypes : uint8_t {
     N4 = 1,
     N16 = 2,
@@ -24,6 +29,7 @@ enum class NTypes : uint8_t {
 
 class LeafArray;
 
+//节点的基类。只记录节点类型。
 class BaseNode {
   public:
     NTypes type;
@@ -31,12 +37,15 @@ class BaseNode {
     virtual ~BaseNode() {}
 };
 
+//叶子节点的实现。继承自基类BaseNode。
 class Leaf : public BaseNode {
   public:
     size_t key_len;
     size_t val_len;
 //    uint64_t key;
-// variable key
+//    variable key
+
+// 若预定义KEY_INLINE，则Key与Value被存储到一起
 #ifdef KEY_INLINE
     char kv[0]; // append key and value
 #else
@@ -53,6 +62,7 @@ class Leaf : public BaseNode {
 
     virtual ~Leaf() {}
 
+    // 比较叶节点内的Key与输入参数的Key是否一致
     bool checkKey(const Key *k) const {
 #ifdef KEY_INLINE
         if (key_len == k->getKeyLen() && memcmp(kv, k->fkey, key_len) == 0)
@@ -86,20 +96,26 @@ class Leaf : public BaseNode {
 
 } __attribute__((aligned(64)));
 
+// 结构体Prefix存储的前缀的最大字节数
 static constexpr uint32_t maxStoredPrefixLength = 4;
+// 结构体Prefix存储前缀
 struct Prefix {
     uint32_t prefixCount = 0;
     uint8_t prefix[maxStoredPrefixLength];
 };
+// 若修改前缀的最大字节数，则下列assert需要修改
 static_assert(sizeof(Prefix) == 8, "Prefix should be 64 bit long");
 
+// 内部节点的实现
 class N : public BaseNode {
   protected:
+    // 构造函数
+    // 初始化时，版本设置为1，并设置前缀信息
     N(NTypes type, uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : BaseNode(type), level(level) {
         type_version_lock_obsolete = new std::atomic<uint64_t>;
         type_version_lock_obsolete->store(0b100);
-        recovery_latch.store(0, std::memory_order_seq_cst);
+        recovery_latch.store(0, std::memory_order_seq_cst);     // 将0存储到recovery_latch中，第二个参数表明按照Sequential consistency内存模型
         setType(type);
         setPrefix(prefix, prefixLength, false);
     }
@@ -111,26 +127,27 @@ class N : public BaseNode {
         recovery_latch.store(0, std::memory_order_seq_cst);
         setType(type);
     }
-
+    // 不允许拷贝构造
     N(const N &) = delete;
 
     N(N &&) = delete;
 
     virtual ~N() {}
 
+    // 记录节点的 类型、版本、是否上锁、是否失效
     // 3b type 59b version 1b lock 1b obsolete
     // obsolete means this node has been deleted
     std::atomic<uint64_t> *type_version_lock_obsolete;
-
+    // prefix记录前缀的内容等信息
     alignas(64) std::atomic<Prefix> prefix;
-    const uint32_t level;
-    uint16_t count = 0;
-    uint16_t compactCount = 0;
+    const uint32_t level;       // 记录节点的层级Level
+    uint16_t count = 0;         // 
+    uint16_t compactCount = 0;  // 
 
-    uint64_t generation_version = 0;
-    std::atomic<uint64_t> recovery_latch;
+    uint64_t generation_version = 0;    //
+    std::atomic<uint64_t> recovery_latch;   //
 
-    static const uint64_t dirty_bit = ((uint64_t)1 << 60);
+    static const uint64_t dirty_bit = ((uint64_t)1 << 60);  //
 
     void setType(NTypes type);
 

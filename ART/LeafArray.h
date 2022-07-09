@@ -1,5 +1,5 @@
 //
-// Created by 谢威宇 on 2021/4/3.
+// Created by 潘许飞 on 2022/5.
 //
 
 #ifndef P_ART_LEAFARRAY_H
@@ -11,22 +11,43 @@
 
 namespace PART_ns {
 
-const size_t LeafArrayLength = 64;
-const size_t FingerPrintShift = 48;
+const size_t LeafArrayLength = 64;      // 叶数组的容量
+const size_t FingerPrintShift = 48;     // 指纹的偏移量
 
 class LeafArray : public N {
   public:
-    std::atomic<uintptr_t> leaf[LeafArrayLength];
+    std::atomic<uintptr_t> leaf[LeafArrayLength];   // Leaf用于记录子节点地址
     std::atomic<std::bitset<LeafArrayLength>>
-        bitmap; // 0 means used slot; 1 means empty slot
+        bitmap;   // 位图用于存储使用情况
+    // 新添加的双向指针
+    std::atomic<LeafArray*> prev;
+    std::atomic<LeafArray*> next;
+    // 新添加的用于隐式排序的槽数组. uint8_t:2^8=256
+    std::atomic<uint8_t> slot[LeafArrayLength];    // slot[i]记录第i小的键，在叶数组中所处的位置
 
   public:
     LeafArray(uint32_t level = -1) : N(NTypes::LeafArray, level, {}, 0) {
         bitmap.store(std::bitset<LeafArrayLength>{}.reset());
         memset(leaf, 0, sizeof(leaf));
+        
+        // 初始化双向指针
+        prev.store(0);
+        next.store(0);
+        // 初始化槽数组
+        memset(slot,0,sizeof(slot));
     }
 
     virtual ~LeafArray() {}
+
+    void setLinkedList(LeafArray* prev,LeafArray* next ,bool flush) {
+      this->prev.store(prev);
+      this->next.store(next);
+      // 如果参数flush为真，将双向指针持久化Flush到NVM中
+      if(flush){
+        flush_data(&prev, sizeof(std::atomic<LeafArray*>));
+        flush_data(&next, sizeof(std::atomic<LeafArray*>));
+      }
+    }
 
     size_t getRightmostSetBit() const;
 
@@ -55,6 +76,8 @@ class LeafArray : public N {
     bool isFull() const;
 
     void splitAndUnlock(N *parentNode, uint8_t parentKey, bool &need_restart);
+
+    void splitAndUnlock(N *parentNode, uint8_t parentKey, bool &need_restart, LeafArray* prev,LeafArray* next);
 
     std::vector<Leaf *> getSortedLeaf(const Key *start, const Key *end,
                                       int start_level, bool compare_start,

@@ -1,3 +1,7 @@
+//
+// Created by 潘许飞 on 2022/5.
+//
+
 #include "Tree.h"
 #include "EpochGuard.h"
 #include "N.h"
@@ -32,6 +36,7 @@ POBJ_LAYOUT_TOID(DLART, char);
 POBJ_LAYOUT_END(DLART);
 PMEMobjpool *pmem_pool;
 
+//从NVM中根据参数size分配固定大小空间
 void *allocate_size(size_t size) {
 #ifdef COUNT_ALLOC
     if (alloc_time == nullptr)
@@ -49,13 +54,28 @@ void *allocate_size(size_t size) {
 }
 #endif
 
+// RadixTree的构造函数
 Tree::Tree() {
     std::cout << "[P-ART]\tnew P-ART\n";
 
+    // 初始化NVM_MGR的实例
+    // problem mark
     init_nvm_mgr();
+    // 注册线程信息
+    // problem mark
     register_threadinfo();
+    // 获取NVM内存全局管理器
     NVMMgr *mgr = get_nvm_mgr();
     //    Epoch_Mgr * epoch_mgr = new Epoch_Mgr();
+    
+#ifdef LEAF_ARRAY
+    // 初始化LeafArray链表的头尾指针
+    head = nullptr;
+    tail = nullptr;
+    leafArrayCount = 0;
+#endif
+
+    //ARTPMDK相关暂时还未弄明白 Problem mark
 #ifdef ARTPMDK
     const char *pool_name = "/mnt/pmem0/matianmao/dlartpmdk.data";
     const char *layout_name = "DLART";
@@ -78,9 +98,11 @@ Tree::Tree() {
     flush_data((void *)root, sizeof(N256));
 
 #else
-
+    // 若首次创建NVM文件
     if (mgr->first_created) {
         // first open
+        // 创建1个N256节点，层级Level=0，无前缀Prefix
+        // Problem mark 暂未弄清楚 为什么前面要写(mgr->alloc_tree_root)
         root = new (mgr->alloc_tree_root()) N256(0, {});
         flush_data((void *)root, sizeof(N256));
         //        N::clflush((char *)root, sizeof(N256), true, true);
@@ -796,6 +818,7 @@ bool Tree::checkKey(const Key *ret, const Key *k) const {
            memcmp(ret->fkey, k->fkey, k->getKeyLen()) == 0;
 }
 
+// Radix Tree的插入操作
 typename Tree::OperationResults Tree::insert(const Key *k) {
     EpochGuard NewEpoch;
 
@@ -806,27 +829,39 @@ restart:
     N *parentNode = nullptr;
     uint8_t parentKey, nodeKey = 0;
     uint32_t level = 0;
-
+    // 新添加的相邻node，用于添加节点时，构建双向链表(由于普通的Radix Tree的内部节点内的数据项是有序的，因此可以找到)
+    N * siblingNode = nullptr;
+    LeafArray * prevLeafArray = nullptr;    // 为LeafArray进行节点分裂做准备。记录当前LeafArray的前驱节点。
+    LeafArray * nextLeafArray = nullptr;    // 为LeafArray进行节点分裂做准备。记录当前LeafArray的后继节点。
+    
+    //按层级不断迭代向叶子节点方向查找
     while (true) {
+        //迭代
         parentNode = node;
         parentKey = nodeKey;
-        node = nextNode;
+        node = nextNode;    //初始化时，node即为root节点
+        //problem mark
 #ifdef INSTANT_RESTART
         node->check_generation();
 #endif
+        //problem mark
         auto v = node->getVersion();
 
         uint32_t nextLevel = level;
 
         uint8_t nonMatchingKey;
         Prefix remainingPrefix;
+        // 先检查前缀
         switch (
             checkPrefixPessimistic(node, k, nextLevel, nonMatchingKey,
                                    remainingPrefix)) { // increases nextLevel
         case CheckPrefixPessimisticResult::SkippedLevel:
             goto restart;
         case CheckPrefixPessimisticResult::NoMatch: {
+            // 若未匹配，则插入新节点
+            // 避免重复的Key
             assert(nextLevel < k->getKeyLen()); // prevent duplicate key
+            // Problem mark
             node->lockVersionOrRestart(v, needRestart);
             if (needRestart)
                 goto restart;
@@ -850,6 +885,19 @@ restart:
 #ifdef LEAF_ARRAY
             auto newLeafArray =
                 new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
+            // 设置双向指针
+            if(leafArrayCount==0){
+                // 第一个叶数组
+                newLeafArray.prev = head;   // ==nullptr
+                newLeafArray.next = tail;   // ==nullptr
+                head = newLeafArray;
+                tail = newLeafArray;
+            }else{
+                
+                
+            }
+            // 添加LeafArrayCount的计数器
+            leafArrayCount++;
             newLeafArray->insert(newLeaf, true);
             newNode->insert(k->fkey[nextLevel], N::setLeafArray(newLeafArray),
                             false);
@@ -889,29 +937,36 @@ restart:
 
         } // end case  NoMatch
         case CheckPrefixPessimisticResult::Match:
+            // 若Match，则不进行实际操作。跳出Switch，直接后续的迭代与判断过程
             break;
         }
         assert(nextLevel < k->getKeyLen()); // prevent duplicate key
         // TODO: maybe one string is substring of another, so it fkey[level]
         // will be 0 solve problem of substring
 
+        // 在搜索路径中，向下方的节点迭代
         level = nextLevel;
-        nodeKey = k->fkey[level];
-
+        nodeKey = k->fkey[level];   //nodekey是uint8_t，即按照字节去判断
+        //根据Key获取下一个节点
         nextNode = N::getChild(nodeKey, node);
-
+        // 若寻找下一个节点为空（搜索到Radix Tree的最底层了），则：直接新建叶节点与叶数组
         if (nextNode == nullptr) {
             node->lockVersionOrRestart(v, needRestart);
             if (needRestart)
                 goto restart;
+            // 生成新的叶子节点
             Leaf *newLeaf = allocLeaf(k);
 #ifdef LEAF_ARRAY
+            // 若预定义了LEAF_ARRAY，则还需要新建叶数组
             auto newLeafArray =
                 new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
+            // 叶数组中插入新的叶节点
             newLeafArray->insert(newLeaf, true);
+            // 将 叶数组 LeafArray 设置为 当前内部node 的子节点
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeafArray(newLeafArray), needRestart);
 #else
+            // 将 叶子节点 Leaf 设置为 当前内部node 的子节点
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeaf(newLeaf), needRestart);
 #endif
@@ -921,17 +976,25 @@ restart:
             return OperationResults::Success;
         }
 #ifdef LEAF_ARRAY
+        // 若寻找的下一个节点nextnode是叶数组（搜索到Radix Tree的次底层了），则：直接插入到LeafArray中，并判断是否需要叶数组分裂
         if (N::isLeafArray(nextNode)) {
             auto leaf_array = N::getLeafArray(nextNode);
+            // 若已经查询到这个Key，说明已经存在了。则直接返回Existed状态。
             if (leaf_array->lookup(k) != nullptr) {
                 return OperationResults::Existed;
             } else {
+                // 若未查询到这个Key，则直接在LeafArray中插入
                 auto lav = leaf_array->getVersion();
                 leaf_array->lockVersionOrRestart(lav, needRestart);
                 if (needRestart) {
                     goto restart;
                 }
+                // 当叶数组已满，则进行节点分裂
+                // 这种情况下，当前叶数组肯定已维护好LeafArray层的双向链表，因此分裂后的指针关系也比较好确定
                 if (leaf_array->isFull()) {
+                    //记录之前的LeafArray的前驱与后继节点
+                    prevLeafArray = leaf_array->prev.load();
+                    nextLeafArray = leaf_array->next.load();
                     leaf_array->splitAndUnlock(node, nodeKey, needRestart);
                     if (needRestart) {
                         goto restart;
@@ -939,6 +1002,7 @@ restart:
                     nextNode = N::getChild(nodeKey, node);
                     // insert at the next iteration
                 } else {
+                    // 当叶数组未满，则直接分配叶节点，如何插入到叶数组中
                     auto leaf = allocLeaf(k);
                     leaf_array->insert(leaf, true);
                     leaf_array->writeUnlock();
@@ -947,6 +1011,7 @@ restart:
             }
         }
 #else
+        // 若寻找到的下一个节点是叶子节点（若采用LeafArray叶数组压缩的策略，则不存在改情况）
         if (N::isLeaf(nextNode)) {
             node->lockVersionOrRestart(v, needRestart);
             if (needRestart)
@@ -1009,6 +1074,7 @@ restart:
             return OperationResults::Success;
         }
 #endif
+        // 递增Level
         level++;
     }
     //    std::cout<<"ohfinish\n";
@@ -1161,16 +1227,20 @@ void Tree::rebuild(std::vector<std::pair<uint64_t, size_t>> &rs,
     N::rebuild_node(root, rs, start_addr, end_addr, thread_id);
 }
 
+// 检查前缀，返回检查结果CheckPrefixResult
 typename Tree::CheckPrefixResult Tree::checkPrefix(N *n, const Key *k,
                                                    uint32_t &level) {
+    //若待查询的Key的整体长度，小于节点n当前的层级Level，认为 不匹配
     if (k->getKeyLen() <= n->getLevel()) {
         return CheckPrefixResult::NoMatch;
     }
+    // 若 节点n存储的前缀数目+上层Level 小于 节点n目前位于的Level ，则认为 乐观匹配
     Prefix p = n->getPrefi();
     if (p.prefixCount + level < n->getLevel()) {
         level = n->getLevel();
         return CheckPrefixResult::OptimisticMatch;
     }
+    // 若节点n存储的前缀数目大于0，则依次进行判断：
     if (p.prefixCount > 0) {
         for (uint32_t i = ((level + p.prefixCount) - n->getLevel());
              i < std::min(p.prefixCount, maxStoredPrefixLength); ++i) {
@@ -1179,9 +1249,10 @@ typename Tree::CheckPrefixResult Tree::checkPrefix(N *n, const Key *k,
             }
             ++level;
         }
+        // 若前缀数目大于最大能存储的前缀长度，则认为 乐观匹配
         if (p.prefixCount > maxStoredPrefixLength) {
             // level += p.prefixCount - maxStoredPrefixLength;
-            level = n->getLevel();
+            level = n->getLevel();      //乐观匹配则直接将当前正在匹配的层级Level设置为节点n的Level
             return CheckPrefixResult::OptimisticMatch;
         }
     }
@@ -1357,6 +1428,8 @@ typename Tree::PCEqualsResults Tree::checkPrefixEquals(const N *n,
     }
     return PCEqualsResults::BothMatch;
 }
+
+// 用于Debug
 void Tree::graphviz_debug() {
     std::ofstream f("../dot/tree-view.dot");
 
