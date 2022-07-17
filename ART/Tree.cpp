@@ -77,7 +77,7 @@ Tree::Tree() {
 
     //ARTPMDK相关暂时还未弄明白 Problem mark
 #ifdef ARTPMDK
-    const char *pool_name = "/mnt/pmem0/matianmao/dlartpmdk.data";
+    const char *pool_name = "/mnt/pmem0/pxf/dlartpmdk.data";
     const char *layout_name = "DLART";
     size_t pool_size = 64LL * 1024 * 1024 * 1024; // 16GB
 
@@ -837,7 +837,7 @@ restart:
     //按层级不断迭代向叶子节点方向查找
     while (true) {
         //迭代
-        parentNode = node;
+        parentNode = node;  //初始化时，parentNode为nullptr
         parentKey = nodeKey;
         node = nextNode;    //初始化时，node即为root节点
         //problem mark
@@ -847,7 +847,7 @@ restart:
         //problem mark
         auto v = node->getVersion();
 
-        uint32_t nextLevel = level;
+        uint32_t nextLevel = level; //初始化时，level=0.nextLevel=0
 
         uint8_t nonMatchingKey;
         Prefix remainingPrefix;
@@ -886,6 +886,7 @@ restart:
             auto newLeafArray =
                 new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
             // 设置双向指针
+            // PXF
             if(leafArrayCount==0){
                 // 第一个叶数组
                 newLeafArray.prev = head;   // ==nullptr
@@ -893,7 +894,8 @@ restart:
                 head = newLeafArray;
                 tail = newLeafArray;
             }else{
-                
+                newLeafArray.prev = ;
+                newLeafArray.next = ;
                 
             }
             // 添加LeafArrayCount的计数器
@@ -922,7 +924,7 @@ restart:
                 node->writeUnlock();
                 goto restart;
             }
-
+            // 设置ParentNode的数据项，将parentKey对应的子节点设置为newNode
             N::change(parentNode, parentKey, newNode);
             parentNode->writeUnlock();
 
@@ -963,8 +965,25 @@ restart:
             // 叶数组中插入新的叶节点
             newLeafArray->insert(newLeaf, true);
             // 将 叶数组 LeafArray 设置为 当前内部node 的子节点
+            // 若 当前内部node已满，则进行扩容，并重新分配node节点，修改parentNode指向子节点node
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeafArray(newLeafArray), needRestart);
+
+            // 此时，可能node内无数据，或者node有数据但无匹配的子节点
+            // 设置双向指针
+            // 需要注意的是：
+            if(leafArrayCount==0){
+                // 第一个叶数组,初始时head与tail都为nullptr
+                newLeafArray.prev = head;   // ==nullptr
+                newLeafArray.next = tail;   // ==nullptr
+                head = newLeafArray;
+                tail = newLeafArray;
+            }else{
+                
+            }
+            // 添加LeafArrayCount的计数器
+            leafArrayCount++;
+
 #else
             // 将 叶子节点 Leaf 设置为 当前内部node 的子节点
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
@@ -1268,6 +1287,7 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
         // Intermediate or inconsistent state from path compression
         // "splitAndUnlock" or "merge" is detected Inconsistent path compressed
         // prefix should be recovered in here
+        // 用于检测路径压缩的不一致状态，并进行恢复
         bool needRecover = false;
         auto v = n->getVersion();
         n->lockVersionOrRestart(v, needRecover);
@@ -1302,6 +1322,7 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
         }
     }
 
+    // 逐个比较node的前缀prev是否匹配。值得注意的是：若无前缀，也会被判定为match
     if (p.prefixCount > 0) {
         uint32_t prevLevel = level;
         Leaf *kt = nullptr;

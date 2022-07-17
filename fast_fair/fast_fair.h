@@ -1848,7 +1848,7 @@ class page {
 
 void init_pmem() {
     // create pool
-    const char *pool_name = "/mnt/pmem0/matianmao/fast_fair.data";
+    const char *pool_name = "/mnt/pmem0/pxf/fast_fair.data";
     const char *layout_name = "fast_fair";
     size_t pool_size = 64LL * 1024 * 1024 * 1024; // 16GB
 

@@ -12,7 +12,7 @@
 
 using namespace NVMMgr_ns;
 
-inline void clear_data() { system("rm -rf /mnt/pmem0/matianmao/part.data"); }
+inline void clear_data() { system("rm -rf /mnt/pmem0/pxf/part.data"); }
 
 TEST(TestNVMMgr, nvm_mgr) {
     std::cout << "[TEST]\tstart to test nvm_mgr\n";

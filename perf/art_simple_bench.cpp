@@ -10,7 +10,7 @@ using namespace std;
 
 using namespace PART_ns;
 
-inline void clear_data() { system("rm -rf /mnt/pmem0/matianmao/part.data"); }
+inline void clear_data() { system("rm -rf /mnt/pmem0/pxf/part.data"); }
 void run(char **argv) {
     clear_data();
     std::cout << "Simple Example of P-ART" << std::endl;

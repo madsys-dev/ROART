@@ -37,8 +37,8 @@ int main(int argc, char **argv) {
     size_t nsize = atoi(argv[2]);
     int test_iter = 1000000;
 
-    system("rm -rf /mnt/pmem0/matianmao/test_alloc.data");
-    const char *pool_name = "/mnt/pmem0/matianmao/test_alloc.data";
+    system("rm -rf /mnt/pmem0/pxf/test_alloc.data");
+    const char *pool_name = "/mnt/pmem0/pxf/test_alloc.data";
     const char *layout_name = "pmdk-alloc";
     size_t pool_size = 1024 * 1024 * 256;
 

@@ -10,13 +10,12 @@
 
 namespace PART_ns {
 
+// 删除全部子节点
 void N4::deleteChildren() {
-    for (uint32_t i = 0; i < compactCount; ++i) {
-#ifdef ZENTRY
-        N *child = N::clearDirty(getZentryPtr(zens[i]));
-#else
+    for (uint32_t i = 0; i < count; ++i) {
+
         N *child = N::clearDirty(children[i].load());
-#endif
+
         if (child != nullptr) {
             N::deleteChildren(child);
             N::deleteNode(child);
@@ -24,101 +23,112 @@ void N4::deleteChildren() {
     }
 }
 
+//插入数据
 bool N4::insert(uint8_t key, N *n, bool flush) {
-    if (compactCount == 4) {
+    if (count==4) {
         return false;
     }
-#ifdef ZENTRY
-    zens[compactCount].store(makeZentry(key, n));
-    if (flush)
-        flush_data(&zens[compactCount], sizeof(std::atomic<uintptr_t>));
 
-#else
-    keys[compactCount].store(key, std::memory_order_seq_cst);
-    if (flush)
-        flush_data((void *)&keys[compactCount], sizeof(std::atomic<uint8_t>));
-
-    children[compactCount].store(n, std::memory_order_seq_cst);
-    if (flush) {
-        flush_data((void *)&children[compactCount], sizeof(std::atomic<N *>));
+    // 从小到大的排序插入
+    uint8_t tmpKey;
+    N* tmpChild;
+    int pos;
+    for(pos=count;pos>=1;pos--){
+        tmpKey = keys[pos-1].load();
+        tmpChild = children[pos-1].load();
+        if(tmpKey > key){
+            keys[pos].store(tmpKey, std::memory_order_seq_cst);
+            children[pos].store(tmpChild,std::memory_order_seq_cst)
+            if (flush){
+                flush_data((void *)&keys[pos], sizeof(std::atomic<uint8_t>));
+                flush_data((void *)&children[pos], sizeof(std::atomic<N *>));
+            }
+                
+        }else{
+            keys[pos].store(key, std::memory_order_seq_cst);
+            children[pos].store(n,std::memory_order_seq_cst)
+            if (flush){
+                flush_data((void *)&keys[pos], sizeof(std::atomic<uint8_t>));
+                flush_data((void *)&children[pos], sizeof(std::atomic<N *>));
+            }
+            count++;
+            return true;
+        }
     }
-#endif
-    compactCount++;
+
+    //到此处说明，新插入的Key是最小的Key
+    keys[0].store(key, std::memory_order_seq_cst);
+    children[0].store(n,std::memory_order_seq_cst)
+    if (flush){
+        flush_data((void *)&keys[0], sizeof(std::atomic<uint8_t>));
+        flush_data((void *)&children[0], sizeof(std::atomic<N *>));
+    }
+        
     count++;
     return true;
+
 }
 
 void N4::change(uint8_t key, N *val) {
-    for (uint32_t i = 0; i < compactCount; ++i) {
-#ifdef ZENTRY
-        auto p = getZentryKeyPtr(zens[i].load());
-        if (p.second != nullptr && p.first == key) {
-            zens[i].store(makeZentry(key, val));
-            flush_data((void *)&zens[i], sizeof(std::atomic<uintptr_t>));
+    int left=0;
+    int right=count-1;
+    while(left<=right){
+        int middle = left + ((right-left)/2);
+        N *child = children[middle].load();
+        uint8_t num = keys[middle].load();
+        if(num >key){
+            right=middle-1;
+        }else if(num<key){
+            left=middle+1;
+        }else{
+            children[middle].store(val, std::memory_order_seq_cst);
+            flush_data((void *)&children[middle], sizeof(std::atomic<N *>));
             return;
         }
-#else
-        N *child = children[i].load();
-        if (child != nullptr && keys[i].load() == key) {
-            children[i].store(val, std::memory_order_seq_cst);
-            flush_data((void *)&children[i], sizeof(std::atomic<N *>));
-            return;
-        }
-#endif
     }
 }
 
 N *N4::getChild(const uint8_t k) {
-    for (uint32_t i = 0; i < 4; ++i) {
-#ifdef ZENTRY
-        auto p = getZentryKeyPtr(zens[i].load());
-        if (p.second != nullptr && p.first == k) {
-            return p.second;
-        }
-#else
-        N *child = children[i].load();
-        if (child != nullptr && keys[i].load() == k) {
+    int left=0;
+    int right=count-1;
+    while(left<=right){
+        int middle = left + ((right-left)/2);
+        N *child = children[middle].load();
+        uint8_t num = keys[middle].load();
+        if(num >k){
+            right=middle-1;
+        }else if(num<k){
+            left=middle+1;
+        }else{
             return child;
         }
-#endif
     }
-    return nullptr;
 }
 
 bool N4::remove(uint8_t k, bool force, bool flush) {
-    for (uint32_t i = 0; i < compactCount; ++i) {
-#ifdef ZENTRY
-        auto p = getZentryKeyPtr(zens[i].load());
-        if (p.second != nullptr && p.first == k) {
-            zens[i].store(0);
-            flush_data(&zens[i], sizeof(std::atomic<uintptr_t>));
+    int left=0;
+    int right=count-1;
+    while(left<=right){
+        int middle = left + ((right-left)/2);
+        N *child = children[middle].load();
+        uint8_t num = keys[middle].load();
+        if(num >k){
+            right=middle-1;
+        }else if(num<k){
+            left=middle+1;
+        }else{
+            children[middle].store(nullptr, std::memory_order_seq_cst);
+            flush_data((void *)&children[middle], sizeof(std::atomic<N *>));
             count--;
             return true;
         }
-#else
-        if (children[i] != nullptr && keys[i].load() == k) {
-            children[i].store(nullptr, std::memory_order_seq_cst);
-            flush_data((void *)&children[i], sizeof(std::atomic<N *>));
-            count--;
-            return true;
-        }
-#endif
     }
     return false;
 }
 
 N *N4::getAnyChild() const {
     N *anyChild = nullptr;
-    for (uint32_t i = 0; i < 4; ++i) {
-#ifdef ZENTRY
-        N *child = getZentryPtr(zens[i].load());
-        if (child != nullptr) {
-            if (N::isLeaf(child)) {
-                return child;
-            }
-            anyChild = child;
-        }
-#else
+    for (uint32_t i = 0; i < count; ++i) {
         N *child = children[i].load();
         if (child != nullptr) {
             if (N::isLeaf(child)) {
@@ -126,22 +136,13 @@ N *N4::getAnyChild() const {
             }
             anyChild = child;
         }
-#endif
     }
     return anyChild;
 }
 
 // in the critical section
 std::tuple<N *, uint8_t> N4::getSecondChild(const uint8_t key) const {
-    for (uint32_t i = 0; i < compactCount; ++i) {
-#ifdef ZENTRY
-        auto p = getZentryKeyPtr(zens[i].load());
-        if (p.second != nullptr) {
-            if (p.first != key) {
-                return std::make_tuple(p.second, p.first);
-            }
-        }
-#else
+    for (uint32_t i = 0; i < count; ++i) {
         N *child = children[i].load();
         if (child != nullptr) {
             uint8_t k = keys[i].load();
@@ -149,7 +150,6 @@ std::tuple<N *, uint8_t> N4::getSecondChild(const uint8_t key) const {
                 return std::make_tuple(child, k);
             }
         }
-#endif
     }
     return std::make_tuple(nullptr, 0);
 }
@@ -159,16 +159,7 @@ void N4::getChildren(uint8_t start, uint8_t end,
                      std::tuple<uint8_t, N *> children[],
                      uint32_t &childrenCount) {
     childrenCount = 0;
-    for (uint32_t i = 0; i < 4; ++i) {
-#ifdef ZENTRY
-        auto p = getZentryKeyPtr(zens[i]);
-        if (p.first >= start && p.first <= end) {
-            if (p.second != nullptr) {
-                children[childrenCount] = std::make_tuple(p.first, p.second);
-                childrenCount++;
-            }
-        }
-#else
+    for (uint32_t i = 0; i < count; ++i) {
         uint8_t key = this->keys[i].load();
         if (key >= start && key <= end) {
             N *child = this->children[i].load();
@@ -177,26 +168,24 @@ void N4::getChildren(uint8_t start, uint8_t end,
                 childrenCount++;
             }
         }
-#endif
     }
-    std::sort(children, children + childrenCount,
-              [](auto &first, auto &second) {
-                  return std::get<0>(first) < std::get<0>(second);
-              });
+    // std::sort(children, children + childrenCount,
+    //           [](auto &first, auto &second) {
+    //               return std::get<0>(first) < std::get<0>(second);
+    //           });
 }
 
 uint32_t N4::getCount() const {
-    uint32_t cnt = 0;
-    for (uint32_t i = 0; i < compactCount && cnt < 3; i++) {
-#ifdef ZENTRY
-        N *child = getZentryPtr(zens[i].load());
-#else
-        N *child = children[i].load();
-#endif
-        if (child != nullptr)
-            cnt++;
-    }
-    return cnt;
+    // uint32_t cnt = 0;
+    // for (uint32_t i = 0; i < compactCount && cnt < 3; i++) {
+
+    //     N *child = children[i].load();
+
+    //     if (child != nullptr)
+    //         cnt++;
+    // }
+    // return cnt;
+    return count;
 }
 void N4::graphviz_debug(std::ofstream &f) {
     char buf[1000] = {};
@@ -211,18 +200,14 @@ void N4::graphviz_debug(std::ofstream &f) {
     }
     sprintf(buf + strlen(buf), "\n");
     sprintf(buf + strlen(buf), "count: %d\n", count);
-    sprintf(buf + strlen(buf), "compact: %d\n", compactCount);
+    //sprintf(buf + strlen(buf), "compact: %d\n", compactCount);
     sprintf(buf + strlen(buf), "\"]\n");
 
-    for (int i = 0; i < compactCount; i++) {
-#ifdef ZENTRY
-        auto pp = getZentryKeyPtr(zens[i].load());
-        auto p = pp.second;
-        auto x = pp.first;
-#else
+    for (int i = 0; i < count; i++) {
+
         auto p = children[i].load();
         auto x = keys[i].load();
-#endif
+
         if (p != nullptr) {
 
             auto addr = reinterpret_cast<uintptr_t>(p);
@@ -235,12 +220,10 @@ void N4::graphviz_debug(std::ofstream &f) {
     }
     f << buf;
 
-    for (int i = 0; i < compactCount; i++) {
-#ifdef ZENTRY
-        auto p = getZentryPtr(zens[i].load());
-#else
+    for (int i = 0; i < count; i++) {
+
         auto p = children[i].load();
-#endif
+
         if (p != nullptr) {
             if (isLeaf(p)) {
 #ifdef LEAF_ARRAY

@@ -148,56 +148,33 @@ void N::check_generation() {
             case NTypes::N4: {
                 auto n = static_cast<N4 *>(this);
                 for (int i = 0; i < 4; i++) {
-#ifdef ZENTRY
-                    if (n->zens[i].load() != 0) {
-                        count++;
-                        compactCount = i;
-                    }
-#else
                     N *child = n->children[i].load();
                     if (child != nullptr) {
                         count++;
                         compactCount = i;
                     }
-#endif
                 }
                 break;
             }
             case NTypes::N16: {
                 auto n = static_cast<N16 *>(this);
                 for (int i = 0; i < 16; i++) {
-#ifdef ZENTRY
-                    if (n->zens[i].load() != 0) {
-                        count++;
-                        compactCount = i;
-                    }
-#else
                     N *child = n->children[i].load();
                     if (child != nullptr) {
                         count++;
                         compactCount = i;
                     }
-#endif
                 }
                 break;
             }
             case NTypes::N48: {
                 auto n = static_cast<N48 *>(this);
                 for (int i = 0; i < 48; i++) {
-#ifdef ZENTRY
-                    auto p = getZentryKeyPtr(n->zens[i]);
-                    if (p.second != nullptr) {
-                        n->childIndex[p.first] = i;
-                        count++;
-                        compactCount = i;
-                    }
-#else
                     N *child = n->children[i].load();
                     if (child != nullptr) {
                         count++;
                         compactCount = i;
                     }
-#endif
                 }
                 break;
             }
@@ -429,33 +406,36 @@ void N::insertAndUnlock(N *node, N *parentNode, uint8_t keyParent, uint8_t key,
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
-        if (n->compactCount == 4 && n->count <= 3) {
-            compactAndInsertAndUnlock<N4>(n, parentNode, keyParent, key, val,
-                                          NTypes::N4, needRestart);
-            break;
-        }
+        // PXF
+        // if (n->compactCount == 4 && n->count <= 3) {
+        //     compactAndInsertAndUnlock<N4>(n, parentNode, keyParent, key, val,
+        //                                   NTypes::N4, needRestart);
+        //     break;
+        // }
         tryInsertOrGrowAndUnlock<N4, N16>(n, parentNode, keyParent, key, val,
                                           NTypes::N16, needRestart);
         break;
     }
     case NTypes::N16: {
         auto n = static_cast<N16 *>(node);
-        if (n->compactCount == 16 && n->count <= 14) {
-            compactAndInsertAndUnlock<N16>(n, parentNode, keyParent, key, val,
-                                           NTypes::N16, needRestart);
-            break;
-        }
+        // PXF
+        // if (n->compactCount == 16 && n->count <= 14) {
+        //     compactAndInsertAndUnlock<N16>(n, parentNode, keyParent, key, val,
+        //                                    NTypes::N16, needRestart);
+        //     break;
+        // }
         tryInsertOrGrowAndUnlock<N16, N48>(n, parentNode, keyParent, key, val,
                                            NTypes::N48, needRestart);
         break;
     }
     case NTypes::N48: {
         auto n = static_cast<N48 *>(node);
-        if (n->compactCount == 48 && n->count != 48) {
-            compactAndInsertAndUnlock<N48>(n, parentNode, keyParent, key, val,
-                                           NTypes::N48, needRestart);
-            break;
-        }
+        // PXF
+        // if (n->compactCount == 48 && n->count != 48) {
+        //     compactAndInsertAndUnlock<N48>(n, parentNode, keyParent, key, val,
+        //                                    NTypes::N48, needRestart);
+        //     break;
+        // }
         tryInsertOrGrowAndUnlock<N48, N256>(n, parentNode, keyParent, key, val,
                                             NTypes::N256, needRestart);
         break;
@@ -874,11 +854,7 @@ void N::rebuild_node(N *node, std::vector<std::pair<uint64_t, size_t>> &rs,
     case NTypes::N4: {
         auto n = static_cast<N4 *>(node);
         for (int i = 0; i < 4; i++) {
-#ifdef ZENTRY
-            N *child = getZentryPtr(n->zens[i]);
-#else
             N *child = n->children[i].load();
-#endif
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
@@ -890,11 +866,7 @@ void N::rebuild_node(N *node, std::vector<std::pair<uint64_t, size_t>> &rs,
     case NTypes::N16: {
         auto n = static_cast<N16 *>(node);
         for (int i = 0; i < 16; i++) {
-#ifdef ZENTRY
-            N *child = getZentryPtr(n->zens[i]);
-#else
             N *child = n->children[i].load();
-#endif
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
@@ -906,11 +878,7 @@ void N::rebuild_node(N *node, std::vector<std::pair<uint64_t, size_t>> &rs,
     case NTypes::N48: {
         auto n = static_cast<N48 *>(node);
         for (int i = 0; i < 48; i++) {
-#ifdef ZENTRY
-            N *child = getZentryPtr(n->zens[i]);
-#else
             N *child = n->children[i].load();
-#endif
             if (child != nullptr) {
                 xcount++;
                 xcompactCount = i;
@@ -1040,21 +1008,6 @@ bool N::key_leaf_lt(const Key *a, Leaf *b, const int compare_level) {
 bool N::key_key_lt(const Key *a, const Key *b) {
     return key_keylen_lt(reinterpret_cast<char *>(a->fkey), a->key_len,
                          reinterpret_cast<char *>(b->fkey), b->key_len, 0);
-}
-uint8_t N::getZentryKey(uintptr_t zentry) {
-    return uint8_t(zentry >> ZentryKeyShift);
-}
-
-N *N::getZentryPtr(uintptr_t zentry) {
-    const uintptr_t mask = (1LL << ZentryKeyShift) - 1;
-    return reinterpret_cast<N *>(zentry & mask);
-}
-std::pair<uint8_t, N *> N::getZentryKeyPtr(uintptr_t zentry) {
-    return {getZentryKey(zentry), getZentryPtr(zentry)};
-}
-uintptr_t N::makeZentry(uint8_t key, N *node) {
-    return (uintptr_t(key) << ZentryKeyShift) |
-           reinterpret_cast<uintptr_t>(node);
 }
 // namespace PART_ns
 } // namespace PART_ns
