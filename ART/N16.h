@@ -48,9 +48,17 @@ class N16 : public N {
 
     N *getChild(const uint8_t k);
 
+    N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger);
+
+    N *getMaxChild();
+    
+    N *getMinChild();
+
     bool remove(uint8_t k, bool force, bool flush);
 
     N *getAnyChild() const;
+
+    N *getMaxSmallerChild(uint8_t k);
 
     std::tuple<N *, uint8_t> getSecondChild(const uint8_t key) const;
 

@@ -116,6 +116,15 @@ inline uint16_t Key::getFingerPrint() const {
     }
     return re;
 }
+
+// 根据fkey中存储的Key获取哈希值（主要用于：LeafArray快速寻找Expected_Pos时，发生哈希冲突的二次哈希）
+inline uint16_t Key::getHash() const {
+    uint16_t re = 0;
+    for (int i = 0; i < key_len; i++) {
+        re = re * 173 + this->fkey[i];
+    }
+    return re;
+}
 } // namespace PART_ns
 
 #endif // ART_KEY_H

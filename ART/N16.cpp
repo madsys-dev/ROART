@@ -13,17 +13,20 @@ namespace PART_ns {
 // 删除全部子节点
 void N16::deleteChildren() {
     for (uint32_t i = 0; i < count; ++i) {
-
+        //获取子节点地址，判断其是否为dirty
         N *child = N::clearDirty(children[i].load());
-
+        //对子节点递归调用deleteChildren函数，删除全部子节点
         if (child != nullptr) {
             N::deleteChildren(child);
             N::deleteNode(child);
         }
     }
+    count=0;
+    compactCount=0;
 }
 
 //插入数据
+//TIPS:key需要与现有Key不同，否则直接认为insert成功，不做实际的写入操作
 bool N16::insert(uint8_t key, N *n, bool flush) {
     if (count==16) {
         return false;
@@ -36,14 +39,18 @@ bool N16::insert(uint8_t key, N *n, bool flush) {
     for(pos=count;pos>=1;pos--){
         tmpKey = keys[pos-1].load();
         tmpChild = children[pos-1].load();
-        if(tmpKey > key){
+        if(tmpKey == key){
+            //若已存在，则该node无需实际写入
+            printf("N16::insert():Insert the same uint8_t key\n");
+            return true;
+        }else if(tmpKey > key){
+            //将更大的Key往后移动
             keys[pos].store(tmpKey, std::memory_order_seq_cst);
             children[pos].store(tmpChild,std::memory_order_seq_cst)
             if (flush){
                 flush_data((void *)&keys[pos], sizeof(std::atomic<uint8_t>));
                 flush_data((void *)&children[pos], sizeof(std::atomic<N *>));
             }
-                
         }else{
             keys[pos].store(key, std::memory_order_seq_cst);
             children[pos].store(n,std::memory_order_seq_cst)
@@ -52,6 +59,7 @@ bool N16::insert(uint8_t key, N *n, bool flush) {
                 flush_data((void *)&children[pos], sizeof(std::atomic<N *>));
             }
             count++;
+            compactCount++
             return true;
         }
     }
@@ -65,10 +73,12 @@ bool N16::insert(uint8_t key, N *n, bool flush) {
     }
         
     count++;
+    compactCount++;
     return true;
 
 }
 
+//修改Key对应的子节点。（二分法）
 void N16::change(uint8_t key, N *val) {
     int left=0;
     int right=count-1;
@@ -88,6 +98,7 @@ void N16::change(uint8_t key, N *val) {
     }
 }
 
+//根据key获取子节点地址(二分法)
 N *N16::getChild(const uint8_t k) {
     int left=0;
     int right=count-1;
@@ -105,6 +116,37 @@ N *N16::getChild(const uint8_t k) {
     }
 }
 
+// 判断某个key在该节点内的范围（最大、最小、两者之间），若在2者之间，则返回小于该key的最大child
+N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger){
+    if(keys[0].load() > k){
+        hasSmaller = false;
+        hasBigger = true;
+        return nullptr;
+    }else if(keys[count-1].load() < k){
+        hasSmaller = true;
+        hasBigger = false;
+        return nullptr;
+    }else{
+        hasBigger = true;
+        hasSmaller =true;
+        return getMaxSmallerChild(k);
+    }
+}
+
+// 获取最大的子节点
+N *getMaxChild() {
+    N *maxChild=children[count-1].load();
+    return maxChild;
+}
+
+// 获取最小的子节点
+N *getMinChild(){
+    N *minChild=children[0].load();
+    return minChild;
+}
+
+//根据key，将对应项的数据清空
+//Tips:为了保证数据连续且有序，需要移动之后的数据
 bool N16::remove(uint8_t k, bool force, bool flush) {
     int left=0;
     int right=count-1;
@@ -120,12 +162,15 @@ bool N16::remove(uint8_t k, bool force, bool flush) {
             children[middle].store(nullptr, std::memory_order_seq_cst);
             flush_data((void *)&children[middle], sizeof(std::atomic<N *>));
             count--;
+            compactCount--;
             return true;
         }
     }
     return false;
 }
 
+//获取任意子节点。
+//优先返回Leaf节点，否则返回最后一个位置的子节点
 N *N16::getAnyChild() const {
     N *anyChild = nullptr;
     for (uint32_t i = 0; i < count; ++i) {
@@ -140,7 +185,23 @@ N *N16::getAnyChild() const {
     return anyChild;
 }
 
+// 获取小于k的 最大的子节点
+N *getMaxSmallerChild(uint8_t k){
+    uint8_t tmpKey;
+    if(count==1){
+        return children[0].load();
+    }
+    for(int i=1;i<count;i++){
+        tmpKey = keys[i].load();
+        if(tmpKey >= k){
+            return children[i-1].load();
+        }
+    }
+    return children[count-1].load();
+}
+
 // in the critical section
+// 遍历，返回 第一个 key与输入参数key不同的子节点的 地址和子节点key。
 std::tuple<N *, uint8_t> N16::getSecondChild(const uint8_t key) const {
     for (uint32_t i = 0; i < count; ++i) {
         N *child = children[i].load();
@@ -155,6 +216,7 @@ std::tuple<N *, uint8_t> N16::getSecondChild(const uint8_t key) const {
 }
 
 // must read persisted child
+// 根据start与end作为起始位置，获取所有子节点
 void N16::getChildren(uint8_t start, uint8_t end,
                      std::tuple<uint8_t, N *> children[],
                      uint32_t &childrenCount) {
@@ -175,6 +237,7 @@ void N16::getChildren(uint8_t start, uint8_t end,
     //           });
 }
 
+//返回子节点数目
 uint32_t N16::getCount() const {
     // uint32_t cnt = 0;
     // for (uint32_t i = 0; i < compactCount && cnt < 3; i++) {
@@ -187,6 +250,7 @@ uint32_t N16::getCount() const {
     // return cnt;
     return count;
 }
+//图形化Debug
 void N16::graphviz_debug(std::ofstream &f) {
     char buf[1000] = {};
     sprintf(buf + strlen(buf), "node%lx [label=\"",

@@ -21,9 +21,9 @@ class Tree {
     N *root;    //根节点root
 #ifdef LEAF_ARRAY
     // 添加LeafArray链表的头尾指针
-    N * head;
-    N * tail;
-    long long leafArrayCount;
+    LeafArray * head;
+    LeafArray * tail;
+    //long long leafArrayCount;
 #endif
 
     bool checkKey(const Key *ret, const Key *k) const;
@@ -89,6 +89,8 @@ class Tree {
     OperationResults insert(const Key *k);
 
     OperationResults remove(const Key *k);
+
+    OperationResults radixLSMRemove(const Key *k);
 
     Leaf *allocLeaf(const Key *k) const;
 

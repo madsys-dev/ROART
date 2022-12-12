@@ -10,6 +10,7 @@
 
 namespace PART_ns {
 
+// 删除所有子节点
 void N256::deleteChildren() {
     for (uint64_t i = 0; i < 256; ++i) {
         N *child = N::clearDirty(children[i].load());
@@ -18,12 +19,15 @@ void N256::deleteChildren() {
             N::deleteNode(child);
         }
     }
+    count=0;
+    compactCount=0;
 }
 
+//插入数据
 bool N256::insert(uint8_t key, N *val, bool flush) {
-    if (flush) {
-        uint64_t oldp = (1ull << 56) | ((uint64_t)key << 48);
-    }
+    // if (flush) {
+    //     uint64_t oldp = (1ull << 56) | ((uint64_t)key << 48);
+    // }
 
     children[key].store(val, std::memory_order_seq_cst);
     if (flush) {
@@ -34,18 +38,85 @@ bool N256::insert(uint8_t key, N *val, bool flush) {
     return true;
 }
 
+//修改Key对应的子节点。
 void N256::change(uint8_t key, N *n) {
 
     children[key].store(n, std::memory_order_seq_cst);
     flush_data((void *)&children[key], sizeof(std::atomic<N *>));
 }
 
+//根据key获取子节点地址
 N *N256::getChild(const uint8_t k) {
     N *child = children[k].load();
     return child;
 }
 
+// 判断某个key在该节点内的范围（最大、最小、两者之间），若在2者之间，则返回小于该key的最大child
+N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger){
+    hasSmaller = false;
+    hasBigger = false;
+    N* res = nullptr;
+    for(int i=k-1;i>=0;i--){
+        res=children[i].load();
+        if(res!='\0' && res!=nullptr){
+            hasSmaller = true;
+            break;
+        }
+    }
+    for(int i=k+1;i<255;i++){
+        N* tmp=children[i].load();
+        if(tmp!='\0' && tmp!=nullptr){
+            hasBigger = true;
+            break;
+        }
+    }
+    return res;
+}
+
+// 获取最大的子节点
+N *getMaxChild() {
+    N *maxChild=nullptr;
+    for(uint8_t i=0;i<256;i++){
+        maxChild=children[i].load();
+        if(maxChild!='\0' && maxChild!=nullptr){
+            return maxChild;
+        }
+    }
+    
+    return nullptr;
+}
+
+// 获取最小的子节点
+N *getMinChild(){
+    N *minChild=nullptr;
+    for(uint8_t i=0;i<256;i++){
+        minChild=children[i].load();
+        if(minChild!='\0' && minChild!=nullptr){
+            return minChild;
+        }
+    }
+    
+    return nullptr;
+}
+
+// 获取小于k的 最大的子节点
+N *getMaxSmallerChild(uint8_t k){
+    if(count==1){
+        return getAnyChild();
+    }
+    
+    for(uint8_t i=k-1;i!=0;i--){
+        N* tmp = children[index].load();
+        if(tmp!='\0' && tmp!=nullptr){
+            return tmp;
+        }
+    }
+    return getAnyChild();
+}
+
+//根据key，将对应项的数据清空
 bool N256::remove(uint8_t k, bool force, bool flush) {
+    //不理解这部分的作用
     if (count <= 37 && !force) {
         return false;
     }
@@ -56,6 +127,8 @@ bool N256::remove(uint8_t k, bool force, bool flush) {
     return true;
 }
 
+//获取任意子节点。
+//优先返回Leaf节点，否则返回最后一个位置的子节点
 N *N256::getAnyChild() const {
     N *anyChild = nullptr;
     for (uint64_t i = 0; i < 256; ++i) {
@@ -71,6 +144,7 @@ N *N256::getAnyChild() const {
     return anyChild;
 }
 
+// 根据start与end作为起始位置，获取所有子节点
 void N256::getChildren(uint8_t start, uint8_t end,
                        std::tuple<uint8_t, N *> children[],
                        uint32_t &childrenCount) {
@@ -85,15 +159,18 @@ void N256::getChildren(uint8_t start, uint8_t end,
     }
 }
 
+//返回子节点数目
 uint32_t N256::getCount() const {
-    uint32_t cnt = 0;
-    for (uint32_t i = 0; i < 256 && cnt < 3; i++) {
-        N *child = children[i].load();
-        if (child != nullptr)
-            cnt++;
-    }
-    return cnt;
+    // uint32_t cnt = 0;
+    // for (uint32_t i = 0; i < 256 && cnt < 3; i++) {
+    //     N *child = children[i].load();
+    //     if (child != nullptr)
+    //         cnt++;
+    // }
+    // return cnt;
+    return count;
 }
+//图形化Debug
 void N256::graphviz_debug(std::ofstream &f) {
     char buf[10000] = {};
     sprintf(buf + strlen(buf), "node%lx [label=\"",

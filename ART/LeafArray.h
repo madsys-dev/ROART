@@ -10,10 +10,10 @@
 #include <functional>
 
 namespace PART_ns {
-
+//leafarray的参数
 const size_t LeafArrayLength = 64;      // 叶数组的容量
 const size_t FingerPrintShift = 48;     // 指纹的偏移量
-
+//leaf array类的定义
 class LeafArray : public N {
   public:
     std::atomic<uintptr_t> leaf[LeafArrayLength];   // Leaf用于记录子节点地址
@@ -22,6 +22,7 @@ class LeafArray : public N {
     // 新添加的双向指针
     std::atomic<LeafArray*> prev;
     std::atomic<LeafArray*> next;
+    // 考虑到排序的开销较大，实际上只需要在Flush的时候进行一次排序即可，因此槽数组暂时未使用
     // 新添加的用于隐式排序的槽数组. uint8_t:2^8=256
     std::atomic<uint8_t> slot[LeafArrayLength];    // slot[i]记录第i小的键，在叶数组中所处的位置
 
@@ -39,6 +40,16 @@ class LeafArray : public N {
 
     virtual ~LeafArray() {}
 
+    //设置本leafarray节点的prev和next指针。默认会持久化该部分内容至NVM中。
+    void setLinkedList(LeafArray* prev,LeafArray* next) {
+      this->prev.store(prev);
+      this->next.store(next);
+      // 默认将双向指针持久化Flush到NVM中
+      flush_data(&prev, sizeof(std::atomic<LeafArray*>));
+      flush_data(&next, sizeof(std::atomic<LeafArray*>));
+    }
+
+    //设置本leafarray节点的prev和next指针
     void setLinkedList(LeafArray* prev,LeafArray* next ,bool flush) {
       this->prev.store(prev);
       this->next.store(next);
@@ -66,6 +77,7 @@ class LeafArray : public N {
     bool update(const Key *k, Leaf *l);
 
     bool insert(Leaf *l, bool flush);
+    bool radixLSMInsert(Leaf *l, bool flush);
 
     bool remove(const Key *k);
 

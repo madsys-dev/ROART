@@ -27,14 +27,45 @@ uint16_t PART_ns::LeafArray::getFingerPrint(size_t pos) const {
     uint16_t re = x >> FingerPrintShift;
     return re;
 }
+
+
 // 点查询操作
-Leaf *LeafArray::lookup(const Key *k) const {
+Leaf *Array::lookup(const Key *k) const {
     // 计算待查询的Key的指纹
     uint16_t finger_print = k->getFingerPrint();
 
     // 遍历节点内数据，判断指纹是否相等。若指纹相等，则再确认整个Key是否一致，若一致则返回叶子节点的地址
     auto b = bitmap.load();
     
+    // 对期望位置的元素进行判断
+#ifdef EXPECTED_POS
+    // 寻找期望的位置，从而尽可能快速找到，若未匹配，则再遍历
+    uint16_t expectedPos = finger_print % LeafArrayLength;
+
+    auto fingerprint_ptr = this->leaf[expectedPos].load();
+    if (fingerprint_ptr != 0) {
+        uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+        auto ptr = reinterpret_cast<Leaf *>(
+            fingerprint_ptr ^
+            (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+        if (finger_print == thisfp && ptr->checkKey(k)) {
+            return ptr;
+        }
+    }
+    //若key的finger作为ExpectedPos发生了哈希冲突，则进行二次哈希
+    uint16_t secondExpectedPos = k->getHash() % LeafArrayLength;
+    fingerprint_ptr = this->leaf[secondExpectedPos].load();
+    if (fingerprint_ptr != 0) {
+        thisfp = fingerprint_ptr >> FingerPrintShift;
+        ptr = reinterpret_cast<Leaf *>(
+            fingerprint_ptr ^
+            (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+        if (finger_print == thisfp && ptr->checkKey(k)) {
+            return ptr;
+        }
+    }
+#endif
+
 #ifdef FIND_FIRST
     auto i = b[0] ? 0 : 1;
     while (i < LeafArrayLength) {
@@ -69,11 +100,193 @@ Leaf *LeafArray::lookup(const Key *k) const {
 
     return nullptr;
 }
+
+// // 点查询操作
+// Leaf *LeafArray::lookup(const Key *k) const {
+//     // 计算待查询的Key的指纹
+//     uint16_t finger_print = k->getFingerPrint();
+
+//     // 遍历节点内数据，判断指纹是否相等。若指纹相等，则再确认整个Key是否一致，若一致则返回叶子节点的地址
+//     auto b = bitmap.load();
+    
+// #ifdef FIND_FIRST
+//     auto i = b[0] ? 0 : 1;
+//     while (i < LeafArrayLength) {
+//         auto fingerprint_ptr = this->leaf[i].load();
+//         if (fingerprint_ptr != 0) {
+//             uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+//             auto ptr = reinterpret_cast<Leaf *>(
+//                 fingerprint_ptr ^
+//                 (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+//             if (finger_print == thisfp && ptr->checkKey(k)) {
+//                 return ptr;
+//             }
+//         }
+//         i = b._Find_next(i);
+//     }
+// #else
+//     for (int i = 0; i < LeafArrayLength; i++) {
+//         if (b[i] == false)
+//             continue;
+//         auto fingerprint_ptr = this->leaf[i].load();
+//         if (fingerprint_ptr != 0) {
+//             uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+//             auto ptr = reinterpret_cast<Leaf *>(
+//                 fingerprint_ptr ^
+//                 (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+//             if (finger_print == thisfp && ptr->checkKey(k)) {
+//                 return ptr;
+//             }
+//         }
+//     }
+// #endif
+
+//     return nullptr;
+// }
+
+
+// RadixLSM的插入操作
+// 与普通的区别在于：
+// （1）先判断是否存在，若存在则更新
+// （2）若不存在，则才Insert。避免出现冗余副本。
+bool LeafArray::radixLSMInsert(Leaf *l,bool flush){
+
+// 先寻找是否存在，若存在则更新
+
+    auto k = l->GetKey();
+    // 计算待查询的Key的指纹
+    uint16_t finger_print = k->getFingerPrint();
+
+    // 遍历节点内数据，判断指纹是否相等。若指纹相等，则再确认整个Key是否一致，若一致则返回叶子节点的地址
+    auto b = bitmap.load();
+    
+    // 对期望位置的元素进行判断
+#ifdef EXPECTED_POS
+    // 寻找期望的位置，从而尽可能快速找到，若未匹配，则再遍历
+    uint16_t expectedPos = finger_print % LeafArrayLength;
+
+    auto fingerprint_ptr = this->leaf[expectedPos].load();
+    if (fingerprint_ptr != 0) {
+        uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+        auto ptr = reinterpret_cast<Leaf *>(
+            fingerprint_ptr ^
+            (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+        if (finger_print == thisfp && ptr->checkKey(k)) {
+            auto news = fingerPrintLeaf(finger_print, l);
+            leaf[expectedPos].store(news);        // 存储新的复合指纹
+            flush_data(&leaf[expectedPos], sizeof(std::atomic<uintptr_t>));   // Flush持久化
+            return true;
+        }
+    }
+    //若key的finger作为ExpectedPos发生了哈希冲突，则进行二次哈希
+    uint16_t secondExpectedPos = k->getHash() % LeafArrayLength;
+    fingerprint_ptr = this->leaf[secondExpectedPos].load();
+    if (fingerprint_ptr != 0) {
+        uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+        auto ptr = reinterpret_cast<Leaf *>(
+            fingerprint_ptr ^
+            (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+        if (finger_print == thisfp && ptr->checkKey(k)) {
+            auto news = fingerPrintLeaf(finger_print, l);
+            leaf[secondExpectedPos].store(news);        // 存储新的复合指纹
+            flush_data(&leaf[secondExpectedPos], sizeof(std::atomic<uintptr_t>));   // Flush持久化
+            return true;
+        }
+    }
+#endif
+
+#ifdef FIND_FIRST
+    auto i = b[0] ? 0 : 1;
+    while (i < LeafArrayLength) {
+        auto fingerprint_ptr = this->leaf[i].load();
+        if (fingerprint_ptr != 0) {
+            uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+            auto ptr = reinterpret_cast<Leaf *>(
+                fingerprint_ptr ^
+                (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+            if (finger_print == thisfp && ptr->checkKey(k)) {
+                auto news = fingerPrintLeaf(finger_print, l);
+                leaf[i].store(news);        // 存储新的复合指纹
+                flush_data(&leaf[i], sizeof(std::atomic<uintptr_t>));   // Flush持久化
+                return true;;
+            }
+        }
+        i = b._Find_next(i);
+    }
+#else
+    for (int i = 0; i < LeafArrayLength; i++) {
+        if (b[i] == false)
+            continue;
+        auto fingerprint_ptr = this->leaf[i].load();
+        if (fingerprint_ptr != 0) {
+            uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+            auto ptr = reinterpret_cast<Leaf *>(
+                fingerprint_ptr ^
+                (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+            if (finger_print == thisfp && ptr->checkKey(k)) {
+                auto news = fingerPrintLeaf(finger_print, l);
+                leaf[i].store(news);        // 存储新的复合指纹
+                flush_data(&leaf[i], sizeof(std::atomic<uintptr_t>));   // Flush持久化
+                return true;;
+            }
+        }
+    }
+#endif
+
+// 到此处，表明数据不存在（有效&无效），此时需要插入新数据
+    return insert(l,flush);
+}
+
+
 // 插入操作
 // 需要注意的是，Insert操作是直接找的第一个空闲的位置。那么对于相同的Key，岂不是会存在2个可能的副本，而不是直接进行更新？
 // problem mark
 bool LeafArray::insert(Leaf *l, bool flush) {
     auto b = bitmap.load();
+
+    // 对期望位置的元素进行判断
+#ifdef EXPECTED_POS
+    uint16_t expectedPos = l->getFingerPrint(); 
+    uint16_t pos = expectedPos%LeafArrayLength;
+    if(b.test(pos)){
+        //如果该位置已有元素，则进行二次哈希
+        expectedPos = l->getHash();
+        pos = expectedPos%LeafArrayLength;
+        if(b.test(pos)){
+        }else{
+            //如果该位置为空，则直接在期望位置插入新元素
+            b[pos] = true;
+            bitmap.store(b);
+            // 计算指纹s
+            // 目前的计算逻辑是，根据叶节点中存储的Key计算指纹。叶数组中存储的则是 16位指纹 与 叶节点地址 的复合值。
+            auto s =
+                (static_cast<uintptr_t>(l->getFingerPrint()) << FingerPrintShift) |
+                (reinterpret_cast<uintptr_t>(l));
+            leaf[pos].store(s);
+            // 将leaf[pos]这个元素进行持久化
+            if (flush)
+                flush_data((void *)&leaf[pos], sizeof(std::atomic<uintptr_t>));
+
+            return true;
+        }
+    }else{
+        //如果该位置为空，则直接在期望位置插入新元素
+        b[pos] = true;
+        bitmap.store(b);
+        // 计算指纹s
+        // 目前的计算逻辑是，根据叶节点中存储的Key计算指纹。叶数组中存储的则是 16位指纹 与 叶节点地址 的复合值。
+        auto s =
+            (static_cast<uintptr_t>(l->getFingerPrint()) << FingerPrintShift) |
+            (reinterpret_cast<uintptr_t>(l));
+        leaf[pos].store(s);
+        // 将leaf[pos]这个元素进行持久化
+        if (flush)
+            flush_data((void *)&leaf[pos], sizeof(std::atomic<uintptr_t>));
+
+        return true;
+    }
+#endif
+    // 若ExpectedPos未找到空闲位置，则选择第1个空闲的位置
     // 先翻转bitmap，从而方便找到第一个还未set的位置
     b.flip();
     auto pos = b._Find_first();
@@ -96,6 +309,7 @@ bool LeafArray::insert(Leaf *l, bool flush) {
         return false;
     }
 }
+
 // 删除操作
 // 我们的实现里，删除操作实际上就是插入一个标记为DelFlag=true的Key。
 // 细分步骤，则为：（1)先查询这个Key是否在Radix Tree中存在，若存在则直接将其置为无效。（2）若不存在，则插入新的数据
@@ -363,6 +577,18 @@ void splitAndUnlock(N *parentNode, uint8_t parentKey, bool &need_restart, LeafAr
         split_array.at(keys[i][level])->insert(getLeafAt(i), false);
     }
 
+    // 将分裂后的节点之间，用链表串联起来
+    LeafArray* tmpPrev=prev;
+    auto tmpIter = split_array.begin();
+    for(;tmpIter<split_array.end();tmpIter++){
+        tmpPrev->next=tmpIter;
+        tmpIter->prev = tmpPrev;
+        tmpPrev = tmpIter;
+    }
+    tmpPrev->next= next;
+    next->prev = tmpPrev;
+
+
     N *n;
     uint8_t *prefix_start = reinterpret_cast<uint8_t *>(common_prefix.data());
     auto prefix_len = common_prefix.size();
@@ -453,6 +679,39 @@ bool LeafArray::update(const Key *k, Leaf *l) {
     // 前面的步骤与lookup是一致的，仅仅在最终lookup成功后，修改了叶数组
     uint16_t finger_print = k->getFingerPrint();
     auto b = bitmap.load();
+
+    // 对期望位置的元素进行判断
+#ifdef EXPECTED_POS
+    uint16_t expectedPos = finger_print % LeafArrayLength;
+    auto fingerprint_ptr = this->leaf[expectedPos].load();
+    if (fingerprint_ptr != 0) {
+        uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+        auto ptr = reinterpret_cast<Leaf *>(
+            fingerprint_ptr ^
+            (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+        if (finger_print == thisfp && ptr->checkKey(k)) {
+            auto news = fingerPrintLeaf(finger_print, l);
+            leaf[expectedPos].store(news);        // 存储新的复合指纹
+            flush_data(&leaf[expectedPos], sizeof(std::atomic<uintptr_t>));   // Flush持久化
+            return true;
+        }
+    }
+    //若key的finger作为ExpectedPos发生了哈希冲突，则进行二次哈希
+    uint16_t secondExpectedPos = k->getHash() % LeafArrayLength;
+    fingerprint_ptr = this->leaf[secondExpectedPos].load();
+    if (fingerprint_ptr != 0) {
+        uint16_t thisfp = fingerprint_ptr >> FingerPrintShift;
+        auto ptr = reinterpret_cast<Leaf *>(
+            fingerprint_ptr ^
+            (static_cast<uintptr_t>(thisfp) << FingerPrintShift));
+        if (finger_print == thisfp && ptr->checkKey(k)) {
+            auto news = fingerPrintLeaf(finger_print, l);
+            leaf[secondExpectedPos].store(news);        // 存储新的复合指纹
+            flush_data(&leaf[secondExpectedPos], sizeof(std::atomic<uintptr_t>));   // Flush持久化
+            return true;
+        }
+    }
+#endif
 
 #ifdef FIND_FIRST
     auto i = b[0] ? 0 : 1;

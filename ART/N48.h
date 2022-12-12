@@ -10,23 +10,23 @@ namespace PART_ns {
 
 class N48 : public N {
   public:
-    std::atomic<uint8_t> childIndex[256];
+    std::atomic<uint8_t> childIndex[256];   //根据Key作为Index，从childIndex中找到子节点在children中的Index
 
     std::atomic<N *> children[48];
 
   public:
-    static const uint8_t emptyMarker = 48;
+    static const uint8_t emptyMarker = 48;  //填充empty entry的默认数值（因为N48节点，只有children[0-47]存储子节点位置）
 
     N48(uint32_t level, const uint8_t *prefix, uint32_t prefixLength)
         : N(NTypes::N48, level, prefix, prefixLength) {
-        memset(childIndex, emptyMarker, sizeof(childIndex));
+        memset(childIndex, emptyMarker, sizeof(childIndex));    //填充默认值
 
         memset(children, 0, sizeof(children));
 
     }
 
     N48(uint32_t level, const Prefix &prefi) : N(NTypes::N48, level, prefi) {
-        memset(childIndex, emptyMarker, sizeof(childIndex));
+        memset(childIndex, emptyMarker, sizeof(childIndex));    //填充默认值
 
         memset(children, 0, sizeof(children));
 
@@ -52,9 +52,17 @@ class N48 : public N {
 
     N *getChild(const uint8_t k);
 
+    N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger);
+
+    N *getMaxChild();
+    
+    N *getMinChild();
+
     bool remove(uint8_t k, bool force, bool flush);
 
     N *getAnyChild() const;
+
+    N *getMaxSmallerChild(uint8_t k);
 
     void deleteChildren();
 

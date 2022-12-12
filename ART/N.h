@@ -44,6 +44,7 @@ class Leaf : public BaseNode {
     size_t val_len;
 //    uint64_t key;
 //    variable key
+    bool DelFlag; // 用于判断叶子节点是正常的有效数据还是被删除的数据DelFlag
 
 // 若预定义KEY_INLINE，则Key与Value被存储到一起
 #ifdef KEY_INLINE
@@ -232,6 +233,14 @@ class N : public BaseNode {
     static N *getAnyChild(N *n);
 
     static Leaf *getAnyChildTid(const N *n);
+
+    static N *getMaxChild(const N *n);
+
+    static N *getMinChild(const N *n);
+
+    static N *checkKeyRange(const N *n,uint8_t k,bool& hasSmaller,bool& hasBigger);
+
+    static N *getMaxSmallerChild(const N *n, uint8_t k);   // 用于寻找节点中，小于某key的 最大key的child。
 
     static void deleteChildren(N *node);
 

@@ -26,6 +26,7 @@ int gethelpcount() { return helpcount; }
 Leaf::Leaf(const Key *k) : BaseNode(NTypes::Leaf) {
     key_len = k->key_len;
     val_len = k->val_len;
+    DelFlag=false;
 #ifdef KEY_INLINE
     // have allocate the memory for kv
     // 存储在内存DRAM中
@@ -53,6 +54,7 @@ Leaf::Leaf(uint8_t *key_, size_t key_len_, char *value_, size_t val_len_)
     : BaseNode(NTypes::Leaf) {
     key_len = key_len_;
     val_len = val_len_;
+    DelFlag = false;
 #ifdef KEY_INLINE
     memcpy(kv, key_, key_len);
     memcpy(kv + key_len, value_, val_len);
@@ -288,6 +290,106 @@ N *N::getAnyChild(N *node) {
     case NTypes::LeafArray: {
         auto n = static_cast<const LeafArray *>(node);
         return n->getAnyChild();
+    }
+    default: {
+        assert(false);
+    }
+    }
+    return nullptr;
+}
+
+N *N::getMaxChild(const N *node){
+    switch (node->getType()) {
+    case NTypes::N4: {
+        auto n = static_cast<const N4 *>(node);
+        return n->getMaxChild(k);
+    }
+    case NTypes::N16: {
+        auto n = static_cast<const N16 *>(node);
+        return n->getMaxChild(k);
+    }
+    case NTypes::N48: {
+        auto n = static_cast<const N48 *>(node);
+        return n->getMaxChild(k);
+    }
+    case NTypes::N256: {
+        auto n = static_cast<const N256 *>(node);
+        return n->getMaxChild(k);
+    }
+    default: {
+        assert(false);
+    }
+    }
+    return nullptr;
+}
+
+N *N::getMinChild(const N *node){
+    switch (node->getType()) {
+    case NTypes::N4: {
+        auto n = static_cast<const N4 *>(node);
+        return n->getMinChild(k);
+    }
+    case NTypes::N16: {
+        auto n = static_cast<const N16 *>(node);
+        return n->getMinChild(k);
+    }
+    case NTypes::N48: {
+        auto n = static_cast<const N48 *>(node);
+        return n->getMinChild(k);
+    }
+    case NTypes::N256: {
+        auto n = static_cast<const N256 *>(node);
+        return n->getMinChild(k);
+    }
+    default: {
+        assert(false);
+    }
+    }
+    return nullptr;
+}
+
+N *N::checkKeyRange(const N *n,uint8_t k,bool& hasSmaller,bool& hasBigger){
+    switch (node->getType()) {
+    case NTypes::N4: {
+        auto n = static_cast<const N4 *>(node);
+        return n->checkKeyRange(k);
+    }
+    case NTypes::N16: {
+        auto n = static_cast<const N16 *>(node);
+        return n->checkKeyRange(k);
+    }
+    case NTypes::N48: {
+        auto n = static_cast<const N48 *>(node);
+        return n->checkKeyRange(k);
+    }
+    case NTypes::N256: {
+        auto n = static_cast<const N256 *>(node);
+        return n->checkKeyRange(k);
+    }
+    default: {
+        assert(false);
+    }
+    }
+    return nullptr;
+}
+
+N *N::getMaxSmallerChild(const N *node,uint8_t k) {
+    switch (node->getType()) {
+    case NTypes::N4: {
+        auto n = static_cast<const N4 *>(node);
+        return n->getMaxSmallerChild(k);
+    }
+    case NTypes::N16: {
+        auto n = static_cast<const N16 *>(node);
+        return n->getMaxSmallerChild(k);
+    }
+    case NTypes::N48: {
+        auto n = static_cast<const N48 *>(node);
+        return n->getMaxSmallerChild(k);
+    }
+    case NTypes::N256: {
+        auto n = static_cast<const N256 *>(node);
+        return n->getMaxSmallerChild(k);
     }
     default: {
         assert(false);

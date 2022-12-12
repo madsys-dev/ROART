@@ -70,9 +70,10 @@ Tree::Tree() {
     
 #ifdef LEAF_ARRAY
     // 初始化LeafArray链表的头尾指针
-    head = nullptr;
-    tail = nullptr;
-    leafArrayCount = 0;
+    head = new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
+    tail = new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
+    head->setLinkedList(nullptr,tail);
+    tail->setLinkedList(head,nullptr);
 #endif
 
     //ARTPMDK相关暂时还未弄明白 Problem mark
@@ -208,6 +209,11 @@ restart:
                 //                    printf("read restart\n");
                 //                    goto restart;
                 //                }
+                // 如果寻找到的叶节点为空，或者节点删除标志位为true，则寻找失败
+                if(ret==nullptr || ret->DelFlag==true){
+                    return nullptr;
+                }
+
                 if (ret == nullptr && restart_cnt < 0) {
                     restart_cnt++;
                     goto restart;
@@ -407,6 +413,12 @@ bool Tree::lookupRange(const Key *start, const Key *end, const Key *continueKey,
                     if (resultsFound == resultSize) {
                         toContinue = N::getLeaf(node);
                         return;
+                    }
+
+                    // 可能节点为最新的删除的数据，此时需要跳过。
+                    // 为什么不直接删除呢？因为RadixLSM结构的SSD中，可能有旧数据，需要把删除指令通过Flush刷到SSD中，避免误读SSD中的旧数据
+                    if(leaf->DelFlag==true){
+                        continue;
                     }
 
                     result[resultsFound] = leaf;
@@ -830,7 +842,8 @@ restart:
     uint8_t parentKey, nodeKey = 0;
     uint32_t level = 0;
     // 新添加的相邻node，用于添加节点时，构建双向链表(由于普通的Radix Tree的内部节点内的数据项是有序的，因此可以找到)
-    N * siblingNode = nullptr;
+    N * prevSiblingNode = nullptr;
+    N * nextSiblingNode = nullptr;
     LeafArray * prevLeafArray = nullptr;    // 为LeafArray进行节点分裂做准备。记录当前LeafArray的前驱节点。
     LeafArray * nextLeafArray = nullptr;    // 为LeafArray进行节点分裂做准备。记录当前LeafArray的后继节点。
     
@@ -849,9 +862,9 @@ restart:
 
         uint32_t nextLevel = level; //初始化时，level=0.nextLevel=0
 
-        uint8_t nonMatchingKey;
+        uint8_t nonMatchingKey;     //若前缀不匹配NoMatch，则会在checkPrefixPessimistic函数中，存储第一个不匹配的字符值
         Prefix remainingPrefix;
-        // 先检查前缀
+        // 先检查node节点的前缀信息，如果node没有prefix，则直接返回Match
         switch (
             checkPrefixPessimistic(node, k, nextLevel, nonMatchingKey,
                                    remainingPrefix)) { // increases nextLevel
@@ -887,27 +900,50 @@ restart:
                 new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
             // 设置双向指针
             // PXF
-            if(leafArrayCount==0){
-                // 第一个叶数组
-                newLeafArray.prev = head;   // ==nullptr
-                newLeafArray.next = tail;   // ==nullptr
-                head = newLeafArray;
-                tail = newLeafArray;
+            // 判断新插入的Key与现有Key的大小关系，来寻找nearest leaf arrays
+            if(k->fkey[nextLevel] > nonMatchingKey){
+                prevSiblingNode = node;
+                while(! N::isLeafArray(prevSiblingNode)){
+                    // 找到最相邻的prevLeafArray
+                    if(prevSiblingNode==nullptr){
+                        break;
+                    }
+                    prevSiblingNode = prevSiblingNode->getMaxChild();
+                }
+                if(N::isLeafArray(prevSiblingNode)){
+                    // 连接next leafarray
+                    prevSiblingNode->next->prev=newLeafArray;
+                    newLeafArray->next =  prevSiblingNode->next;
+                    // 连接prev leafarray
+                    prevSiblingNode->next = newLeafArray;
+                    newLeafArray->prev = prevSiblingNode;
+                }
             }else{
-                newLeafArray.prev = ;
-                newLeafArray.next = ;
-                
+                nextSiblingNode = node;
+                while(! N::isLeafArray(nextSiblingNode)){
+                    // 找到最相邻的nextLeafArray
+                    if(nextSiblingNode==nullptr){
+                        break;
+                    }
+                    nextSiblingNode = nextSiblingNode->getMinChild();
+                }
+                if(N::isLeafArray(nextSiblingNode)){
+                    // 连接prev leafarray
+                    nextSiblingNode->prev->next=newLeafArray;
+                    newLeafArray->prev =  nextSiblingNode->prev;
+                    // 连接next leafarray
+                    nextSiblingNode->prev = newLeafArray;
+                    newLeafArray->next = nextSiblingNode;
+                }
             }
-            // 添加LeafArrayCount的计数器
-            leafArrayCount++;
-            newLeafArray->insert(newLeaf, true);
-            newNode->insert(k->fkey[nextLevel], N::setLeafArray(newLeafArray),
+            newLeafArray->insert(newLeaf, true);    //新生成的LeafArray 作为新叶子节点的 父节点
+            newNode->insert(k->fkey[nextLevel], N::setLeafArray(newLeafArray),  //新生成的N4 NewNode 作为 新生成的LeafArray的 父节点。nextLevel是第一个不匹配的字符的层级
                             false);
 #else
             newNode->insert(k->fkey[nextLevel], N::setLeaf(newLeaf), false);
 #endif
             // not persist
-            newNode->insert(nonMatchingKey, node, false);
+            newNode->insert(nonMatchingKey, node, false);   //将原有的single child sub tree也添加过来。
             // persist the new node
             flush_data((void *)newNode, sizeof(N4));
 
@@ -964,26 +1000,118 @@ restart:
                 new (alloc_new_node_from_type(NTypes::LeafArray)) LeafArray();
             // 叶数组中插入新的叶节点
             newLeafArray->insert(newLeaf, true);
+
+            // 此时，可能node内无数据(例如初始状态下root节点无数据)，或者node有数据但无匹配的子节点
+            // 若node内无数据，此时理论上，应该node仅为root节点
+            // problem mark:需要保证在删除节点，导致父节点为空时，需要释放父节点空间
+            uint32_t tmpDataCount=N::getCount(node);
+            if(tmpDataCount==0){
+                if(node==root){
+                    head->next=newLeafArray;
+                    tail->prev=newLeafArray;
+                    newLeafArray->prev=head;
+                    newLeafArray->next=tail;   
+                }else{
+                    // 如果没实现完善，导致存在空节点，且不为root节点时，那么需要寻找其相邻节点
+                    if(N::getCount(parentNode)>1 && N::getMinChild(parentNode)!=node){
+                        prevSiblingNode = N::getMaxSmallerChild(parentNode,parentKey);
+                    }else{
+                        //需要寻找比parentnode更小的node
+                        printf("We cannot find sibing node,when insert\n");
+                    }
+                }
+            }else{
+                // 若node内部有数据但无匹配的子节点
+                // 分为3种情况：小于node内所有数据、大于node内所有数据、在node内2数据之间
+                N* tmpPrevSiblingNode = nullptr;
+                bool hasSmaller=false;
+                bool hasBigger=false;
+                tmpPrevSiblingNode = N::checkKeyRange(node,nodeKey,hasSmaller,hasBigger);
+                if(hasSmaller){
+                    if(hasBigger){
+                        // 此时，key范围在node节点内
+                        prevSiblingNode = tmpPrevSiblingNode;
+                        while(! N::isLeafArray(prevSiblingNode)){
+                            // 找到最相邻的prevLeafArray
+                            if(prevSiblingNode==nullptr){
+                                break;
+                            }
+                            prevSiblingNode = prevSiblingNode->getMaxChild();
+                        }
+                        if(N::isLeafArray(prevSiblingNode)){
+                            // 连接next leafarray
+                            prevSiblingNode->next->prev=newLeafArray;
+                            newLeafArray->next =  prevSiblingNode->next;
+                            // 连接prev leafarray
+                            prevSiblingNode->next = newLeafArray;
+                            newLeafArray->prev = prevSiblingNode;
+                        }
+                    }else{
+                        // 此时，key比node内所有数据都大
+                        prevSiblingNode = node;
+                        while(! N::isLeafArray(prevSiblingNode)){
+                            // 找到最相邻的prevLeafArray
+                            if(prevSiblingNode==nullptr){
+                                break;
+                            }
+                            prevSiblingNode = prevSiblingNode->getMaxChild();
+                        }
+                        if(N::isLeafArray(prevSiblingNode)){
+                            // 连接next leafarray
+                            prevSiblingNode->next->prev=newLeafArray;
+                            newLeafArray->next =  prevSiblingNode->next;
+                            // 连接prev leafarray
+                            prevSiblingNode->next = newLeafArray;
+                            newLeafArray->prev = prevSiblingNode;
+                        }
+                    }
+                }else{
+                    // 此时，key比node内所有数据都小
+                    // 2种实现方式
+                    // (1)一种是 寻找 距离node最近的前一个SiblingNode，然后不断getMaxChild
+                    // (2)另外一种是 直接根据当前node不断getMinChild，获取tmpLeafArray，然后新添加的LeafArray就在tmpLeafArray之前
+                    
+                    // 第一种实现，但可能getMaxSmallChild比较耗时？
+                    // prevSibingNode = N::getMaxSmallerChild(parentNode,parentKey);
+                    // while(! N::isLeafArray(prevSiblingNode)){
+                    //     // 找到最相邻的prevLeafArray
+                    //     if(prevSiblingNode==nullptr){
+                    //         break;
+                    //     }
+                    //     prevSiblingNode = prevSiblingNode->getMaxChild();
+                    // }
+                    // if(N::isLeafArray(prevSiblingNode)){
+                    //     // 连接next leafarray
+                    //     prevSiblingNode->next->prev=newLeafArray;
+                    //     newLeafArray->next =  prevSiblingNode->next;
+                    //     // 连接prev leafarray
+                    //     prevSiblingNode->next = newLeafArray;
+                    //     newLeafArray->prev = prevSiblingNode;
+                    // }
+                    
+                    // 第2种实现
+                    nextSiblingNode = node;
+                    while(! N::isLeafArray(nextSiblingNode)){
+                        // 找到最相邻的nextLeafArray
+                        if(nextSiblingNode==nullptr){
+                            break;
+                        }
+                        nextSiblingNode = nextSiblingNode->getMinChild();
+                    }
+                    if(N::isLeafArray(nextSiblingNode)){
+                        // 连接prev leafarray
+                        nextSiblingNode->prev->next=newLeafArray;
+                        newLeafArray->prev =  nextSiblingNode->prev;
+                        // 连接next leafarray
+                        nextSiblingNode->prev = newLeafArray;
+                        newLeafArray->next = nextSiblingNode;
+                    }
+                }
+            }
             // 将 叶数组 LeafArray 设置为 当前内部node 的子节点
             // 若 当前内部node已满，则进行扩容，并重新分配node节点，修改parentNode指向子节点node
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeafArray(newLeafArray), needRestart);
-
-            // 此时，可能node内无数据，或者node有数据但无匹配的子节点
-            // 设置双向指针
-            // 需要注意的是：
-            if(leafArrayCount==0){
-                // 第一个叶数组,初始时head与tail都为nullptr
-                newLeafArray.prev = head;   // ==nullptr
-                newLeafArray.next = tail;   // ==nullptr
-                head = newLeafArray;
-                tail = newLeafArray;
-            }else{
-                
-            }
-            // 添加LeafArrayCount的计数器
-            leafArrayCount++;
-
 #else
             // 将 叶子节点 Leaf 设置为 当前内部node 的子节点
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
@@ -1014,7 +1142,7 @@ restart:
                     //记录之前的LeafArray的前驱与后继节点
                     prevLeafArray = leaf_array->prev.load();
                     nextLeafArray = leaf_array->next.load();
-                    leaf_array->splitAndUnlock(node, nodeKey, needRestart);
+                    leaf_array->splitAndUnlock(node, nodeKey, needRestart,prevLeafArray,nextLeafArray);
                     if (needRestart) {
                         goto restart;
                     }
@@ -1237,6 +1365,28 @@ restart:
         }
         }
     }
+}
+
+// 对于RadixLSM，将Key的标记位设置为删除。
+typename Tree::OperationResults Tree::radixLSMRemove(const Key *k){
+    k->setDelKey(); // 设置Key的删除标记位
+    Leaf * existLeaf = nullptr;
+    existLeaf = lookup(k);
+    // 3种情况：（1）存在有效数据（2）存在无效数据（3）不存在任何数据
+    if(existLeaf!=nullptr){
+        if(existLeaf->DelFlag == true){
+            // 存在无效数据
+            return OperationResults::Success;
+        }else{
+            // 存在有效数据
+            existLeaf->DelFlag = true;
+            return OperationResults::Success;
+        }
+    }else{
+        // 不存在任何数据，则插入一个DelFlag为true的Key的叶节点
+        return insert(k);
+    }
+    return OperationResults::Success;
 }
 
 void Tree::rebuild(std::vector<std::pair<uint64_t, size_t>> &rs,

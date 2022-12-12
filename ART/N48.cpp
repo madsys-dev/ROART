@@ -10,11 +10,11 @@
 
 namespace PART_ns {
 
+//插入子节点
 bool N48::insert(uint8_t key, N *n, bool flush) {
     if (compactCount == 48) {
         return false;
     }
-
 
     childIndex[key].store(compactCount, std::memory_order_seq_cst);
     if (flush)
@@ -31,41 +31,132 @@ bool N48::insert(uint8_t key, N *n, bool flush) {
     return true;
 }
 
+// 根据uint8_t key修改其对应的子节点
 void N48::change(uint8_t key, N *val) {
     uint8_t index = childIndex[key].load();
     assert(index != emptyMarker);
 
-    children[index].store(val, std::memory_order_seq_cst);
-    flush_data((void *)&children[index], sizeof(std::atomic<N *>));
-
+    if(index!=emptyMarker){
+        children[index].store(val, std::memory_order_seq_cst);
+        flush_data((void *)&children[index], sizeof(std::atomic<N *>));
+    }
 }
 
+// 根据uint8_t key获取子节点的地址
 N *N48::getChild(const uint8_t k) {
     uint8_t index = childIndex[k].load();
     if (index == emptyMarker) {
         return nullptr;
     } else {
-
         N *child = children[index].load();
         return child;
     }
 }
 
+// 判断某个key在该节点内的范围（最大、最小、两者之间），若在2者之间，则返回小于该key的最大child
+N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger){
+    hasSmaller = false;
+    hasBigger = false;
+    N* res = nullptr;
+    for(int i=k-1;i>=0;i--){
+        uint8_t index = childIndex[i].load();
+
+        if (index != emptyMarker){
+            res=children[index].load();
+            if(res!=nullptr){
+                hasSmaller = true;
+                break;
+            }
+        }  
+    }
+    for(int i=k+1;i<255;i++){
+        uint8_t index = childIndex[i].load();
+
+        if (index != emptyMarker){
+            N* tmp=children[index].load();
+            if(tmp!=nullptr){
+                hasBigger = true;
+                break;
+            }
+        }  
+    }
+    return res;
+}
+
+// 获取最大的子节点
+N *getMaxChild() {
+    N *maxChild=nullptr;
+    for(unsigned i=255;i>=0;i--){
+        uint8_t index = childIndex[i].load();
+
+        if (index != emptyMarker){
+            maxChild=children[index].load();
+            if(maxChild!=nullptr){
+                return maxChild;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// 获取最小的子节点
+N *getMinChild(){
+    N *minChild=nullptr;
+    for(unsigned i=0;i<256;i++){
+        uint8_t index = childIndex[i].load();
+
+        if (index != emptyMarker){
+            minChild=children[index].load();
+            if(minChild!=nullptr){
+                return minChild;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// 获取小于k的 最大的子节点
+N *getMaxSmallerChild(uint8_t k){
+    if(count==1){
+        return getAnyChild();
+    }
+    
+    for(uint8_t i=k-1;i!=0;i--){
+        uint8_t index = childIndex[i].load();
+        if(index != emptyMarker){
+            N* tmp = children[index].load();
+            if(tmp!=nullptr){
+                return tmp;
+            }
+        }
+    }
+    return getAnyChild();
+}
+
+// 根据uint8_t key删除对应的子节点信息
 bool N48::remove(uint8_t k, bool force, bool flush) {
+    //这一步不太理解为何要做这样的判断
     if (count <= 12 && !force) {
         return false;
     }
+
     uint8_t index = childIndex[k].load();
     assert(index != emptyMarker);
+    if(index!=emptyMarker){
+        children[index].store(nullptr, std::memory_order_seq_cst);
+        flush_data((void *)&children[index], sizeof(std::atomic<N *>));
+    }
 
-    children[index].store(nullptr, std::memory_order_seq_cst);
-    flush_data((void *)&children[index], sizeof(std::atomic<N *>));
+    childIndex[k].store(emptyMarker,std::memory_order_seq_cst);
 
     count--;
+    compactCount--;
     assert(getChild(k) == nullptr);
     return true;
 }
 
+//获取任意子节点。
+//优先返回Leaf节点，否则返回已存在数据中最大Key对应的子节点
 N *N48::getAnyChild() const {
     N *anyChild = nullptr;
     for (unsigned i = 0; i < 48; i++) {
@@ -82,6 +173,7 @@ N *N48::getAnyChild() const {
     return anyChild;
 }
 
+//删除所有子节点
 void N48::deleteChildren() {
     for (unsigned i = 0; i < 256; i++) {
         uint8_t index = childIndex[i].load();
@@ -93,8 +185,11 @@ void N48::deleteChildren() {
         }
 
     }
+    count=0;
+    compactCount=0;
 }
 
+// 根据start与end作为起始位置，获取所有子节点,实际上是比较Key的值是否在start与end之间
 void N48::getChildren(uint8_t start, uint8_t end,
                       std::tuple<uint8_t, N *> children[],
                       uint32_t &childrenCount) {
@@ -114,6 +209,7 @@ void N48::getChildren(uint8_t start, uint8_t end,
     }
 }
 
+// 返回子节点数目
 uint32_t N48::getCount() const {
     uint32_t cnt = 0;
     for (uint32_t i = 0; i < 256 && cnt < 3; i++) {
@@ -125,6 +221,7 @@ uint32_t N48::getCount() const {
     }
     return cnt;
 }
+//图形化Debug
 void N48::graphviz_debug(std::ofstream &f) {
     char buf[10000] = {};
     sprintf(buf + strlen(buf), "node%lx [label=\"",
