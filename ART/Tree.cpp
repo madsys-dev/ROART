@@ -78,7 +78,7 @@ Tree::Tree() {
 
     //ARTPMDK相关暂时还未弄明白 Problem mark
 #ifdef ARTPMDK
-    const char *pool_name = "/mnt/pmem0/pxf/dlartpmdk.data";
+    const char *pool_name = "/mnt/pmem_pxf/dlartpmdk.data";
     const char *layout_name = "DLART";
     size_t pool_size = 64LL * 1024 * 1024 * 1024; // 16GB
 
@@ -846,31 +846,37 @@ restart:
     N * nextSiblingNode = nullptr;
     LeafArray * prevLeafArray = nullptr;    // 为LeafArray进行节点分裂做准备。记录当前LeafArray的前驱节点。
     LeafArray * nextLeafArray = nullptr;    // 为LeafArray进行节点分裂做准备。记录当前LeafArray的后继节点。
-    
+    printf("art insert started\n");
     //按层级不断迭代向叶子节点方向查找
     while (true) {
+        printf("111\n");
         //迭代
         parentNode = node;  //初始化时，parentNode为nullptr
         parentKey = nodeKey;
         node = nextNode;    //初始化时，node即为root节点
+        printf("111a\n");
         //problem mark
 #ifdef INSTANT_RESTART
         node->check_generation();
 #endif
+        printf("111aaa\n");
         //problem mark
         auto v = node->getVersion();
-
+        printf("111b\n");
         uint32_t nextLevel = level; //初始化时，level=0.nextLevel=0
 
         uint8_t nonMatchingKey;     //若前缀不匹配NoMatch，则会在checkPrefixPessimistic函数中，存储第一个不匹配的字符值
         Prefix remainingPrefix;
+        printf("11c\n");
         // 先检查node节点的前缀信息，如果node没有prefix，则直接返回Match
         switch (
             checkPrefixPessimistic(node, k, nextLevel, nonMatchingKey,
                                    remainingPrefix)) { // increases nextLevel
         case CheckPrefixPessimisticResult::SkippedLevel:
+            printf("222\n");
             goto restart;
         case CheckPrefixPessimisticResult::NoMatch: {
+            printf("333\n");
             // 若未匹配，则插入新节点
             // 避免重复的Key
             assert(nextLevel < k->getKeyLen()); // prevent duplicate key
@@ -908,15 +914,16 @@ restart:
                     if(prevSiblingNode==nullptr){
                         break;
                     }
-                    prevSiblingNode = prevSiblingNode->getMaxChild();
+                    prevSiblingNode = N::getMaxChild(prevSiblingNode);
                 }
                 if(N::isLeafArray(prevSiblingNode)){
                     // 连接next leafarray
-                    prevSiblingNode->next->prev=newLeafArray;
-                    newLeafArray->next =  prevSiblingNode->next;
+                    LeafArray* prev_leaf_array = N::getLeafArray(prevSiblingNode);
+                    prev_leaf_array->next->prev=newLeafArray;
+                    newLeafArray->next =  prev_leaf_array->next;
                     // 连接prev leafarray
-                    prevSiblingNode->next = newLeafArray;
-                    newLeafArray->prev = prevSiblingNode;
+                    prev_leaf_array->next = newLeafArray;
+                    newLeafArray->prev = prev_leaf_array;
                 }
             }else{
                 nextSiblingNode = node;
@@ -925,15 +932,16 @@ restart:
                     if(nextSiblingNode==nullptr){
                         break;
                     }
-                    nextSiblingNode = nextSiblingNode->getMinChild();
+                    nextSiblingNode = N::getMinChild(nextSiblingNode);
                 }
                 if(N::isLeafArray(nextSiblingNode)){
+                    LeafArray* next_leaf_array = N::getLeafArray(nextSiblingNode);
                     // 连接prev leafarray
-                    nextSiblingNode->prev->next=newLeafArray;
-                    newLeafArray->prev =  nextSiblingNode->prev;
+                    next_leaf_array->prev->next=newLeafArray;
+                    newLeafArray->prev =  next_leaf_array->prev;
                     // 连接next leafarray
-                    nextSiblingNode->prev = newLeafArray;
-                    newLeafArray->next = nextSiblingNode;
+                    next_leaf_array->prev = newLeafArray;
+                    newLeafArray->next = next_leaf_array;
                 }
             }
             newLeafArray->insert(newLeaf, true);    //新生成的LeafArray 作为新叶子节点的 父节点
@@ -976,12 +984,14 @@ restart:
         } // end case  NoMatch
         case CheckPrefixPessimisticResult::Match:
             // 若Match，则不进行实际操作。跳出Switch，直接后续的迭代与判断过程
+            printf("444\n");
             break;
         }
+        printf("555\n");
         assert(nextLevel < k->getKeyLen()); // prevent duplicate key
         // TODO: maybe one string is substring of another, so it fkey[level]
         // will be 0 solve problem of substring
-
+        printf("666\n");
         // 在搜索路径中，向下方的节点迭代
         level = nextLevel;
         nodeKey = k->fkey[level];   //nodekey是uint8_t，即按照字节去判断
@@ -989,6 +999,7 @@ restart:
         nextNode = N::getChild(nodeKey, node);
         // 若寻找下一个节点为空（搜索到Radix Tree的最底层了），则：直接新建叶节点与叶数组
         if (nextNode == nullptr) {
+            printf("777\n");
             node->lockVersionOrRestart(v, needRestart);
             if (needRestart)
                 goto restart;
@@ -1006,12 +1017,15 @@ restart:
             // problem mark:需要保证在删除节点，导致父节点为空时，需要释放父节点空间
             uint32_t tmpDataCount=N::getCount(node);
             if(tmpDataCount==0){
+                printf("888\n");
                 if(node==root){
+                    printf("999\n");
                     head->next=newLeafArray;
                     tail->prev=newLeafArray;
                     newLeafArray->prev=head;
                     newLeafArray->next=tail;   
                 }else{
+                    printf("aaa\n");
                     // 如果没实现完善，导致存在空节点，且不为root节点时，那么需要寻找其相邻节点
                     if(N::getCount(parentNode)>1 && N::getMinChild(parentNode)!=node){
                         prevSiblingNode = N::getMaxSmallerChild(parentNode,parentKey);
@@ -1021,6 +1035,7 @@ restart:
                     }
                 }
             }else{
+                printf("bbb\n");
                 // 若node内部有数据但无匹配的子节点
                 // 分为3种情况：小于node内所有数据、大于node内所有数据、在node内2数据之间
                 N* tmpPrevSiblingNode = nullptr;
@@ -1028,7 +1043,9 @@ restart:
                 bool hasBigger=false;
                 tmpPrevSiblingNode = N::checkKeyRange(node,nodeKey,hasSmaller,hasBigger);
                 if(hasSmaller){
+                    printf("ccc\n");
                     if(hasBigger){
+                        printf("ddd\n");
                         // 此时，key范围在node节点内
                         prevSiblingNode = tmpPrevSiblingNode;
                         while(! N::isLeafArray(prevSiblingNode)){
@@ -1036,17 +1053,19 @@ restart:
                             if(prevSiblingNode==nullptr){
                                 break;
                             }
-                            prevSiblingNode = prevSiblingNode->getMaxChild();
+                            prevSiblingNode = N::getMaxChild(prevSiblingNode);
                         }
                         if(N::isLeafArray(prevSiblingNode)){
+                            LeafArray* prev_leaf_array = N::getLeafArray(prevSiblingNode);
                             // 连接next leafarray
-                            prevSiblingNode->next->prev=newLeafArray;
-                            newLeafArray->next =  prevSiblingNode->next;
+                            prev_leaf_array->next->prev=newLeafArray;
+                            newLeafArray->next =  prev_leaf_array->next;
                             // 连接prev leafarray
-                            prevSiblingNode->next = newLeafArray;
-                            newLeafArray->prev = prevSiblingNode;
+                            prev_leaf_array->next = newLeafArray;
+                            newLeafArray->prev = prev_leaf_array;
                         }
                     }else{
+                        printf("eee\n");
                         // 此时，key比node内所有数据都大
                         prevSiblingNode = node;
                         while(! N::isLeafArray(prevSiblingNode)){
@@ -1054,18 +1073,20 @@ restart:
                             if(prevSiblingNode==nullptr){
                                 break;
                             }
-                            prevSiblingNode = prevSiblingNode->getMaxChild();
+                            prevSiblingNode = N::getMaxChild(prevSiblingNode);
                         }
                         if(N::isLeafArray(prevSiblingNode)){
+                            LeafArray* prev_leaf_array = N::getLeafArray(prevSiblingNode);
                             // 连接next leafarray
-                            prevSiblingNode->next->prev=newLeafArray;
-                            newLeafArray->next =  prevSiblingNode->next;
+                            prev_leaf_array->next->prev=newLeafArray;
+                            newLeafArray->next =  prev_leaf_array->next;
                             // 连接prev leafarray
-                            prevSiblingNode->next = newLeafArray;
-                            newLeafArray->prev = prevSiblingNode;
+                            prev_leaf_array->next = newLeafArray;
+                            newLeafArray->prev = prev_leaf_array;
                         }
                     }
                 }else{
+                    printf("1a\n");
                     // 此时，key比node内所有数据都小
                     // 2种实现方式
                     // (1)一种是 寻找 距离node最近的前一个SiblingNode，然后不断getMaxChild
@@ -1096,40 +1117,50 @@ restart:
                         if(nextSiblingNode==nullptr){
                             break;
                         }
-                        nextSiblingNode = nextSiblingNode->getMinChild();
+                        nextSiblingNode = N::getMinChild(nextSiblingNode);
                     }
                     if(N::isLeafArray(nextSiblingNode)){
+                        LeafArray* next_leaf_array = N::getLeafArray(nextSiblingNode);
                         // 连接prev leafarray
-                        nextSiblingNode->prev->next=newLeafArray;
-                        newLeafArray->prev =  nextSiblingNode->prev;
+                        next_leaf_array->prev->next=newLeafArray;
+                        newLeafArray->prev =  next_leaf_array->prev;
                         // 连接next leafarray
-                        nextSiblingNode->prev = newLeafArray;
-                        newLeafArray->next = nextSiblingNode;
+                        next_leaf_array->prev = newLeafArray;
+                        newLeafArray->next = next_leaf_array;
                     }
                 }
             }
+            printf("1b\n");
             // 将 叶数组 LeafArray 设置为 当前内部node 的子节点
             // 若 当前内部node已满，则进行扩容，并重新分配node节点，修改parentNode指向子节点node
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeafArray(newLeafArray), needRestart);
+            printf("1c\n");
 #else
             // 将 叶子节点 Leaf 设置为 当前内部node 的子节点
             N::insertAndUnlock(node, parentNode, parentKey, nodeKey,
                                N::setLeaf(newLeaf), needRestart);
+            printf("1d\n");
 #endif
             if (needRestart)
                 goto restart;
 
+            printf("1e\n");
+
             return OperationResults::Success;
         }
 #ifdef LEAF_ARRAY
+        printf("1a1\n");
         // 若寻找的下一个节点nextnode是叶数组（搜索到Radix Tree的次底层了），则：直接插入到LeafArray中，并判断是否需要叶数组分裂
         if (N::isLeafArray(nextNode)) {
+            printf("1a2\n");
             auto leaf_array = N::getLeafArray(nextNode);
             // 若已经查询到这个Key，说明已经存在了。则直接返回Existed状态。
             if (leaf_array->lookup(k) != nullptr) {
+                printf("1a3\n");
                 return OperationResults::Existed;
             } else {
+                printf("1a4\n");
                 // 若未查询到这个Key，则直接在LeafArray中插入
                 auto lav = leaf_array->getVersion();
                 leaf_array->lockVersionOrRestart(lav, needRestart);
@@ -1139,9 +1170,10 @@ restart:
                 // 当叶数组已满，则进行节点分裂
                 // 这种情况下，当前叶数组肯定已维护好LeafArray层的双向链表，因此分裂后的指针关系也比较好确定
                 if (leaf_array->isFull()) {
+                    printf("1a5\n");
                     //记录之前的LeafArray的前驱与后继节点
-                    prevLeafArray = leaf_array->prev.load();
-                    nextLeafArray = leaf_array->next.load();
+                    prevLeafArray = leaf_array->prev;
+                    nextLeafArray = leaf_array->next;
                     leaf_array->splitAndUnlock(node, nodeKey, needRestart,prevLeafArray,nextLeafArray);
                     if (needRestart) {
                         goto restart;
@@ -1149,6 +1181,7 @@ restart:
                     nextNode = N::getChild(nodeKey, node);
                     // insert at the next iteration
                 } else {
+                    printf("1a6\n");
                     // 当叶数组未满，则直接分配叶节点，如何插入到叶数组中
                     auto leaf = allocLeaf(k);
                     leaf_array->insert(leaf, true);
@@ -1158,8 +1191,10 @@ restart:
             }
         }
 #else
-        // 若寻找到的下一个节点是叶子节点（若采用LeafArray叶数组压缩的策略，则不存在改情况）
+        // 若寻找到的下一个节点是叶子节点（若采用LeafArray叶数组压缩的策略，则不存在该情况）
+        printf("1b1\n");
         if (N::isLeaf(nextNode)) {
+            printf("1b2\n");
             node->lockVersionOrRestart(v, needRestart);
             if (needRestart)
                 goto restart;
@@ -1221,6 +1256,7 @@ restart:
             return OperationResults::Success;
         }
 #endif
+        printf("1c6\n");
         // 递增Level
         level++;
     }
@@ -1368,7 +1404,7 @@ restart:
 }
 
 // 对于RadixLSM，将Key的标记位设置为删除。
-typename Tree::OperationResults Tree::radixLSMRemove(const Key *k){
+typename Tree::OperationResults Tree::radixLSMRemove(Key *k){
     k->setDelKey(); // 设置Key的删除标记位
     Leaf * existLeaf = nullptr;
     existLeaf = lookup(k);
@@ -1432,8 +1468,10 @@ typename Tree::CheckPrefixPessimisticResult
 Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
                              uint8_t &nonMatchingKey,
                              Prefix &nonMatchingPrefix) {
+    printf("2a1\n");
     Prefix p = n->getPrefi();
     if (p.prefixCount + level != n->getLevel()) {
+        printf("2a2\n");
         // Intermediate or inconsistent state from path compression
         // "splitAndUnlock" or "merge" is detected Inconsistent path compressed
         // prefix should be recovered in here
@@ -1442,6 +1480,7 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
         auto v = n->getVersion();
         n->lockVersionOrRestart(v, needRecover);
         if (!needRecover) {
+            printf("2a3\n");
             // Inconsistent state due to prior system crash is suspected --> Do
             // recovery
 
@@ -1463,17 +1502,19 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
             n->setPrefix(p.prefix, p.prefixCount, true);
             n->writeUnlock();
         }
-
+        printf("2a4\n");
         // path compression merge is in progress --> restart from root
         // path compression splitAndUnlock is in progress --> skipping an
         // intermediate compressed prefix by using level (invariant)
         if (p.prefixCount + level < n->getLevel()) {
+            printf("2a5\n");
             return CheckPrefixPessimisticResult::SkippedLevel;
         }
     }
-
+    printf("2a6\n");
     // 逐个比较node的前缀prev是否匹配。值得注意的是：若无前缀，也会被判定为match
     if (p.prefixCount > 0) {
+        printf("2a7\n");
         uint32_t prevLevel = level;
         Leaf *kt = nullptr;
         bool load_flag = false;
@@ -1519,6 +1560,7 @@ Tree::checkPrefixPessimistic(N *n, const Key *k, uint32_t &level,
             ++level;
         }
     }
+    printf("2a8\n");
     return CheckPrefixPessimisticResult::Match;
 }
 

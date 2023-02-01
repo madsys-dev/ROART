@@ -7,7 +7,7 @@
 
 const int max_thread_num = 36;
 
-inline const char *nvm_dir = "/mnt/pmem0/pxf/";
+inline const char *nvm_dir = "/mnt/pmem_pxf/";
 
 enum IndexType { PART, FAST_FAIR, SKIPLIST, _IndexTypeNumber };
 

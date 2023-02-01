@@ -42,7 +42,7 @@
 //void init_pmem() {
 //    // create pool
 //
-//    const char *pool_name = "/mnt/pmem0/pxf/skiplist.data";
+//    const char *pool_name = "/mnt/pmem_pxf/skiplist.data";
 //    const char *layout_name = "skiplist";
 //    size_t pool_size = 64LL * 1024 * 1024 * 1024; // 16GB
 //

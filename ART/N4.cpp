@@ -46,14 +46,14 @@ bool N4::insert(uint8_t key, N *n, bool flush) {
         }else if(tmpKey > key){
             //将更大的Key往后移动
             keys[pos].store(tmpKey, std::memory_order_seq_cst);
-            children[pos].store(tmpChild,std::memory_order_seq_cst)
+            children[pos].store(tmpChild,std::memory_order_seq_cst);
             if (flush){
                 flush_data((void *)&keys[pos], sizeof(std::atomic<uint8_t>));
                 flush_data((void *)&children[pos], sizeof(std::atomic<N *>));
             }
         }else{
             keys[pos].store(key, std::memory_order_seq_cst);
-            children[pos].store(n,std::memory_order_seq_cst)
+            children[pos].store(n,std::memory_order_seq_cst);
             if (flush){
                 flush_data((void *)&keys[pos], sizeof(std::atomic<uint8_t>));
                 flush_data((void *)&children[pos], sizeof(std::atomic<N *>));
@@ -66,7 +66,7 @@ bool N4::insert(uint8_t key, N *n, bool flush) {
 
     //到此处说明，新插入的Key是最小的Key
     keys[0].store(key, std::memory_order_seq_cst);
-    children[0].store(n,std::memory_order_seq_cst)
+    children[0].store(n,std::memory_order_seq_cst);
     if (flush){
         flush_data((void *)&keys[0], sizeof(std::atomic<uint8_t>));
         flush_data((void *)&children[0], sizeof(std::atomic<N *>));
@@ -117,7 +117,7 @@ N *N4::getChild(const uint8_t k) {
 }
 
 // 判断某个key在该节点内的范围（最大、最小、两者之间），若在2者之间，则返回小于该key的最大child
-N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger){
+N *N4::checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger) const{
     if(keys[0].load() > k){
         hasSmaller = false;
         hasBigger = true;
@@ -134,19 +134,19 @@ N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger){
 }
 
 // 获取最大的子节点
-N *getMaxChild() {
+N *N4::getMaxChild() const {
     N *maxChild=children[count-1].load();
     return maxChild;
 }
 
 // 获取最小的子节点
-N *getMinChild(){
+N *N4::getMinChild() const {
     N *minChild=children[0].load();
     return minChild;
 }
 
 // 获取小于k的 最大的子节点
-N *getMaxSmallerChild(uint8_t k){
+N *N4::getMaxSmallerChild(uint8_t k) const{
     uint8_t tmpKey;
     if(count==1){
         return children[0].load();

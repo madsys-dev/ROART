@@ -5,7 +5,7 @@
 // using namespace skiplist;
 //
 // inline void clear_data() {
-//    system("rm -rf /mnt/pmem0/pxf/skiplist.data");
+//    system("rm -rf /mnt/pmem_pxf/skiplist.data");
 //}
 //
 // TEST(TestSkipList, skiplist) {

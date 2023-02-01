@@ -52,20 +52,20 @@ N *N256::getChild(const uint8_t k) {
 }
 
 // 判断某个key在该节点内的范围（最大、最小、两者之间），若在2者之间，则返回小于该key的最大child
-N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger){
+N *N256::checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger) const{
     hasSmaller = false;
     hasBigger = false;
     N* res = nullptr;
     for(int i=k-1;i>=0;i--){
         res=children[i].load();
-        if(res!='\0' && res!=nullptr){
+        if(res!=nullptr){
             hasSmaller = true;
             break;
         }
     }
     for(int i=k+1;i<255;i++){
         N* tmp=children[i].load();
-        if(tmp!='\0' && tmp!=nullptr){
+        if(tmp!=nullptr){
             hasBigger = true;
             break;
         }
@@ -74,11 +74,11 @@ N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger){
 }
 
 // 获取最大的子节点
-N *getMaxChild() {
+N *N256::getMaxChild() const {
     N *maxChild=nullptr;
     for(uint8_t i=0;i<256;i++){
         maxChild=children[i].load();
-        if(maxChild!='\0' && maxChild!=nullptr){
+        if(maxChild!=nullptr){
             return maxChild;
         }
     }
@@ -87,11 +87,11 @@ N *getMaxChild() {
 }
 
 // 获取最小的子节点
-N *getMinChild(){
+N *N256::getMinChild() const {
     N *minChild=nullptr;
     for(uint8_t i=0;i<256;i++){
         minChild=children[i].load();
-        if(minChild!='\0' && minChild!=nullptr){
+        if(minChild!=nullptr){
             return minChild;
         }
     }
@@ -100,14 +100,14 @@ N *getMinChild(){
 }
 
 // 获取小于k的 最大的子节点
-N *getMaxSmallerChild(uint8_t k){
+N *N256::getMaxSmallerChild(uint8_t k) const{
     if(count==1){
         return getAnyChild();
     }
     
     for(uint8_t i=k-1;i!=0;i--){
-        N* tmp = children[index].load();
-        if(tmp!='\0' && tmp!=nullptr){
+        N* tmp = children[i].load();
+        if(tmp!=nullptr){
             return tmp;
         }
     }

@@ -20,8 +20,10 @@ class LeafArray : public N {
     std::atomic<std::bitset<LeafArrayLength>>
         bitmap;   // 位图用于存储使用情况
     // 新添加的双向指针
-    std::atomic<LeafArray*> prev;
-    std::atomic<LeafArray*> next;
+    // std::atomic<LeafArray*> prev;
+    // std::atomic<LeafArray*> next;
+    LeafArray* prev;
+    LeafArray* next;
     // 考虑到排序的开销较大，实际上只需要在Flush的时候进行一次排序即可，因此槽数组暂时未使用
     // 新添加的用于隐式排序的槽数组. uint8_t:2^8=256
     std::atomic<uint8_t> slot[LeafArrayLength];    // slot[i]记录第i小的键，在叶数组中所处的位置
@@ -32,8 +34,8 @@ class LeafArray : public N {
         memset(leaf, 0, sizeof(leaf));
         
         // 初始化双向指针
-        prev.store(0);
-        next.store(0);
+        prev=nullptr;
+        next=nullptr;
         // 初始化槽数组
         memset(slot,0,sizeof(slot));
     }
@@ -42,8 +44,8 @@ class LeafArray : public N {
 
     //设置本leafarray节点的prev和next指针。默认会持久化该部分内容至NVM中。
     void setLinkedList(LeafArray* prev,LeafArray* next) {
-      this->prev.store(prev);
-      this->next.store(next);
+      this->prev=prev;
+      this->next=next;
       // 默认将双向指针持久化Flush到NVM中
       flush_data(&prev, sizeof(std::atomic<LeafArray*>));
       flush_data(&next, sizeof(std::atomic<LeafArray*>));
@@ -51,8 +53,8 @@ class LeafArray : public N {
 
     //设置本leafarray节点的prev和next指针
     void setLinkedList(LeafArray* prev,LeafArray* next ,bool flush) {
-      this->prev.store(prev);
-      this->next.store(next);
+      this->prev=prev;
+      this->next=next;
       // 如果参数flush为真，将双向指针持久化Flush到NVM中
       if(flush){
         flush_data(&prev, sizeof(std::atomic<LeafArray*>));

@@ -73,6 +73,15 @@ uint16_t Leaf::getFingerPrint() {
     }
     return re;
 }
+// 根据fkey中存储的Key获取哈希值（主要用于：LeafArray快速寻找Expected_Pos时，发生哈希冲突的二次哈希）
+uint16_t Leaf::getHash(){
+    uint16_t re = 0;
+    auto k = GetKey();
+    for (int i = 0; i < key_len; i++) {
+        re = re * 173 + k[i];
+    }
+    return re;
+}
 // 调试与Debug
 void Leaf::graphviz_debug(std::ofstream &f) {
     char buf[1000] = {};
@@ -128,14 +137,18 @@ void N::check_generation() {
     //        generation_version++;
     //        return;
     //    }
+    printf("check_generation 1a1\n");
     uint64_t mgr_generation = get_threadlocal_generation();
 
     uint64_t zero = 0;
     uint64_t one = 1;
+    printf("check_generation 1a2\n");
     if (generation_version != mgr_generation) {
+        printf("check_generation 1a3\n");
         //        printf("start to recovery of this node %lld\n",
         //        (uint64_t)this);
         if (recovery_latch.compare_exchange_strong(zero, one)) {
+            printf("check_generation 1a4\n");
             //            printf("start to recovery of this node %lld\n",
             //            (uint64_t)this);
             type_version_lock_obsolete = new std::atomic<uint64_t>;
@@ -207,6 +220,7 @@ void N::check_generation() {
             recovery_latch.store(zero);
 
         } else {
+            printf("check_generation 1a5\n");
             while (generation_version != mgr_generation) {
             }
         }
@@ -298,23 +312,23 @@ N *N::getAnyChild(N *node) {
     return nullptr;
 }
 
-N *N::getMaxChild(const N *node){
+N *N::getMaxChild(N *node) {
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<const N4 *>(node);
-        return n->getMaxChild(k);
+        return n->getMaxChild();
     }
     case NTypes::N16: {
         auto n = static_cast<const N16 *>(node);
-        return n->getMaxChild(k);
+        return n->getMaxChild();
     }
     case NTypes::N48: {
         auto n = static_cast<const N48 *>(node);
-        return n->getMaxChild(k);
+        return n->getMaxChild();
     }
     case NTypes::N256: {
         auto n = static_cast<const N256 *>(node);
-        return n->getMaxChild(k);
+        return n->getMaxChild();
     }
     default: {
         assert(false);
@@ -323,23 +337,23 @@ N *N::getMaxChild(const N *node){
     return nullptr;
 }
 
-N *N::getMinChild(const N *node){
+N *N::getMinChild(N *node){
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<const N4 *>(node);
-        return n->getMinChild(k);
+        return n->getMinChild();
     }
     case NTypes::N16: {
         auto n = static_cast<const N16 *>(node);
-        return n->getMinChild(k);
+        return n->getMinChild();
     }
     case NTypes::N48: {
         auto n = static_cast<const N48 *>(node);
-        return n->getMinChild(k);
+        return n->getMinChild();
     }
     case NTypes::N256: {
         auto n = static_cast<const N256 *>(node);
-        return n->getMinChild(k);
+        return n->getMinChild();
     }
     default: {
         assert(false);
@@ -348,23 +362,23 @@ N *N::getMinChild(const N *node){
     return nullptr;
 }
 
-N *N::checkKeyRange(const N *n,uint8_t k,bool& hasSmaller,bool& hasBigger){
+N *N::checkKeyRange(const N *node,uint8_t k,bool& hasSmaller,bool& hasBigger){
     switch (node->getType()) {
     case NTypes::N4: {
         auto n = static_cast<const N4 *>(node);
-        return n->checkKeyRange(k);
+        return n->checkKeyRange(k,hasSmaller,hasBigger);
     }
     case NTypes::N16: {
         auto n = static_cast<const N16 *>(node);
-        return n->checkKeyRange(k);
+        return n->checkKeyRange(k,hasSmaller,hasBigger);
     }
     case NTypes::N48: {
         auto n = static_cast<const N48 *>(node);
-        return n->checkKeyRange(k);
+        return n->checkKeyRange(k,hasSmaller,hasBigger);
     }
     case NTypes::N256: {
         auto n = static_cast<const N256 *>(node);
-        return n->checkKeyRange(k);
+        return n->checkKeyRange(k,hasSmaller,hasBigger);
     }
     default: {
         assert(false);

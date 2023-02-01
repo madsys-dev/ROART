@@ -30,7 +30,7 @@ uint16_t PART_ns::LeafArray::getFingerPrint(size_t pos) const {
 
 
 // 点查询操作
-Leaf *Array::lookup(const Key *k) const {
+Leaf* LeafArray::lookup(const Key *k) const {
     // 计算待查询的Key的指纹
     uint16_t finger_print = k->getFingerPrint();
 
@@ -152,10 +152,9 @@ Leaf *Array::lookup(const Key *k) const {
 bool LeafArray::radixLSMInsert(Leaf *l,bool flush){
 
 // 先寻找是否存在，若存在则更新
-
-    auto k = l->GetKey();
+    auto k = new Key(*(l->GetKey()),l->getKeyLen(),l->GetValue());
     // 计算待查询的Key的指纹
-    uint16_t finger_print = k->getFingerPrint();
+    uint16_t finger_print = l->getFingerPrint();
 
     // 遍历节点内数据，判断指纹是否相等。若指纹相等，则再确认整个Key是否一致，若一致则返回叶子节点的地址
     auto b = bitmap.load();
@@ -505,7 +504,7 @@ void LeafArray::splitAndUnlock(N *parentNode, uint8_t parentKey,
 
 
 // 修改后的节点分裂函数，添加了对前驱与后继节点的连接
-void splitAndUnlock(N *parentNode, uint8_t parentKey, bool &need_restart, LeafArray* prev,LeafArray* next)
+void LeafArray::splitAndUnlock(N *parentNode, uint8_t parentKey, bool &need_restart, LeafArray* prev,LeafArray* next)
 {
     parentNode->writeLockOrRestart(need_restart);
 
@@ -579,12 +578,12 @@ void splitAndUnlock(N *parentNode, uint8_t parentKey, bool &need_restart, LeafAr
 
     // 将分裂后的节点之间，用链表串联起来
     LeafArray* tmpPrev=prev;
-    auto tmpIter = split_array.begin();
-    for(;tmpIter<split_array.end();tmpIter++){
-        tmpPrev->next=tmpIter;
-        tmpIter->prev = tmpPrev;
-        tmpPrev = tmpIter;
+    for(auto &tmpIter : split_array){
+        tmpPrev->next=tmpIter.second;
+        tmpIter.second->prev = tmpPrev;
+        tmpPrev = tmpIter.second;
     }
+
     tmpPrev->next= next;
     next->prev = tmpPrev;
 

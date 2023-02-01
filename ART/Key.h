@@ -69,13 +69,15 @@ struct Key {
     inline size_t getKeyLen() const;
 
     inline uint16_t getFingerPrint() const;
+
+    inline uint16_t getHash() const;
 } __attribute__((aligned(64)));
 
 // 将Key标记为 删除操作的Key
-inline void setDelKey(){
-    this->DelFlag = true ;
+inline void Key::setDelKey(){
+    DelFlag = true ;
     // 由于删除操作，所以无需Value
-    this->val_len = 0;
+    val_len = 0;
 }
 
 // 生成叶子节点，并赋值

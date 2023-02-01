@@ -59,10 +59,10 @@ int main(int argc, char **argv) {
     int type = atoi(argv[1]);
     int threads_num = atoi(argv[2]);
 
-    system("rm -rf /mnt/pmem0/pxf/acmma.data");
-    system("rm -rf /mnt/pmem0/pxf/part.data");
+    system("rm -rf /mnt/pmem_pxf/acmma.data");
+    system("rm -rf /mnt/pmem_pxf/part.data");
 
-    const char *pool_name = "/mnt/pmem0/pxf/acmma.data";
+    const char *pool_name = "/mnt/pmem_pxf/acmma.data";
     const char *layout_name = "acmma";
     size_t pool_size = 64ull * 1024 * 1024 * 1024;
 

@@ -54,7 +54,7 @@ N *N48::getChild(const uint8_t k) {
 }
 
 // 判断某个key在该节点内的范围（最大、最小、两者之间），若在2者之间，则返回小于该key的最大child
-N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger){
+N *N48::checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger) const{
     hasSmaller = false;
     hasBigger = false;
     N* res = nullptr;
@@ -84,7 +84,7 @@ N *checkKeyRange(uint8_t k,bool& hasSmaller,bool& hasBigger){
 }
 
 // 获取最大的子节点
-N *getMaxChild() {
+N *N48::getMaxChild() const {
     N *maxChild=nullptr;
     for(unsigned i=255;i>=0;i--){
         uint8_t index = childIndex[i].load();
@@ -100,7 +100,7 @@ N *getMaxChild() {
 }
 
 // 获取最小的子节点
-N *getMinChild(){
+N *N48::getMinChild() const {
     N *minChild=nullptr;
     for(unsigned i=0;i<256;i++){
         uint8_t index = childIndex[i].load();
@@ -116,7 +116,7 @@ N *getMinChild(){
 }
 
 // 获取小于k的 最大的子节点
-N *getMaxSmallerChild(uint8_t k){
+N *N48::getMaxSmallerChild(uint8_t k) const{
     if(count==1){
         return getAnyChild();
     }

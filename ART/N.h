@@ -75,6 +75,7 @@ class Leaf : public BaseNode {
         return false;
 #endif
     }
+
     size_t getKeyLen() const { return key_len; }
     char *GetKey() {
 #ifdef KEY_INLINE
@@ -92,6 +93,8 @@ class Leaf : public BaseNode {
     }
 
     uint16_t getFingerPrint();
+
+    uint16_t getHash();
 
     void graphviz_debug(std::ofstream &f);
 
@@ -234,9 +237,9 @@ class N : public BaseNode {
 
     static Leaf *getAnyChildTid(const N *n);
 
-    static N *getMaxChild(const N *n);
+    static N *getMaxChild(N *n);
 
-    static N *getMinChild(const N *n);
+    static N *getMinChild(N *n);
 
     static N *checkKeyRange(const N *n,uint8_t k,bool& hasSmaller,bool& hasBigger);
 

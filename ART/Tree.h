@@ -90,7 +90,7 @@ class Tree {
 
     OperationResults remove(const Key *k);
 
-    OperationResults radixLSMRemove(const Key *k);
+    OperationResults radixLSMRemove(Key *k);
 
     Leaf *allocLeaf(const Key *k) const;
 
